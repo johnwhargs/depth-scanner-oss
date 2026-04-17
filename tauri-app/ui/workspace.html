@@ -101,6 +101,20 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
 
 /* ── Estimate box ────────────────────────────────────── */
 .estimate-box{margin-bottom:8px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-size:10px;font-family:var(--mono);color:var(--muted);line-height:1.6}
+
+/* ── Video controls ─────────────────────────────────── */
+.video-controls{padding:8px 16px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
+.vc-timeline{margin-bottom:6px}
+.vc-track{position:relative;height:24px;background:var(--bg);border-radius:3px;cursor:pointer;overflow:hidden}
+.vc-playhead{position:absolute;top:0;width:2px;height:100%;background:var(--ok);z-index:2}
+.vc-comb{position:absolute;top:0;left:0;right:0;height:100%;display:flex;pointer-events:none}
+.vc-comb-block{height:100%;opacity:0.3}
+.vc-comb-L{background:var(--accent)}
+.vc-comb-R{background:var(--accent2)}
+.vc-buttons{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
+.vc-buttons button{background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);cursor:pointer;padding:4px 10px;font-size:12px}
+.vc-buttons button:hover{background:var(--border)}
+.badge-video{display:inline-block;background:var(--accent2);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle;letter-spacing:.5px}
 </style>
 </head>
 <body>
@@ -126,12 +140,17 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
     <!-- Load inputs -->
     <div class="sb-section">
       <div class="sb-title">Source Files</div>
-      <label class="btn" for="source-input" style="cursor:pointer">Load Source Image</label>
-      <input type="file" id="source-input" accept="image/*" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none"/>
+      <label class="btn" for="source-input" style="cursor:pointer">Load Source</label>
+      <input type="file" id="source-input" accept="image/*,video/*,.mp4,.mov,.avi" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none"/>
       <div id="source-name" style="font-size:10px;color:var(--muted);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <div id="video-info" style="display:none;font-size:10px;color:var(--muted);margin-bottom:6px;font-family:var(--mono)"></div>
       <label class="btn" for="depth-input" style="cursor:pointer">Load Depth Map</label>
       <input type="file" id="depth-input" accept="image/*" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none"/>
-      <div id="depth-name" style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <div id="depth-name" style="font-size:10px;color:var(--muted);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <label class="btn" for="depth-video-input" id="depth-video-btn" style="cursor:pointer;display:none">Load Depth Video</label>
+      <input type="file" id="depth-video-input" accept="video/*,.mp4,.mov,.avi" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none"/>
+      <div id="depth-video-name" style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <div id="depth-video-hint" style="display:none;font-size:9px;color:var(--warn);margin-top:2px">Process depth in Renderer first, then load depth video here</div>
     </div>
 
     <!-- Effect selector -->
@@ -203,6 +222,12 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
           <input type="range" id="wig-mblur" min="0" max="1" step="0.05" value="0.3"
             oninput="document.getElementById('wig-mblur-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="wig-mblur-v">0.30</span>
+        </div>
+        <div class="field" id="comb-field" style="display:none">
+          <label>Comb frames</label>
+          <input type="range" id="wig-comb" min="1" max="5" step="1" value="3"
+            oninput="document.getElementById('wig-comb-v').textContent=this.value"/>
+          <span class="range-val" id="wig-comb-v">3</span>
         </div>
         <div class="estimate-box" id="wig-estimate">Est. export: calculating...</div>
         <div class="btn-row">
@@ -330,6 +355,28 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
       <span id="info-fps"></span>
     </div>
 
+    <!-- Video controls -->
+    <div class="video-controls" id="video-controls" style="display:none">
+      <div class="vc-timeline">
+        <div class="vc-track" id="vc-track">
+          <div class="vc-playhead" id="vc-playhead"></div>
+          <div class="vc-comb" id="vc-comb"></div>
+        </div>
+      </div>
+      <div class="vc-buttons">
+        <button id="vc-play">&#9654;</button>
+        <button id="vc-pause" style="display:none">&#10074;&#10074;</button>
+        <button id="vc-stop">&#9632;</button>
+        <span id="vc-time">0:00 / 0:00</span>
+        <span id="vc-frame">Frame 0/0</span>
+      </div>
+    </div>
+
+    <!-- Hidden video elements -->
+    <video id="vid-source" muted playsinline preload="auto" style="display:none"></video>
+    <video id="vid-depth" muted playsinline preload="auto" style="display:none"></video>
+    <canvas id="vid-scratch" style="display:none"></canvas>
+
     <!-- Timeline (wiggle) -->
     <div class="timeline" id="timeline">
       <div class="tl-header">
@@ -384,6 +431,16 @@ const state = {
   startTime: 0,
   lastFrame: 0,
   frameCount: 0,
+  // video
+  isVideo: false,
+  videoPlaying: false,
+  videoDuration: 0,
+  videoFps: 30,
+  videoFrameCount: 0,
+  videoCurrentFrame: 0,
+  hasDepthVideo: false,
+  // comb wigglegram
+  combFrames: 3,
 };
 
 /* ── DOM refs ──────────────────────────────────────────────────────── */
@@ -903,7 +960,7 @@ function updatePlaceholder() {
   } else {
     ph.classList.remove("hidden");
     const texts = [];
-    if (!state.sourceTex) texts.push("source image");
+    if (!state.sourceTex) texts.push(state.isVideo ? "source video" : "source image");
     if (!state.depthTex) texts.push("depth map");
     ph.querySelector(".placeholder-text").textContent = "Load " + texts.join(" and ");
   }
@@ -1046,21 +1103,55 @@ function render() {
     state.lastFrame = now;
   }
 
+  // Video frame upload during playback
+  if (state.isVideo && state.videoPlaying && state.sourceTex) {
+    const vid = $("vid-source");
+    if (vid.readyState >= 2 && !vid.paused) {
+      captureVideoFrame(vid, state.sourceTex);
+      if (state.hasDepthVideo) {
+        const dv = $("vid-depth");
+        if (dv.readyState >= 2) captureVideoFrame(dv, state.depthTex);
+      }
+      updateVideoUI();
+      state.needsRender = true;
+
+      // Check if video ended
+      if (vid.ended) {
+        stopVideoPlayback();
+        if (state.hasDepthVideo) $("vid-depth").pause();
+      }
+    }
+  }
+
   // wiggle animation: compute shift
   if (state.effect === "wiggle" && state.sourceTex && state.depthTex && state.wigglePlaying) {
-    const speed = parseFloat($("wig-speed").value);
-    const sep = parseFloat($("wig-sep").value);
-    const path = $("wig-path").value;
-    const phase = t * speed * Math.PI * 2;
-    const sx = Math.sin(phase) * sep;
-    const sy = path === "arc" ? Math.cos(phase) * sep * 0.3 : 0;
-    $("par-x").value = Math.round(sx);
-    $("par-x-v").textContent = Math.round(sx) + "px";
-    state.needsRender = true;
+    if (state.isVideo && state.videoPlaying) {
+      // Comb wigglegram mode for video: alternate L/R based on frame groups
+      const combN = parseInt($("wig-comb").value) || 3;
+      const sep = parseFloat($("wig-sep").value);
+      const frame = state.videoCurrentFrame;
+      const group = Math.floor(frame / combN);
+      const isLeft = (group % 2 === 0);
+      const sx = isLeft ? -sep : sep;
+      $("par-x").value = Math.round(sx);
+      $("par-x-v").textContent = Math.round(sx) + "px";
+      state.needsRender = true;
+    } else {
+      // Static image wiggle: sinusoidal animation
+      const speed = parseFloat($("wig-speed").value);
+      const sep = parseFloat($("wig-sep").value);
+      const path = $("wig-path").value;
+      const phase = t * speed * Math.PI * 2;
+      const sx = Math.sin(phase) * sep;
+      const sy = path === "arc" ? Math.cos(phase) * sep * 0.3 : 0;
+      $("par-x").value = Math.round(sx);
+      $("par-x-v").textContent = Math.round(sx) + "px";
+      state.needsRender = true;
+    }
   }
 
   // determine if we need to render
-  const isAnimating = (state.effect === "wiggle" && state.wigglePlaying) || state.effect === "fog";
+  const isAnimating = (state.effect === "wiggle" && state.wigglePlaying) || state.effect === "fog" || (state.isVideo && state.videoPlaying);
   if (!state.needsRender && !isAnimating) {
     state.animId = requestAnimationFrame(render);
     return;
@@ -1157,16 +1248,160 @@ function render() {
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* ── File inputs ───────────────────────────────────────────────────── */
+function isVideoFile(file) {
+  return file.type.startsWith("video/") || /\.(mp4|mov|avi|webm|mkv)$/i.test(file.name);
+}
+
+function formatTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return m + ":" + String(s).padStart(2, "0");
+}
+
+function stopVideoPlayback() {
+  const vid = $("vid-source");
+  vid.pause();
+  state.videoPlaying = false;
+  $("vc-play").style.display = "";
+  $("vc-pause").style.display = "none";
+}
+
+function resetVideoState() {
+  stopVideoPlayback();
+  state.isVideo = false;
+  state.videoDuration = 0;
+  state.videoFps = 30;
+  state.videoFrameCount = 0;
+  state.videoCurrentFrame = 0;
+  state.hasDepthVideo = false;
+  $("video-controls").style.display = "none";
+  $("video-info").style.display = "none";
+  $("depth-video-btn").style.display = "none";
+  $("depth-video-hint").style.display = "none";
+  $("depth-video-name").textContent = "";
+  $("comb-field").style.display = "none";
+  $("vid-source").removeAttribute("src");
+  $("vid-source").load();
+  $("vid-depth").removeAttribute("src");
+  $("vid-depth").load();
+  updateCombOverlay();
+}
+
+/* Draw current video frame to scratch canvas and upload to WebGL texture */
+function captureVideoFrame(videoEl, targetTex) {
+  const gl = state.gl;
+  if (!gl || !videoEl || videoEl.readyState < 2) return;
+  const scratch = $("vid-scratch");
+  scratch.width = videoEl.videoWidth;
+  scratch.height = videoEl.videoHeight;
+  const ctx = scratch.getContext("2d");
+  ctx.drawImage(videoEl, 0, 0, scratch.width, scratch.height);
+  gl.bindTexture(gl.TEXTURE_2D, targetTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, scratch);
+}
+
+/* Update playhead + time display */
+function updateVideoUI() {
+  const vid = $("vid-source");
+  if (!state.isVideo || !vid.duration) return;
+  const pct = (vid.currentTime / vid.duration) * 100;
+  $("vc-playhead").style.left = pct + "%";
+  $("vc-time").textContent = formatTime(vid.currentTime) + " / " + formatTime(vid.duration);
+  const frame = Math.round(vid.currentTime * state.videoFps);
+  state.videoCurrentFrame = frame;
+  $("vc-frame").textContent = "Frame " + frame + "/" + state.videoFrameCount;
+}
+
+/* Comb overlay: show L/R blocks on the timeline */
+function updateCombOverlay() {
+  const combEl = $("vc-comb");
+  combEl.innerHTML = "";
+  if (!state.isVideo || state.effect !== "wiggle") return;
+  const combN = parseInt($("wig-comb").value) || 3;
+  const totalFrames = state.videoFrameCount || 1;
+  const groups = Math.ceil(totalFrames / combN);
+  for (let g = 0; g < groups; g++) {
+    const framesInGroup = Math.min(combN, totalFrames - g * combN);
+    const widthPct = (framesInGroup / totalFrames) * 100;
+    const block = document.createElement("div");
+    block.className = "vc-comb-block " + (g % 2 === 0 ? "vc-comb-L" : "vc-comb-R");
+    block.style.width = widthPct + "%";
+    combEl.appendChild(block);
+  }
+}
+
 $("source-input").addEventListener("change", async e => {
   const file = e.target.files[0];
   if (!file) return;
-  try {
-    const img = await loadImage(file);
-    setSource(img);
-    $("source-name").textContent = file.name;
-    log("Source loaded: " + file.name + " (" + state.imgW + "x" + state.imgH + ")", "success");
-  } catch (err) {
-    log("Failed to load source: " + err.message, "error");
+
+  if (isVideoFile(file)) {
+    // Video source
+    resetVideoState();
+    const vid = $("vid-source");
+    const url = URL.createObjectURL(file);
+    vid.src = url;
+    vid.load();
+
+    vid.addEventListener("loadedmetadata", function onMeta() {
+      vid.removeEventListener("loadedmetadata", onMeta);
+      state.isVideo = true;
+      state.videoDuration = vid.duration;
+      // estimate fps (default 30 if unknown)
+      state.videoFps = 30;
+      state.videoFrameCount = Math.round(vid.duration * state.videoFps);
+      state.imgW = vid.videoWidth;
+      state.imgH = vid.videoHeight;
+
+      // show info
+      $("source-name").innerHTML = file.name + '<span class="badge-video">VIDEO</span>';
+      $("video-info").style.display = "block";
+      $("video-info").textContent = vid.videoWidth + "x" + vid.videoHeight + " | " +
+        state.videoFps + " fps | " + state.videoFrameCount + " frames | " + formatTime(vid.duration);
+      $("video-controls").style.display = "";
+      $("depth-video-btn").style.display = "";
+      $("depth-video-hint").style.display = "";
+      $("info-dims").textContent = vid.videoWidth + " x " + vid.videoHeight;
+      // Show comb field when wiggle is active
+      if (state.effect === "wiggle") {
+        $("comb-field").style.display = "";
+      }
+      updateCombOverlay();
+      updateVideoUI();
+      updateExportButtons();
+
+      // Capture first frame as source texture
+      vid.currentTime = 0;
+    });
+
+    vid.addEventListener("seeked", function onFirstSeek() {
+      vid.removeEventListener("seeked", onFirstSeek);
+      const gl = state.gl;
+      if (!gl) return;
+      if (state.sourceTex) gl.deleteTexture(state.sourceTex);
+      state.sourceTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, state.sourceTex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      captureVideoFrame(vid, state.sourceTex);
+      updateCanvasSize();
+      setupBlurFBOs();
+      state.needsRender = true;
+      updatePlaceholder();
+      log("Video loaded: " + file.name + " (" + vid.videoWidth + "x" + vid.videoHeight + ", " + state.videoFrameCount + " frames)", "success");
+    });
+  } else {
+    // Image source (existing behaviour)
+    resetVideoState();
+    try {
+      const img = await loadImage(file);
+      setSource(img);
+      $("source-name").textContent = file.name;
+      log("Source loaded: " + file.name + " (" + state.imgW + "x" + state.imgH + ")", "success");
+    } catch (err) {
+      log("Failed to load source: " + err.message, "error");
+    }
   }
 });
 
@@ -1183,6 +1418,128 @@ $("depth-input").addEventListener("change", async e => {
   }
 });
 
+/* ── Depth video input ────────────────────────────────────────────── */
+$("depth-video-input").addEventListener("change", async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const vid = $("vid-depth");
+  const url = URL.createObjectURL(file);
+  vid.src = url;
+  vid.load();
+
+  vid.addEventListener("loadedmetadata", function onMeta() {
+    vid.removeEventListener("loadedmetadata", onMeta);
+    state.hasDepthVideo = true;
+    $("depth-video-name").textContent = file.name;
+    $("depth-video-hint").style.display = "none";
+    log("Depth video loaded: " + file.name + " (" + vid.videoWidth + "x" + vid.videoHeight + ")", "success");
+
+    // Create depth texture from first frame
+    vid.currentTime = 0;
+    vid.addEventListener("seeked", function onSeek() {
+      vid.removeEventListener("seeked", onSeek);
+      const gl = state.gl;
+      if (!gl) return;
+      if (state.depthTex) gl.deleteTexture(state.depthTex);
+      state.depthTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, state.depthTex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      captureVideoFrame(vid, state.depthTex);
+      state.needsRender = true;
+      updatePlaceholder();
+      updateExportButtons();
+    });
+  });
+});
+
+/* ── Video playback controls ──────────────────────────────────────── */
+$("vc-play").addEventListener("click", () => {
+  if (!state.isVideo) return;
+  const vid = $("vid-source");
+  const dv = $("vid-depth");
+  vid.play();
+  if (state.hasDepthVideo) dv.play();
+  state.videoPlaying = true;
+  $("vc-play").style.display = "none";
+  $("vc-pause").style.display = "";
+});
+
+$("vc-pause").addEventListener("click", () => {
+  stopVideoPlayback();
+  if (state.hasDepthVideo) $("vid-depth").pause();
+});
+
+$("vc-stop").addEventListener("click", () => {
+  stopVideoPlayback();
+  const vid = $("vid-source");
+  vid.currentTime = 0;
+  if (state.hasDepthVideo) { $("vid-depth").pause(); $("vid-depth").currentTime = 0; }
+  // Capture frame at 0
+  vid.addEventListener("seeked", function onSeek() {
+    vid.removeEventListener("seeked", onSeek);
+    captureVideoFrame(vid, state.sourceTex);
+    if (state.hasDepthVideo) {
+      captureVideoFrame($("vid-depth"), state.depthTex);
+    }
+    state.needsRender = true;
+    updateVideoUI();
+  });
+});
+
+/* ── Timeline scrub (click + drag) ────────────────────────────────── */
+function scrubToX(clientX) {
+  const track = $("vc-track");
+  const rect = track.getBoundingClientRect();
+  let pct = (clientX - rect.left) / rect.width;
+  pct = Math.max(0, Math.min(1, pct));
+  const vid = $("vid-source");
+  const targetTime = pct * vid.duration;
+  vid.currentTime = targetTime;
+  if (state.hasDepthVideo) {
+    $("vid-depth").currentTime = targetTime;
+  }
+  // update after seek
+  function onSeek() {
+    vid.removeEventListener("seeked", onSeek);
+    captureVideoFrame(vid, state.sourceTex);
+    if (state.hasDepthVideo) {
+      captureVideoFrame($("vid-depth"), state.depthTex);
+    }
+    state.needsRender = true;
+    updateVideoUI();
+  }
+  vid.addEventListener("seeked", onSeek);
+}
+
+let _scrubbing = false;
+$("vc-track").addEventListener("mousedown", e => {
+  if (!state.isVideo) return;
+  _scrubbing = true;
+  const wasPlaying = state.videoPlaying;
+  stopVideoPlayback();
+  if (state.hasDepthVideo) $("vid-depth").pause();
+  scrubToX(e.clientX);
+
+  function onMove(ev) { scrubToX(ev.clientX); }
+  function onUp() {
+    _scrubbing = false;
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+  }
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+});
+
+/* ── Comb frames slider ───────────────────────────────────────────── */
+$("wig-comb").addEventListener("input", () => {
+  state.combFrames = parseInt($("wig-comb").value) || 3;
+  updateCombOverlay();
+  state.needsRender = true;
+});
+
 /* ── Effect tab switching ──────────────────────────────────────────── */
 document.querySelectorAll(".fx-tab").forEach(tab => {
   tab.addEventListener("click", () => {
@@ -1196,6 +1553,9 @@ document.querySelectorAll(".fx-tab").forEach(tab => {
     state.needsRender = true;
     // show/hide timeline for wiggle
     $("timeline").classList.toggle("show", fx === "wiggle");
+    // show/hide comb field for video wiggle
+    $("comb-field").style.display = (fx === "wiggle" && state.isVideo) ? "" : "none";
+    updateCombOverlay();
   });
 });
 

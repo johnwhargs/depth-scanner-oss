@@ -1904,11 +1904,9 @@ async function init() {
   $("nav-3d").addEventListener("click", goTo3D);
 
   function goTo3D() {
-    if (state.sessionId) {
-      window.location.href = `workspace.html?session=${state.sessionId}&server=${encodeURIComponent(SERVER)}`;
-    } else {
-      log("Process a depth map first to open 3D Workspace", "warn");
-    }
+    var url = `workspace.html?server=${encodeURIComponent(SERVER)}`;
+    if (state.sessionId) url += `&session=${state.sessionId}`;
+    window.location.href = url;
   }
 
   // FX toggle
