@@ -242,6 +242,7 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
       </div>
       <button class="btn btn-accent2" id="btn-process" disabled>Process Depth Map</button>
       <button class="btn" id="btn-save" disabled>Save Result</button>
+      <button class="btn" id="btn-3d" disabled style="margin-top:4px;border-color:var(--accent);color:var(--accent)">Open in 3D Workspace →</button>
     </div>
 
     <!-- ── Effects (shown after processing) ──── -->
@@ -1084,6 +1085,7 @@ async function processImage() {
     $("btn-save").disabled = false;
     $("btn-fx-preview").disabled = false;
     $("btn-fx-apply").disabled = false;
+    $("btn-3d").disabled = false;
     // effects section always visible;
     const imgTime = ((Date.now() - imgStart) / 1000).toFixed(1);
     log(`Depth map ready (${imgTime}s)`, "success");
@@ -1894,6 +1896,11 @@ async function init() {
   });
   $("btn-fx-preview").addEventListener("click", () => runEffect(true));
   $("btn-fx-apply").addEventListener("click", () => runEffect(false));
+  $("btn-3d").addEventListener("click", () => {
+    if (state.sessionId) {
+      window.location.href = `workspace.html?session=${state.sessionId}&server=${encodeURIComponent(SERVER)}`;
+    }
+  });
 
   // FX toggle
   state.fxEnabled = false;

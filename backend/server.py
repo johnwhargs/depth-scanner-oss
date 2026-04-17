@@ -565,6 +565,27 @@ async def video_info(
             os.unlink(tmp_name)
 
 
+@app.get("/session/{session_id}/source")
+def session_source(session_id: str):
+    """Get the source image from a session."""
+    data = cache.get(session_id)
+    if not data:
+        raise HTTPException(404, "Session not found.")
+    img, _ = data
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+@app.get("/session/{session_id}/depth")
+def session_depth(session_id: str, colormap: str = "grayscale"):
+    """Get the depth map from a session as PNG."""
+    data = cache.get(session_id)
+    if not data:
+        raise HTTPException(404, "Session not found.")
+    _, depth = data
+    out = export(depth, "png_gray", colormap)
+    return Response(content=out, media_type="image/png")
+
 @app.post("/save")
 async def save_file(
     file: UploadFile = File(...),
