@@ -242,7 +242,6 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
       </div>
       <button class="btn btn-accent2" id="btn-process" disabled>Process Depth Map</button>
       <button class="btn" id="btn-save" disabled>Save Result</button>
-      <button class="btn" id="btn-3d" disabled style="margin-top:4px;border-color:var(--accent);color:var(--accent)">Open in 3D Workspace →</button>
     </div>
 
     <!-- ── Effects (shown after processing) ──── -->
@@ -410,7 +409,7 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
         <div class="field">
           <label>Views</label>
           <input type="range" id="wig-views" min="3" max="7" step="1" value="5"
-            oninput="document.getElementById('wig-views-v').textContent=this.value"/>
+            oninput="document.getElementById('wig-views-v').textContent=this.value; updateWigEstimate()"/>
           <span class="range-val" id="wig-views-v">5</span>
         </div>
         <div class="field">
@@ -422,17 +421,24 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
         <div class="field">
           <label>Speed</label>
           <input type="range" id="wig-fps" min="5" max="30" step="1" value="12"
-            oninput="document.getElementById('wig-fps-v').textContent=this.value+'fps'"/>
+            oninput="document.getElementById('wig-fps-v').textContent=this.value+'fps'; updateWigEstimate()"/>
           <span class="range-val" id="wig-fps-v">12fps</span>
         </div>
         <div class="field">
           <label>Format</label>
-          <select id="wig-format"><option value="gif">GIF</option><option value="mp4">MP4</option></select>
+          <select id="wig-format" onchange="updateWigEstimate()"><option value="gif">GIF</option><option value="mp4">MP4</option></select>
         </div>
         <div class="field">
           <label>Path</label>
           <select id="wig-path"><option value="linear">Linear</option><option value="arc">Arc</option></select>
         </div>
+        <div class="field">
+          <label>Loops</label>
+          <input type="range" id="wig-loops" min="1" max="10" step="1" value="3"
+            oninput="document.getElementById('wig-loops-v').textContent=this.value; updateWigEstimate()"/>
+          <span class="range-val" id="wig-loops-v">3</span>
+        </div>
+        <div id="wig-estimate" style="display:none;font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:4px;padding:4px 6px;background:var(--bg);border-radius:var(--radius)"></div>
       </div>
 
       <!-- Spatial -->
@@ -486,6 +492,7 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
         </div>
       </div>
       </div><!-- /fx-controls -->
+      <button class="btn" id="btn-3d" disabled style="margin-top:8px;border-color:var(--accent);color:var(--accent)">Open in 3D Workspace →</button>
     </div>
 
   </div>
@@ -1275,64 +1282,12 @@ function isVideoFile(name) {
   return VIDEO_EXTS.includes(ext);
 }
 
-async function openVideo() {
-  try {
-    let file;
-    try {
-      const paths = await Promise.reject("use file input");
-      if (!paths || paths.length === 0) return;
-      const path = paths[0];
-      const name = path.split(/[/\\]/).pop();
-      const r = await fetch(path.startsWith("/") ? `file://${path}` : path);
-      file = new File([await r.blob()], name);
-    } catch {
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = "video/*";
-      file = await new Promise(resolve => {
-        input.onchange = e => resolve(e.target.files[0]);
-        input.click();
-      });
-    }
-    if (!file) return;
-
-    state.videoBlob = file;
-    state.videoResultBlob = null;
-    $("btn-save").disabled = true;
-    hideAllPreviews();
-    $("drop-zone").classList.remove("hidden");
-    $("viewport-bar").style.display = "none";
-    log(`Video loaded: ${file.name} (${formatSize(file.size)})`);
-    $("file-info").textContent = file.name;
-
-    // Get video info
-    setIndeterminate(true);
-    const fd = new FormData();
-    fd.append("file", file, file.name);
-    const r = await fetch(`${SERVER}/process/video/info`, { method: "POST", body: fd });
-    if (r.ok) {
-      state.videoInfo = await r.json();
-      const vi = state.videoInfo;
-      $("video-meta").innerHTML =
-        `${vi.width}×${vi.height} · ${vi.fps.toFixed(2)}fps<br>` +
-        `${vi.frames} frames · ${vi.duration.toFixed(1)}s`;
-      $("video-info-box").style.display = "block";
-      $("btn-process").disabled = false;
-      log(`Video: ${vi.width}×${vi.height}, ${vi.fps.toFixed(2)}fps, ${vi.frames} frames`, "success");
-    }
-    setIndeterminate(false);
-
-  } catch (e) {
-    log(`Video error: ${e.message}`, "error");
-    setIndeterminate(false);
-  }
-}
 
 async function processVideo() {
   if (state.processing || !state.videoBlob) return;
   state.processing = true;
   $("btn-process").disabled = true;
-  $("btn-open").disabled = true;
+  // file input label doesn't need disabling;
 
   const model = $("model").value;
   const format = $("output-format").value;
@@ -1483,7 +1438,7 @@ async function processVideo() {
     state.processing = false;
     $("btn-process").disabled = false;
     $("btn-process").textContent = "Process Depth Map";
-    $("btn-open").disabled = false;
+    // file input label doesn't need enabling;
     $("frame-counter").style.display = "none";
     setProgress(0, false);
     setIndeterminate(false);
@@ -1493,6 +1448,28 @@ async function processVideo() {
 // ── Effects ──────────────────────────────────────────────────────
 function getActiveFx() {
   return document.querySelector(".fx-tab.active")?.dataset.fx || "dof";
+}
+
+function updateWigEstimate() {
+  const est = $("wig-estimate");
+  if (!est) return;
+  const format = $("wig-format")?.value || "gif";
+  if (format !== "mp4") {
+    est.style.display = "none";
+    return;
+  }
+  const views = parseInt($("wig-views")?.value || "5");
+  const loops = parseInt($("wig-loops")?.value || "3");
+  const fps = parseInt($("wig-fps")?.value || "12");
+  const bounce = views * 2 - 2; // frames per cycle (bounce)
+  const totalFrames = bounce * loops;
+  const duration = (totalFrames / fps).toFixed(1);
+  const estRender = (totalFrames * 0.1).toFixed(1); // ~0.1s per frame render
+
+  est.style.display = "block";
+  est.innerHTML =
+    `${totalFrames} frames · ${duration}s duration<br>` +
+    `Est. render: ~${estRender}s`;
 }
 
 function getEffectParams(fx) {

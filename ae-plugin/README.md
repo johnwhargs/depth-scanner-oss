@@ -22,7 +22,7 @@ The script auto-builds the comp structure and creates a **Controller null** with
 | Effect | What it creates | Controller sliders |
 |--------|----------------|-------------------|
 | **EZ Matte** | Precomp with depth as luma matte | Depth Cutoff, Feather |
-| **Depth of Field** | Camera Lens Blur + depth as blur map | Blur Radius, Focal Distance |
+| **Depth of Field** | Camera Lens Blur + depth as blur map, 9 bokeh presets | Blur Radius, Focal Distance, Iris Blades, Roundness, Rotation, Highlight Threshold/Brightness, Anamorphic Stretch, Bokeh Preset dropdown |
 | **Atmospheric Fog** | Fractal Noise solid + depth matte | Fog Density |
 | **Parallax / 2.5D** | Displacement Map + blurred depth | Shift X, Shift Y, Depth Blur |
 | **Stereo 3D** | Left/Right eye comps + SBS viewer | Eye Separation, Convergence |

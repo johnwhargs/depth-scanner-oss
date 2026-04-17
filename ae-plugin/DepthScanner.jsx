@@ -112,7 +112,15 @@
         blur.property("ADBE Camera Lens Blur-0001").setValue(15); // Blur Radius
         blur.property("ADBE Camera Lens Blur-0010").setValue(depthLayer.index); // Blur Map Layer
 
-        // Controller null
+        // Try setting iris shape properties
+        try {
+            blur.property("ADBE Camera Lens Blur-0002").setValue(6); // Iris Shape: Hexagon
+            blur.property("ADBE Camera Lens Blur-0003").setValue(0.5); // Iris Roundness
+            blur.property("ADBE Camera Lens Blur-0005").setValue(100); // Specular Threshold
+            blur.property("ADBE Camera Lens Blur-0006").setValue(200); // Specular Brightness
+        } catch(e) {}
+
+        // Controller null with comprehensive bokeh controls
         var ctrl = comp.layers.addNull();
         ctrl.name = "DoF Controller";
         ctrl.guideLayer = true;
@@ -125,12 +133,161 @@
         sFocal.name = "Focal Distance";
         sFocal.property("ADBE Slider Control-0001").setValue(50);
 
-        // Link
+        var sIrisShape = ctrl.Effects.addProperty("ADBE Slider Control");
+        sIrisShape.name = "Iris Blades (3-8)";
+        sIrisShape.property("ADBE Slider Control-0001").setValue(6);
+
+        var sRoundness = ctrl.Effects.addProperty("ADBE Slider Control");
+        sRoundness.name = "Iris Roundness (0-100)";
+        sRoundness.property("ADBE Slider Control-0001").setValue(50);
+
+        var sRotation = ctrl.Effects.addProperty("ADBE Slider Control");
+        sRotation.name = "Iris Rotation";
+        sRotation.property("ADBE Slider Control-0001").setValue(0);
+
+        var sSpecThresh = ctrl.Effects.addProperty("ADBE Slider Control");
+        sSpecThresh.name = "Highlight Threshold";
+        sSpecThresh.property("ADBE Slider Control-0001").setValue(100);
+
+        var sSpecBright = ctrl.Effects.addProperty("ADBE Slider Control");
+        sSpecBright.name = "Highlight Brightness";
+        sSpecBright.property("ADBE Slider Control-0001").setValue(200);
+
+        var sAspect = ctrl.Effects.addProperty("ADBE Slider Control");
+        sAspect.name = "Anamorphic Stretch (50-200)";
+        sAspect.property("ADBE Slider Control-0001").setValue(100);
+
+        // Add bokeh style presets as dropdown
+        var sPreset = ctrl.Effects.addProperty("ADBE Dropdown Control");
+        sPreset.name = "Bokeh Preset";
+        try {
+            // Set dropdown items
+            var dd = sPreset.property("ADBE Dropdown Control-0001");
+            dd.setPropertyParameters([
+                "Custom",
+                "Gaussian (smooth)",
+                "Disc (hard circle)",
+                "Hexagon (6-blade)",
+                "Pentagon (5-blade)",
+                "Octagon (8-blade)",
+                "Anamorphic (oval)",
+                "Ring / Soap Bubble",
+                "Donut (mirror lens)",
+                "Cat Eye (vignette)"
+            ]);
+        } catch(e) {}
+
+        // Link blur properties to controller
         srcLayer.effect("Camera Lens Blur")("Blur Radius").expression =
             'thisComp.layer("DoF Controller").effect("Blur Radius")("Slider")';
+
         try {
             srcLayer.effect("Camera Lens Blur")("Blur Focal Distance").expression =
                 'thisComp.layer("DoF Controller").effect("Focal Distance")("Slider") / 100';
+        } catch(e) {}
+
+        // Iris shape linked via expression (maps slider to shape enum)
+        try {
+            srcLayer.effect("Camera Lens Blur")("Iris Shape").expression =
+                'clamp(Math.round(thisComp.layer("DoF Controller").effect("Iris Blades (3-8)")("Slider")), 3, 8)';
+        } catch(e) {}
+
+        try {
+            srcLayer.effect("Camera Lens Blur")("Iris Roundness").expression =
+                'thisComp.layer("DoF Controller").effect("Iris Roundness (0-100)")("Slider") / 100';
+        } catch(e) {}
+
+        try {
+            srcLayer.effect("Camera Lens Blur")("Iris Rotation").expression =
+                'thisComp.layer("DoF Controller").effect("Iris Rotation")("Slider")';
+        } catch(e) {}
+
+        try {
+            srcLayer.effect("Camera Lens Blur")("Specular Threshold").expression =
+                'thisComp.layer("DoF Controller").effect("Highlight Threshold")("Slider")';
+        } catch(e) {}
+
+        try {
+            srcLayer.effect("Camera Lens Blur")("Specular Brightness").expression =
+                'thisComp.layer("DoF Controller").effect("Highlight Brightness")("Slider")';
+        } catch(e) {}
+
+        // Preset expression: auto-set params based on dropdown selection
+        var presetExpr = [
+            '// Bokeh Preset Auto-Apply',
+            'var p = thisComp.layer("DoF Controller").effect("Bokeh Preset")(1);',
+            'var val = value;',
+            '// 1=Custom (no change)',
+            'if (p == 2) val = __GAUSSIAN__;  // Gaussian',
+            'if (p == 3) val = __DISC__;      // Disc',
+            'if (p == 4) val = __HEX__;       // Hexagon',
+            'if (p == 5) val = __PENT__;      // Pentagon',
+            'if (p == 6) val = __OCT__;       // Octagon',
+            'if (p == 7) val = __ANAM__;      // Anamorphic',
+            'if (p == 8) val = __RING__;      // Ring',
+            'if (p == 9) val = __DONUT__;     // Donut',
+            'if (p == 10) val = __CAT__;      // Cat Eye',
+            'val;'
+        ].join('\n');
+
+        // Set presets for iris blades
+        try {
+            ctrl.effect("Iris Blades (3-8)")("Slider").expression =
+                presetExpr
+                    .replace(/__GAUSSIAN__/g, '8')   // high blade = round
+                    .replace(/__DISC__/g, '8')
+                    .replace(/__HEX__/g, '6')
+                    .replace(/__PENT__/g, '5')
+                    .replace(/__OCT__/g, '8')
+                    .replace(/__ANAM__/g, '6')
+                    .replace(/__RING__/g, '8')
+                    .replace(/__DONUT__/g, '8')
+                    .replace(/__CAT__/g, '6');
+        } catch(e) {}
+
+        // Set presets for roundness
+        try {
+            ctrl.effect("Iris Roundness (0-100)")("Slider").expression =
+                presetExpr
+                    .replace(/__GAUSSIAN__/g, '100')
+                    .replace(/__DISC__/g, '100')
+                    .replace(/__HEX__/g, '0')
+                    .replace(/__PENT__/g, '0')
+                    .replace(/__OCT__/g, '0')
+                    .replace(/__ANAM__/g, '100')
+                    .replace(/__RING__/g, '100')
+                    .replace(/__DONUT__/g, '100')
+                    .replace(/__CAT__/g, '30');
+        } catch(e) {}
+
+        // Set presets for anamorphic stretch
+        try {
+            ctrl.effect("Anamorphic Stretch (50-200)")("Slider").expression =
+                presetExpr
+                    .replace(/__GAUSSIAN__/g, '100')
+                    .replace(/__DISC__/g, '100')
+                    .replace(/__HEX__/g, '100')
+                    .replace(/__PENT__/g, '100')
+                    .replace(/__OCT__/g, '100')
+                    .replace(/__ANAM__/g, '55')    // oval stretch
+                    .replace(/__RING__/g, '100')
+                    .replace(/__DONUT__/g, '100')
+                    .replace(/__CAT__/g, '100');
+        } catch(e) {}
+
+        // Set presets for highlight brightness (ring/donut need high values)
+        try {
+            ctrl.effect("Highlight Brightness")("Slider").expression =
+                presetExpr
+                    .replace(/__GAUSSIAN__/g, '100')
+                    .replace(/__DISC__/g, '150')
+                    .replace(/__HEX__/g, '150')
+                    .replace(/__PENT__/g, '150')
+                    .replace(/__OCT__/g, '150')
+                    .replace(/__ANAM__/g, '200')
+                    .replace(/__RING__/g, '500')    // bright ring edges
+                    .replace(/__DONUT__/g, '500')
+                    .replace(/__CAT__/g, '200');
         } catch(e) {}
 
         // Hide depth layer
@@ -497,7 +654,7 @@
 
         var DESCRIPTIONS = {
             "EZ Matte": "Depth-driven alpha matte with\ncutoff and feather controls.",
-            "Depth of Field": "Camera Lens Blur driven by\ndepth map. Focal distance slider.",
+            "Depth of Field": "Camera Lens Blur with 9 bokeh\npresets. Iris shape, roundness,\nanamorphic stretch controls.",
             "Atmospheric Fog": "Fractal noise fog layered by\ndepth. Density + color controls.",
             "Parallax / 2.5D": "Displacement map parallax.\nKeyframe X/Y for camera moves.",
             "Stereo 3D": "Left/right eye views for 3D.\nSBS viewer with separation control.",
