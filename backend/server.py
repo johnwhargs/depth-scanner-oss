@@ -339,6 +339,10 @@ def video_frame(
         else:
             aligned = raw
         depth = sess.prev_depth * smooth + aligned * (1.0 - smooth)
+        # Re-normalize to prevent drift toward 0 or 1 over many frames
+        lo, hi = depth.min(), depth.max()
+        if hi - lo > 0.01:
+            depth = (depth - lo) / (hi - lo)
         depth = np.clip(depth, 0.0, 1.0)
     else:
         depth = raw

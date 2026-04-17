@@ -209,6 +209,10 @@ class DepthEngine:
                 else:
                     aligned = raw
                 depth = prev * temporal_smooth + aligned * (1.0 - temporal_smooth)
+                # Re-normalize to prevent drift over long sequences
+                lo, hi = depth.min(), depth.max()
+                if hi - lo > 0.01:
+                    depth = (depth - lo) / (hi - lo)
                 depth = np.clip(depth, 0.0, 1.0)
             else:
                 depth = raw
