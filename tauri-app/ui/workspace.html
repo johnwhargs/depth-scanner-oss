@@ -168,20 +168,23 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
       <!-- Parallax -->
       <div class="fx-pane active" id="fx-parallax">
         <div class="field">
-          <label>Shift X</label>
+          <label title="Horizontal camera shift in pixels. Positive = right.">Shift X</label>
           <input type="range" id="par-x" min="-60" max="60" step="1" value="0"
+            title="Horizontal camera shift in pixels. Positive = right."
             oninput="document.getElementById('par-x-v').textContent=this.value+'px'"/>
           <span class="range-val" id="par-x-v">0px</span>
         </div>
         <div class="field">
-          <label>Shift Y</label>
+          <label title="Vertical camera shift in pixels. Positive = down.">Shift Y</label>
           <input type="range" id="par-y" min="-60" max="60" step="1" value="0"
+            title="Vertical camera shift in pixels. Positive = down."
             oninput="document.getElementById('par-y-v').textContent=this.value+'px'"/>
           <span class="range-val" id="par-y-v">0px</span>
         </div>
         <div class="field">
-          <label>Depth scale</label>
+          <label title="How much depth affects displacement. Higher = more 3D.">Depth scale</label>
           <input type="range" id="par-scale" min="0.5" max="3.0" step="0.1" value="1.0"
+            title="How much depth affects displacement. Higher = more 3D."
             oninput="document.getElementById('par-scale-v').textContent=parseFloat(this.value).toFixed(1)+'x'"/>
           <span class="range-val" id="par-scale-v">1.0x</span>
         </div>
@@ -191,69 +194,78 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
       <!-- Wiggle -->
       <div class="fx-pane" id="fx-wiggle">
         <div class="field">
-          <label>Views</label>
+          <label title="Number of eye positions to simulate (like Nishika camera lenses).">Views</label>
           <input type="range" id="wig-views" min="3" max="7" step="1" value="5"
+            title="Number of eye positions to simulate (like Nishika camera lenses)."
             oninput="document.getElementById('wig-views-v').textContent=this.value"/>
           <span class="range-val" id="wig-views-v">5</span>
         </div>
         <div class="field">
-          <label>Separation</label>
+          <label title="Distance between leftmost and rightmost eye position in pixels.">Separation</label>
           <input type="range" id="wig-sep" min="5" max="40" step="1" value="15"
+            title="Distance between leftmost and rightmost eye position in pixels."
             oninput="document.getElementById('wig-sep-v').textContent=this.value+'px'"/>
           <span class="range-val" id="wig-sep-v">15px</span>
         </div>
         <div class="field">
-          <label>Speed</label>
+          <label title="How fast the wiggle oscillates. 1x = normal speed.">Speed</label>
           <input type="range" id="wig-speed" min="0.5" max="4.0" step="0.1" value="1.0"
+            title="How fast the wiggle oscillates. 1x = normal speed."
             oninput="document.getElementById('wig-speed-v').textContent=parseFloat(this.value).toFixed(1)+'x'"/>
           <span class="range-val" id="wig-speed-v">1.0x</span>
         </div>
         <div class="field">
-          <label>Path</label>
-          <select id="wig-path"><option value="linear">Linear</option><option value="arc">Arc</option></select>
+          <label title="Linear = horizontal sweep. Arc = slight vertical curve.">Path</label>
+          <select id="wig-path" title="Linear = horizontal sweep. Arc = slight vertical curve."><option value="linear">Linear</option><option value="arc">Arc</option></select>
         </div>
         <div class="field">
-          <label>Loops</label>
+          <label title="Number of back-and-forth cycles for export.">Loops</label>
           <input type="range" id="wig-loops" min="1" max="10" step="1" value="3"
+            title="Number of back-and-forth cycles for export."
             oninput="document.getElementById('wig-loops-v').textContent=this.value"/>
           <span class="range-val" id="wig-loops-v">3</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)">
-          <input type="checkbox" id="wig-focal-on" style="accent-color:var(--accent);cursor:pointer"/>
-          <label for="wig-focal-on" style="font-size:10px;color:var(--muted);cursor:pointer;white-space:nowrap">Custom Focal Point</label>
-          <input type="checkbox" id="wig-focal-dot" style="accent-color:var(--err);cursor:pointer" title="Show red dot"/>
-          <label for="wig-focal-dot" style="font-size:9px;color:var(--err);cursor:pointer" title="Show focal indicator">dot</label>
+          <input type="checkbox" id="wig-focal-on" style="accent-color:var(--accent);cursor:pointer" title="Enable custom focal point — objects at this depth stay still."/>
+          <label for="wig-focal-on" style="font-size:10px;color:var(--muted);cursor:pointer;white-space:nowrap" title="Enable custom focal point — objects at this depth stay still.">Custom Focal Point</label>
+          <input type="checkbox" id="wig-focal-dot" style="accent-color:var(--err);cursor:pointer" title="Show a red dot on the canvas indicating the focal position."/>
+          <label for="wig-focal-dot" style="font-size:9px;color:var(--err);cursor:pointer" title="Show a red dot on the canvas indicating the focal position.">dot</label>
         </div>
         <div id="focal-controls" style="display:none">
           <div class="field">
-            <label>Depth</label>
+            <label title="Depth value of the convergence plane (0=near, 1=far).">Depth</label>
             <input type="range" id="wig-focal" min="0" max="1" step="0.01" value="0.5"
+              title="Depth value of the convergence plane (0=near, 1=far)."
               oninput="document.getElementById('wig-focal-v').textContent=parseFloat(this.value).toFixed(2)"/>
             <span class="range-val" id="wig-focal-v">0.50</span>
           </div>
           <div class="field">
-            <label>Position X</label>
+            <label title="Horizontal position to sample depth from (0=left, 1=right).">Position X</label>
             <input type="range" id="wig-focal-x" min="0" max="1" step="0.01" value="0.5"
+              title="Horizontal position to sample depth from (0=left, 1=right)."
               oninput="document.getElementById('wig-focal-x-v').textContent=parseFloat(this.value).toFixed(2)"/>
             <span class="range-val" id="wig-focal-x-v">0.50</span>
           </div>
           <div class="field">
-            <label>Position Y</label>
+            <label title="Vertical position to sample depth from (0=top, 1=bottom).">Position Y</label>
             <input type="range" id="wig-focal-y" min="0" max="1" step="0.01" value="0.5"
+              title="Vertical position to sample depth from (0=top, 1=bottom)."
               oninput="document.getElementById('wig-focal-y-v').textContent=parseFloat(this.value).toFixed(2)"/>
             <span class="range-val" id="wig-focal-y-v">0.50</span>
           </div>
           <div style="font-size:9px;color:var(--muted);margin-bottom:6px">Click on canvas to pick focal point from depth map</div>
         </div>
         <div class="field">
-          <label>Motion blur</label>
+          <label title="Blends between eye positions for smoother transitions. 0=sharp flicker.">Motion blur</label>
           <input type="range" id="wig-mblur" min="0" max="1" step="0.05" value="0.3"
+            title="Blends between eye positions for smoother transitions. 0=sharp flicker."
             oninput="document.getElementById('wig-mblur-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="wig-mblur-v">0.30</span>
         </div>
         <div class="field" id="comb-field" style="display:none">
-          <label>Comb frames</label>
+          <label title="Consecutive frames per eye before switching. 3 = classic Nishika look.">Comb frames</label>
           <input type="range" id="wig-comb" min="1" max="5" step="1" value="3"
+            title="Consecutive frames per eye before switching. 3 = classic Nishika look."
             oninput="document.getElementById('wig-comb-v').textContent=this.value"/>
           <span class="range-val" id="wig-comb-v">3</span>
         </div>
@@ -267,20 +279,22 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
       <!-- Spatial -->
       <div class="fx-pane" id="fx-spatial">
         <div class="field">
-          <label>Eye sep.</label>
+          <label title="Distance between virtual left and right eyes in pixels.">Eye sep.</label>
           <input type="range" id="sp-sep" min="5" max="60" step="1" value="30"
+            title="Distance between virtual left and right eyes in pixels."
             oninput="document.getElementById('sp-sep-v').textContent=this.value+'px'"/>
           <span class="range-val" id="sp-sep-v">30px</span>
         </div>
         <div class="field">
-          <label>Convergence</label>
+          <label title="Depth where left/right images overlap (screen plane). 0=near, 1=far.">Convergence</label>
           <input type="range" id="sp-conv" min="0" max="1" step="0.01" value="0.5"
+            title="Depth where left/right images overlap (screen plane). 0=near, 1=far."
             oninput="document.getElementById('sp-conv-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="sp-conv-v">0.50</span>
         </div>
         <div class="field">
-          <label>View mode</label>
-          <select id="sp-mode">
+          <label title="Side-by-side for VR. Anaglyph for red/cyan glasses. Single eye for comparison.">View mode</label>
+          <select id="sp-mode" title="Side-by-side for VR. Anaglyph for red/cyan glasses. Single eye for comparison.">
             <option value="sbs">Side-by-side</option>
             <option value="anaglyph">Anaglyph</option>
             <option value="left">Left only</option>
@@ -293,26 +307,29 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
       <!-- Bokeh -->
       <div class="fx-pane" id="fx-bokeh">
         <div class="field">
-          <label>Focal depth</label>
+          <label title="Depth of the in-focus plane. 0=closest, 1=farthest.">Focal depth</label>
           <input type="range" id="bk-focal" min="0" max="1" step="0.01" value="0.3"
+            title="Depth of the in-focus plane. 0=closest, 1=farthest."
             oninput="document.getElementById('bk-focal-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="bk-focal-v">0.30</span>
         </div>
         <div class="field">
-          <label>Focal range</label>
+          <label title="Size of the in-focus zone around the focal depth.">Focal range</label>
           <input type="range" id="bk-range" min="0.01" max="0.5" step="0.01" value="0.1"
+            title="Size of the in-focus zone around the focal depth."
             oninput="document.getElementById('bk-range-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="bk-range-v">0.10</span>
         </div>
         <div class="field">
-          <label>Max blur</label>
+          <label title="Maximum blur radius for out-of-focus areas.">Max blur</label>
           <input type="range" id="bk-blur" min="1" max="40" step="1" value="14"
+            title="Maximum blur radius for out-of-focus areas."
             oninput="document.getElementById('bk-blur-v').textContent=this.value+'px'"/>
           <span class="range-val" id="bk-blur-v">14px</span>
         </div>
         <div class="field">
-          <label>Shape</label>
-          <select id="bk-shape">
+          <label title="Aperture shape determines the look of out-of-focus highlights.">Shape</label>
+          <select id="bk-shape" title="Aperture shape determines the look of out-of-focus highlights.">
             <option value="gaussian">Gaussian</option>
             <option value="disc">Disc</option>
             <option value="hexagon">Hexagon</option>
@@ -327,28 +344,32 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
 
       <!-- Fog -->
       <div class="fx-pane" id="fx-fog">
-        <div class="field"><label>Fog color</label><input type="color" id="fog-color" value="#c8c8d0"/></div>
+        <div class="field"><label title="Color of the fog/haze.">Fog color</label><input type="color" id="fog-color" value="#c8c8d0" title="Color of the fog/haze."/></div>
         <div class="field">
-          <label>Density</label>
+          <label title="Maximum opacity of the fog. 0=invisible, 1=opaque.">Density</label>
           <input type="range" id="fog-density" min="0" max="1" step="0.05" value="0.7"
+            title="Maximum opacity of the fog. 0=invisible, 1=opaque."
             oninput="document.getElementById('fog-density-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="fog-density-v">0.70</span>
         </div>
         <div class="field">
-          <label>Near start</label>
+          <label title="Depth where fog starts appearing.">Near start</label>
           <input type="range" id="fog-near" min="0" max="1" step="0.01" value="0.3"
+            title="Depth where fog starts appearing."
             oninput="document.getElementById('fog-near-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="fog-near-v">0.30</span>
         </div>
         <div class="field">
-          <label>Far end</label>
+          <label title="Depth where fog reaches maximum density.">Far end</label>
           <input type="range" id="fog-far" min="0" max="1" step="0.01" value="1.0"
+            title="Depth where fog reaches maximum density."
             oninput="document.getElementById('fog-far-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="fog-far-v">1.00</span>
         </div>
         <div class="field">
-          <label>Noise</label>
+          <label title="Adds natural variation to fog edges.">Noise</label>
           <input type="range" id="fog-noise" min="0" max="0.5" step="0.01" value="0.1"
+            title="Adds natural variation to fog edges."
             oninput="document.getElementById('fog-noise-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="fog-noise-v">0.10</span>
         </div>
@@ -357,38 +378,43 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
       <!-- Terrain -->
       <div class="fx-pane" id="fx-terrain">
         <div class="field">
-          <label>Elevation</label>
+          <label title="How much the depth map raises/lowers the 3D surface.">Elevation</label>
           <input type="range" id="ter-height" min="-1.0" max="1.0" step="0.01" value="0.3"
+            title="How much the depth map raises/lowers the 3D surface."
             oninput="document.getElementById('ter-height-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="ter-height-v">0.30</span>
         </div>
         <div class="field">
-          <label>Rotate X</label>
+          <label title="Tilt the terrain forward/backward.">Rotate X</label>
           <input type="range" id="ter-rx" min="-90" max="90" step="1" value="-35"
+            title="Tilt the terrain forward/backward."
             oninput="document.getElementById('ter-rx-v').textContent=this.value+'°'"/>
           <span class="range-val" id="ter-rx-v">-35°</span>
         </div>
         <div class="field">
-          <label>Rotate Y</label>
+          <label title="Rotate the terrain left/right.">Rotate Y</label>
           <input type="range" id="ter-ry" min="-180" max="180" step="1" value="15"
+            title="Rotate the terrain left/right."
             oninput="document.getElementById('ter-ry-v').textContent=this.value+'°'"/>
           <span class="range-val" id="ter-ry-v">15°</span>
         </div>
         <div class="field">
-          <label>Zoom</label>
+          <label title="Zoom into or out from the terrain.">Zoom</label>
           <input type="range" id="ter-zoom" min="0.5" max="3.0" step="0.05" value="1.2"
+            title="Zoom into or out from the terrain."
             oninput="document.getElementById('ter-zoom-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="ter-zoom-v">1.20</span>
         </div>
         <div class="field">
-          <label>Light angle</label>
+          <label title="Direction the light comes from (in degrees).">Light angle</label>
           <input type="range" id="ter-light" min="0" max="360" step="1" value="45"
+            title="Direction the light comes from (in degrees)."
             oninput="document.getElementById('ter-light-v').textContent=this.value+'°'"/>
           <span class="range-val" id="ter-light-v">45°</span>
         </div>
         <div class="field">
-          <label>Colormap</label>
-          <select id="ter-colormap">
+          <label title="Color scheme for the terrain surface.">Colormap</label>
+          <select id="ter-colormap" title="Color scheme for the terrain surface.">
             <option value="source">Source Image</option>
             <option value="terrain">Terrain (green-brown)</option>
             <option value="inferno">Inferno</option>
@@ -397,12 +423,12 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
           </select>
         </div>
         <div class="field">
-          <label>Wireframe</label>
-          <select id="ter-wire"><option value="0">Off</option><option value="1">On</option></select>
+          <label title="Show wireframe grid overlay on the terrain.">Wireframe</label>
+          <select id="ter-wire" title="Show wireframe grid overlay on the terrain."><option value="0">Off</option><option value="1">On</option></select>
         </div>
         <div class="field">
-          <label>Auto orbit</label>
-          <select id="ter-orbit">
+          <label title="Auto-rotate the terrain continuously.">Auto orbit</label>
+          <select id="ter-orbit" title="Auto-rotate the terrain continuously.">
             <option value="none" selected>None</option>
             <option value="slow">Slow</option>
             <option value="medium">Medium</option>
