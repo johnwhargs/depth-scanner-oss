@@ -207,6 +207,7 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
           <option value="exr">EXR 32-bit</option>
         </select>
       </div>
+      <div id="format-hint" style="display:none;font-size:9px;padding-left:88px;margin-top:-4px;margin-bottom:8px"></div>
       <div class="field" id="colormap-row" style="display:none">
         <label>Colormap</label>
         <select id="colormap"></select>
@@ -1083,10 +1084,14 @@ async function processImage() {
     log(`Processing image with Depth Anything V2 (${model})…`);
     log("Sending to server for inference…", "info");
 
+    // Always request PNG for preview (browser can't display EXR)
+    const previewFormat = format === "exr" ? "png_gray" : format;
+    state._saveFormat = format; // remember for save
+
     const fd = new FormData();
     fd.append("file", state.currentBlob, state.currentFile?.name || "image.png");
     fd.append("model", model);
-    fd.append("format", format);
+    fd.append("format", previewFormat);
     fd.append("colormap", colormap);
 
     const r = await fetch(`${SERVER}/process/frame`, { method: "POST", body: fd });
@@ -1094,6 +1099,18 @@ async function processImage() {
 
     state.sessionId = r.headers.get("X-Session-Id");
     const result = await r.blob();
+
+    // If user wants EXR, fetch the EXR separately for save (don't display it)
+    if (format === "exr") {
+      try {
+        const exrFd = new FormData();
+        exrFd.append("file", state.currentBlob, state.currentFile?.name || "image.png");
+        exrFd.append("model", model);
+        exrFd.append("format", "exr");
+        const exrR = await fetch(`${SERVER}/process/frame`, { method: "POST", body: exrFd });
+        if (exrR.ok) state._exrBlob = await exrR.blob();
+      } catch(e) {}
+    }
     state.depthBlob = result;
     state._latestDepthBlob = result;
 
@@ -1160,9 +1177,11 @@ async function saveBlob(blob, defaultName) {
 
 async function saveResult() {
   if (!state.depthBlob) return;
-  const ext = $("output-format").value === "exr" ? "exr" : "png";
+  const format = state._saveFormat || $("output-format").value;
+  const ext = format === "exr" ? "exr" : "png";
+  const blob = (format === "exr" && state._exrBlob) ? state._exrBlob : state.depthBlob;
   const defaultName = (state.currentFile?.name || "image").replace(/\.[^.]+$/, "") + `_depth.${ext}`;
-  await saveBlob(state.depthBlob, defaultName);
+  await saveBlob(blob, defaultName);
 }
 
 // ── Save video result ────────────────────────────────────────────
@@ -2031,7 +2050,20 @@ async function init() {
 
   // Format toggle
   $("output-format").addEventListener("change", () => {
-    $("colormap-row").style.display = $("output-format").value === "png_color" ? "flex" : "none";
+    const fmt = $("output-format").value;
+    $("colormap-row").style.display = fmt === "png_color" ? "flex" : "none";
+    const hint = $("format-hint");
+    if (fmt === "exr") {
+      hint.style.display = "block";
+      hint.style.color = "var(--warn)";
+      hint.textContent = "⚠ EXR: 32-bit float for compositing. Preview shows PNG.";
+    } else if (fmt === "png_color") {
+      hint.style.display = "block";
+      hint.style.color = "var(--muted)";
+      hint.textContent = "Colorized RGB — select colormap below.";
+    } else {
+      hint.style.display = "none";
+    }
   });
 
   setupDrop();
