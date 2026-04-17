@@ -188,6 +188,20 @@ Native C++ GPU plugin (Metal + OpenCL). 6 effects. Add depth map as optional lay
 - **CAIP 2015** — `/CAIP_2015.pdf` — Scattering-based CoC from depth. `CoC = f·b/(D+Δ)`. Joint bilateral filter for depth edge refinement.
 - **MJP Bokeh** — https://therealmjp.github.io/posts/bokeh/ — Deep technical breakdown: gather vs scatter, real-time techniques.
 - **Bokeh types** — https://www.thephoblographer.com/2022/02/02/a-visual-guide-to-the-different-types-of-bokeh/ — Cat-eye, onion ring, soap bubble, swirly, creamy.
+- **Petzval lens swirl** — https://www.filmmakersacademy.com/blog-what-are-petzval-lens/ — Field curvature + astigmatism creates vortex-like swirl in OOF areas.
+
+### Implemented Bokeh Shapes (in effects.py)
+| Shape | Style | Kernel |
+|-------|-------|--------|
+| gaussian | Smooth portrait | Gaussian falloff |
+| disc | Hard-edged circle | Flat disc |
+| hexagon | 6-blade aperture | Polygon intersection |
+| ring / soap_bubble | Trioplan style | Bright outer ring, dim fill |
+| donut | Mirror/catadioptric | Hollow annulus |
+| onion_ring | Aspherical aberration | Cosine radial modulation |
+| cat_eye | Mechanical vignetting | Intersected shifted discs |
+| anamorphic | Oval/stretched | Elliptical kernel (2:1) |
+| petzval | Swirl/vortex | Tangential smear + radial |
 
 ---
 

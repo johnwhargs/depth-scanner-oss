@@ -143,6 +143,94 @@ def depth_grade(
 
 # ── Effect 3: Depth of Field ──────────────────────────────────────────────────
 
+def _make_bokeh_kernel(shape: str, radius: int, image_shape=None, px=0, py=0) -> np.ndarray:
+    """Generate a 2D bokeh kernel of given shape and radius."""
+    r = max(1, radius)
+    size = r * 2 + 1
+    y, x = np.mgrid[-r:r+1, -r:r+1].astype(np.float32)
+    dist = np.sqrt(x*x + y*y)
+
+    if shape == "disc":
+        # Hard-edged circle
+        k = (dist <= r).astype(np.float32)
+
+    elif shape == "ring" or shape == "soap_bubble":
+        # Bright outer ring, dim interior (Trioplan style)
+        inner = r * 0.7
+        k = np.exp(-((dist - r * 0.85) ** 2) / (r * 0.15 + 1e-8) ** 2)
+        k += 0.15 * (dist <= r).astype(np.float32)  # dim fill
+
+    elif shape == "donut":
+        # Mirror lens — hollow center, bright ring
+        inner = r * 0.55
+        k = ((dist >= inner) & (dist <= r)).astype(np.float32)
+
+    elif shape == "onion_ring":
+        # Concentric rings inside disc
+        k = (dist <= r).astype(np.float32)
+        rings = 0.5 + 0.5 * np.cos(2 * np.pi * dist / max(r * 0.25, 1))
+        k *= rings
+
+    elif shape == "cat_eye":
+        # Vignetting: intersect disc with shifted disc based on distance from center
+        k = (dist <= r).astype(np.float32)
+        if image_shape is not None:
+            ih, iw = image_shape[:2]
+            cx, cy = iw / 2, ih / 2
+            # How far this pixel is from center (0-1)
+            radial = math.sqrt((px - cx)**2 + (py - cy)**2) / (math.sqrt(cx**2 + cy**2) + 1e-8)
+            if radial > 0.3:
+                # Shift direction: toward center
+                dx = (cx - px) / (abs(cx - px) + abs(cy - py) + 1e-8)
+                dy = (cy - py) / (abs(cx - px) + abs(cy - py) + 1e-8)
+                shift = radial * r * 0.6
+                shifted_dist = np.sqrt((x - dx * shift)**2 + (y - dy * shift)**2)
+                k2 = (shifted_dist <= r).astype(np.float32)
+                k = k * k2  # intersection
+
+    elif shape == "anamorphic":
+        # Oval: tall, narrow (2:1 vertical stretch)
+        oval_dist = np.sqrt((x * 2.0)**2 + y**2)
+        k = (oval_dist <= r).astype(np.float32)
+
+    elif shape == "petzval":
+        # Swirl: radial motion blur direction based on angle from center
+        k = (dist <= r).astype(np.float32)
+        # Add tangential smear
+        angle = np.arctan2(y, x)
+        tangent_x = -np.sin(angle)
+        tangent_y = np.cos(angle)
+        smear = np.exp(-((x * tangent_y - y * tangent_x)**2) / (r * 0.4 + 1e-8)**2)
+        k = k * 0.4 + smear * 0.6 * (dist <= r * 1.2).astype(np.float32)
+
+    elif shape == "hexagon":
+        # 6-blade aperture
+        k = np.ones((size, size), dtype=np.float32)
+        for angle_deg in [0, 60, 120]:
+            angle = math.radians(angle_deg)
+            proj = np.abs(x * math.cos(angle) + y * math.sin(angle))
+            k *= (proj <= r * 0.87).astype(np.float32)
+
+    else:
+        # gaussian (default) — smooth falloff
+        k = np.exp(-(dist**2) / (2 * (r * 0.45)**2))
+
+    # Normalize
+    total = k.sum()
+    if total > 0:
+        k /= total
+    return k
+
+
+def _convolve_with_kernel(src: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    """Convolve RGB image with a 2D kernel using cv2."""
+    import cv2
+    result = np.zeros_like(src)
+    for c in range(3):
+        result[:, :, c] = cv2.filter2D(src[:, :, c], -1, kernel)
+    return result
+
+
 def depth_of_field(
     image: Image.Image,
     depth: np.ndarray,
@@ -154,17 +242,16 @@ def depth_of_field(
     far_blur: bool = True,
 ) -> Image.Image:
     """
-    Depth-driven depth of field via layered Gaussian blur.
+    Depth-driven depth of field with multiple bokeh styles.
 
     focal_depth  — depth of the in-focus plane (0=near, 1=far)
     focal_range  — half-width of the in-focus zone
     max_blur     — maximum blur radius in pixels
-    bokeh_shape  — 'gaussian' | 'disc' (disc = harder bokeh edges)
+    bokeh_shape  — 'gaussian' | 'disc' | 'hexagon' | 'ring' | 'soap_bubble' |
+                   'donut' | 'onion_ring' | 'cat_eye' | 'anamorphic' | 'petzval'
     near_blur    — blur pixels closer than focal plane
     far_blur     — blur pixels farther than focal plane
     """
-    from PIL import ImageFilter
-
     depth = _ensure_same_size(image, depth)
 
     # Build per-pixel blur amount [0, max_blur]
@@ -173,18 +260,17 @@ def depth_of_field(
     blur_map = (dist / (0.5 - focal_range + 1e-8)) * max_blur
     blur_map = np.clip(blur_map, 0, max_blur)
 
-    # Mask near/far
     if not near_blur:
         blur_map[depth < focal_depth] = 0
     if not far_blur:
         blur_map[depth > focal_depth] = 0
 
-    # Layered blur: render at N discrete blur levels and blend
-    blur_levels = [0, 2, 4, 8, 12, 18, max_blur]
+    # Layered blur with shaped kernels
     blur_levels = sorted(set([0, max_blur / 4, max_blur / 2, max_blur * 0.75, max_blur]))
 
     src = np.array(image.convert("RGB"), dtype=np.float32)
     result = src.copy()
+    h, w = src.shape[:2]
 
     for i in range(len(blur_levels) - 1):
         lo = blur_levels[i]
@@ -194,16 +280,10 @@ def depth_of_field(
         if mid < 0.5:
             continue
 
-        # Blur at this level
-        if bokeh_shape == "disc":
-            blurred = _box_blur(image, mid)
-        else:
-            blurred = np.array(
-                image.filter(ImageFilter.GaussianBlur(radius=mid)),
-                dtype=np.float32
-            )
+        radius = max(1, int(mid))
+        kernel = _make_bokeh_kernel(bokeh_shape, radius, image_shape=(h, w), px=w//2, py=h//2)
+        blurred = _convolve_with_kernel(src, kernel)
 
-        # Blend mask: pixels whose blur amount falls in [lo, hi]
         blend = np.clip((blur_map - lo) / (hi - lo + 1e-8), 0, 1)
         blend = blend[:, :, np.newaxis]
         result = result * (1 - blend) + blurred * blend

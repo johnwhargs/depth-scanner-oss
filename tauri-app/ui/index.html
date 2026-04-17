@@ -292,7 +292,17 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
         </div>
         <div class="field">
           <label>Bokeh</label>
-          <select id="dof-bokeh"><option value="gaussian">Gaussian</option><option value="disc">Disc</option></select>
+          <select id="dof-bokeh">
+            <option value="gaussian">Gaussian</option>
+            <option value="disc">Disc</option>
+            <option value="hexagon">Hexagon</option>
+            <option value="ring">Soap Bubble</option>
+            <option value="donut">Donut</option>
+            <option value="onion_ring">Onion Ring</option>
+            <option value="cat_eye">Cat Eye</option>
+            <option value="anamorphic">Anamorphic</option>
+            <option value="petzval">Petzval Swirl</option>
+          </select>
         </div>
       </div>
 
@@ -959,8 +969,12 @@ async function loadFile(file) {
 }
 
 function updateEstimate() {
+  try { _updateEstimateInner(); } catch(e) { console.error("estimate error:", e); }
+}
+function _updateEstimateInner() {
   const box = $("estimate-box");
   const text = $("estimate-text");
+  if (!box || !text) return;
 
   if (state._fileType === "image") {
     const size = state.currentBlob?.size || 0;
@@ -1002,13 +1016,9 @@ function updateEstimate() {
   } else {
     box.style.display = "none";
   }
-}
+} // end _updateEstimateInner
 
-// Re-estimate when model or every-N changes
-["model", "vid-every"].forEach(id => {
-  const el = $(id);
-  if (el) el.addEventListener("change", updateEstimate);
-});
+// Re-estimate listeners are added in init()
 
 function formatSize(bytes) {
   if (bytes < 1024) return bytes + " B";
@@ -1950,6 +1960,10 @@ async function init() {
   setupWipeDrag();
   setupTimeline();
   state.viewMode = "depth";
+
+  // Re-estimate when model or every-N changes
+  if ($("model")) $("model").addEventListener("change", updateEstimate);
+  if ($("vid-every")) $("vid-every").addEventListener("change", updateEstimate);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
