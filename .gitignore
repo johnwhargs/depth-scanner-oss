@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# macOS
+.DS_Store
+._*
+
+# Desktop app temp files
+desktop/_app.html
+desktop/tmp*.html
+desktop/icon_*.png
+desktop/icon.iconset/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Claude
+.claude/
+
+# Models (downloaded at runtime)
+*.bin
+*.safetensors

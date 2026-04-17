@@ -1,0 +1,540 @@
+"""
+Depth Scanner OSS — FastAPI backend
+uvicorn server:app --host 127.0.0.1 --port 7842
+"""
+
+import io
+import json
+import os
+import tempfile
+import zipfile
+import uuid
+from collections import OrderedDict
+from typing import Optional
+
+import cv2
+import numpy as np
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response, FileResponse
+from PIL import Image
+
+from depth_engine import engine, COLORMAPS, MODEL_MAP
+from exporters import export, apply_colormap
+from effects import apply_effect
+
+app = FastAPI(title="Depth Scanner OSS", version="1.1.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+CONTENT_TYPES = {"png_gray": "image/png", "png_color": "image/png", "exr": "image/x-exr"}
+
+
+# ── Session cache ──────────────────────────────────────────────────────────────
+class SessionCache:
+    def __init__(self, maxsize=20):
+        self._store = OrderedDict()
+        self._maxsize = maxsize
+
+    def put(self, key, image, depth):
+        self._store[key] = (image, depth)
+        self._store.move_to_end(key)
+        while len(self._store) > self._maxsize:
+            self._store.popitem(last=False)
+
+    def get(self, key):
+        return self._store.get(key)
+
+cache = SessionCache()
+
+
+async def _infer_frame(file, model):
+    raw = await file.read()
+    try:
+        img = Image.open(io.BytesIO(raw)).convert("RGB")
+    except Exception as e:
+        raise HTTPException(400, f"Could not decode image: {e}")
+    engine.load_model(model)
+    depth = engine.process_frame(img)
+    sid = str(uuid.uuid4())[:8]
+    cache.put(sid, img, depth)
+    return img, depth, sid
+
+
+def _coerce_params(params):
+    for k in ("invert_mask", "near_blur", "far_blur"):
+        if k in params and isinstance(params[k], str):
+            params[k] = params[k].lower() in ("true", "1", "yes")
+    for k in ("bg_alpha",):
+        if k in params and isinstance(params[k], str):
+            params[k] = int(params[k])
+    return params
+
+
+# ── Routes ─────────────────────────────────────────────────────────────────────
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "device": engine._detect_device(),
+            "model_loaded": engine._model_size, "engine_status": engine._status,
+            "version": "1.1.0"}
+
+@app.get("/models")
+def list_models():
+    return {"models": list(MODEL_MAP.keys())}
+
+@app.get("/colormaps")
+def list_colormaps():
+    return {"colormaps": list(COLORMAPS.keys())}
+
+@app.get("/effects")
+def list_effects():
+    return {"effects": ["slice", "grade", "dof"]}
+
+@app.post("/load")
+def load_model(model: str = Form("small")):
+    if model not in MODEL_MAP:
+        raise HTTPException(400, f"Unknown model '{model}'.")
+    engine.load_model(model)
+    return {"loaded": model}
+
+@app.post("/process/frame")
+async def process_frame(
+    file: UploadFile = File(...),
+    model: str = Form("small"),
+    format: str = Form("png_gray"),
+    colormap: str = Form("inferno"),
+):
+    if format not in CONTENT_TYPES:
+        raise HTTPException(400, f"format must be one of {list(CONTENT_TYPES)}")
+    img, depth, sid = await _infer_frame(file, model)
+    return Response(
+        content=export(depth, format, colormap),
+        media_type=CONTENT_TYPES[format],
+        headers={"X-Session-Id": sid, "X-Width": str(img.width), "X-Height": str(img.height)},
+    )
+
+@app.post("/process/batch")
+async def process_batch(
+    file: UploadFile = File(...),
+    model: str = Form("small"),
+    format: str = Form("png_gray"),
+    colormap: str = Form("inferno"),
+    smooth: float = Form(0.4),
+    align_scale: bool = Form(True),
+):
+    raw = await file.read()
+    try:
+        zin = zipfile.ZipFile(io.BytesIO(raw))
+    except Exception as e:
+        raise HTTPException(400, f"Bad ZIP: {e}")
+
+    names = sorted(n for n in zin.namelist() if not n.endswith("/"))
+    if not names:
+        raise HTTPException(400, "Empty ZIP.")
+
+    frames = [Image.open(io.BytesIO(zin.read(n))).convert("RGB") for n in names]
+    engine.load_model(model)
+    depths = engine.process_video_frames(frames, temporal_smooth=smooth, align_scale=align_scale)
+
+    ext = "exr" if format == "exr" else "png"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zout:
+        for name, depth in zip(names, depths):
+            zout.writestr(f"{name.rsplit('.',1)[0]}_depth.{ext}", export(depth, format, colormap))
+    return Response(content=buf.getvalue(), media_type="application/zip",
+                    headers={"X-Frame-Count": str(len(depths))})
+
+
+# ── Video session (frame-by-frame with live preview) ──────────────────────────
+
+class VideoSession:
+    """Holds extracted frames and temporal state for frame-by-frame processing."""
+    def __init__(self, frames, fps, width, height):
+        self.frames = frames
+        self.fps = fps
+        self.width = width
+        self.height = height
+        self.prev_depth = None
+        self.processed = 0
+        self.cached_depths = []  # store depths from frame-by-frame pass
+
+video_sessions = {}
+
+@app.post("/process/video/start")
+async def video_start(
+    file: UploadFile = File(...),
+    model: str = Form("small"),
+    every: int = Form(1),
+):
+    """Upload video, extract frames, return session_id + metadata."""
+    raw = await file.read()
+    suffix = os.path.splitext(file.filename or "video.mp4")[1] or ".mp4"
+    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    tmp.write(raw)
+    tmp.close()
+
+    try:
+        cap = cv2.VideoCapture(tmp.name)
+        if not cap.isOpened():
+            raise HTTPException(400, "Could not open video.")
+
+        fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        frames = []
+        idx = 0
+        while True:
+            ret, bgr = cap.read()
+            if not ret:
+                break
+            if idx % every == 0:
+                rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+                frames.append(Image.fromarray(rgb))
+            idx += 1
+        cap.release()
+    finally:
+        os.unlink(tmp.name)
+
+    if not frames:
+        raise HTTPException(400, "No frames extracted.")
+
+    engine.load_model(model)
+    sid = str(uuid.uuid4())[:8]
+    video_sessions[sid] = VideoSession(frames, fps / every, w, h)
+
+    # Limit to 10 active sessions
+    while len(video_sessions) > 10:
+        oldest = next(iter(video_sessions))
+        del video_sessions[oldest]
+
+    return {
+        "session_id": sid,
+        "frames": len(frames),
+        "fps": fps / every,
+        "width": w,
+        "height": h,
+    }
+
+
+@app.get("/process/video/source/{session_id}/{frame_idx}")
+def video_source_frame(session_id: str, frame_idx: int):
+    """Return the original source frame as PNG."""
+    sess = video_sessions.get(session_id)
+    if not sess:
+        raise HTTPException(404, "Session not found.")
+    if frame_idx < 0 or frame_idx >= len(sess.frames):
+        raise HTTPException(400, f"Frame {frame_idx} out of range.")
+    buf = io.BytesIO()
+    sess.frames[frame_idx].save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@app.get("/process/video/frame/{session_id}/{frame_idx}")
+def video_frame(
+    session_id: str,
+    frame_idx: int,
+    format: str = "png_gray",
+    colormap: str = "inferno",
+    smooth: float = 0.4,
+    align_scale: bool = True,
+):
+    """Process a single video frame with temporal alignment. Returns depth image."""
+    from depth_engine import _align_depth
+
+    sess = video_sessions.get(session_id)
+    if not sess:
+        raise HTTPException(404, "Session not found.")
+    if frame_idx < 0 or frame_idx >= len(sess.frames):
+        raise HTTPException(400, f"Frame {frame_idx} out of range 0-{len(sess.frames)-1}")
+
+    raw = engine._infer(sess.frames[frame_idx])
+
+    if sess.prev_depth is not None and smooth > 0:
+        if align_scale:
+            aligned = _align_depth(sess.prev_depth, raw)
+        else:
+            aligned = raw
+        depth = sess.prev_depth * smooth + aligned * (1.0 - smooth)
+        depth = np.clip(depth, 0.0, 1.0)
+    else:
+        depth = raw
+
+    sess.prev_depth = depth
+    sess.processed = frame_idx + 1
+    # Cache for render pass
+    while len(sess.cached_depths) <= frame_idx:
+        sess.cached_depths.append(None)
+    sess.cached_depths[frame_idx] = depth
+
+    out_bytes = export(depth, format, colormap)
+    ct = "image/png" if format != "exr" else "image/x-exr"
+    return Response(
+        content=out_bytes,
+        media_type=ct,
+        headers={"X-Frame": str(frame_idx), "X-Total": str(len(sess.frames))},
+    )
+
+
+@app.post("/process/video/render/{session_id}")
+def video_render(
+    session_id: str,
+    format: str = Form("png_gray"),
+    colormap: str = Form("inferno"),
+    smooth: float = Form(0.4),
+    align_scale: bool = Form(True),
+    output: str = Form("video"),
+):
+    """Render all remaining frames and return final video/sequence. Uses already-processed temporal state."""
+    from depth_engine import _align_depth
+
+    sess = video_sessions.get(session_id)
+    if not sess:
+        raise HTTPException(404, "Session not found.")
+
+    # Use cached depths from frame-by-frame pass if available
+    if len(sess.cached_depths) == len(sess.frames) and all(d is not None for d in sess.cached_depths):
+        depths = sess.cached_depths
+    else:
+        # Fallback: re-process
+        prev = None
+        depths = []
+        for frame in sess.frames:
+            raw = engine._infer(frame)
+            if prev is not None and smooth > 0:
+                aligned = _align_depth(prev, raw) if align_scale else raw
+                depth = prev * smooth + aligned * (1.0 - smooth)
+                depth = np.clip(depth, 0.0, 1.0)
+            else:
+                depth = raw
+            depths.append(depth)
+            prev = depth
+
+    w, h = sess.width, sess.height
+
+    if output == "sequence":
+        ext = "exr" if format == "exr" else "png"
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zout:
+            for i, d in enumerate(depths):
+                zout.writestr(f"depth_{i:05d}.{ext}", export(d, format, colormap))
+        return Response(content=buf.getvalue(), media_type="application/zip",
+                        headers={"Content-Disposition": "attachment; filename=depth_sequence.zip"})
+    else:
+        tmp_out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        tmp_out.close()
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(tmp_out.name, fourcc, sess.fps, (w, h))
+        for d in depths:
+            if format == "png_color":
+                rgb = apply_colormap(d, colormap)
+            else:
+                gray = (np.clip(d, 0, 1) * 255).astype(np.uint8)
+                rgb = np.stack([gray, gray, gray], axis=-1)
+            if rgb.shape[0] != h or rgb.shape[1] != w:
+                rgb = cv2.resize(rgb, (w, h), interpolation=cv2.INTER_LINEAR)
+            writer.write(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+        writer.release()
+        # Clean up session
+        del video_sessions[session_id]
+        return FileResponse(tmp_out.name, media_type="video/mp4", filename="depth_video.mp4")
+
+
+@app.post("/process/video")
+async def process_video(
+    file: UploadFile = File(...),
+    model: str = Form("small"),
+    format: str = Form("png_gray"),
+    colormap: str = Form("inferno"),
+    smooth: float = Form(0.4),
+    align_scale: bool = Form(True),
+    output: str = Form("video"),  # "video" or "sequence"
+    every: int = Form(1),
+):
+    """
+    Process a video file. Extract frames, run depth inference, return result.
+    output="video" → returns MP4 of depth maps
+    output="sequence" → returns ZIP of depth map images
+    """
+    raw = await file.read()
+
+    # Write to temp file for OpenCV
+    suffix = os.path.splitext(file.filename or "video.mp4")[1] or ".mp4"
+    tmp_in = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    tmp_in.write(raw)
+    tmp_in.close()
+
+    try:
+        cap = cv2.VideoCapture(tmp_in.name)
+        if not cap.isOpened():
+            raise HTTPException(400, "Could not open video file.")
+
+        fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        # Extract frames
+        frames = []
+        frame_idx = 0
+        while True:
+            ret, bgr = cap.read()
+            if not ret:
+                break
+            if frame_idx % every == 0:
+                rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+                frames.append(Image.fromarray(rgb))
+            frame_idx += 1
+        cap.release()
+
+        if not frames:
+            raise HTTPException(400, "No frames extracted from video.")
+
+        engine.load_model(model)
+        depths = engine.process_video_frames(
+            frames, temporal_smooth=smooth, align_scale=align_scale
+        )
+
+        if output == "sequence":
+            # Return ZIP of depth images
+            ext = "exr" if format == "exr" else "png"
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zout:
+                for i, depth in enumerate(depths):
+                    padded = f"{i:05d}"
+                    zout.writestr(
+                        f"depth_{padded}.{ext}",
+                        export(depth, format, colormap),
+                    )
+            return Response(
+                content=buf.getvalue(),
+                media_type="application/zip",
+                headers={
+                    "X-Frame-Count": str(len(depths)),
+                    "X-FPS": str(fps / every),
+                    "Content-Disposition": "attachment; filename=depth_sequence.zip",
+                },
+            )
+        else:
+            # Return MP4 video of depth maps
+            tmp_out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+            tmp_out.close()
+
+            out_fps = fps / every
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            writer = cv2.VideoWriter(tmp_out.name, fourcc, out_fps, (w, h))
+
+            for depth in depths:
+                if format == "png_color":
+                    rgb = apply_colormap(depth, colormap)
+                else:
+                    gray = (np.clip(depth, 0, 1) * 255).astype(np.uint8)
+                    rgb = np.stack([gray, gray, gray], axis=-1)
+                # Resize to match original video dimensions
+                if rgb.shape[0] != h or rgb.shape[1] != w:
+                    rgb = cv2.resize(rgb, (w, h), interpolation=cv2.INTER_LINEAR)
+                bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+                writer.write(bgr)
+            writer.release()
+
+            return FileResponse(
+                tmp_out.name,
+                media_type="video/mp4",
+                filename="depth_video.mp4",
+                headers={
+                    "X-Frame-Count": str(len(depths)),
+                    "X-FPS": str(out_fps),
+                },
+            )
+    finally:
+        os.unlink(tmp_in.name)
+
+
+@app.post("/process/video/info")
+async def video_info(file: UploadFile = File(...)):
+    """Get video metadata without processing."""
+    raw = await file.read()
+    suffix = os.path.splitext(file.filename or "video.mp4")[1] or ".mp4"
+    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    tmp.write(raw)
+    tmp.close()
+    try:
+        cap = cv2.VideoCapture(tmp.name)
+        if not cap.isOpened():
+            raise HTTPException(400, "Could not open video.")
+        info = {
+            "fps": cap.get(cv2.CAP_PROP_FPS),
+            "frames": int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
+            "width": int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+            "height": int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+            "duration": cap.get(cv2.CAP_PROP_FRAME_COUNT) / max(cap.get(cv2.CAP_PROP_FPS), 1),
+        }
+        cap.release()
+        return info
+    finally:
+        os.unlink(tmp.name)
+
+
+@app.post("/effect/{effect_name}")
+async def run_effect(
+    effect_name: str,
+    file: Optional[UploadFile] = File(None),
+    session_id: Optional[str] = Form(None),
+    model: str = Form("small"),
+    params_json: str = Form("{}"),
+):
+    if effect_name not in {"slice", "grade", "dof"}:
+        raise HTTPException(404, "Unknown effect.")
+    params = _coerce_params(json.loads(params_json))
+
+    if session_id and cache.get(session_id):
+        img, depth = cache.get(session_id)
+    elif file:
+        img, depth, _ = await _infer_frame(file, model)
+    else:
+        raise HTTPException(400, "Provide 'file' or valid 'session_id'.")
+
+    result = apply_effect(effect_name, img, depth, params)
+    buf = io.BytesIO()
+    result.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+@app.post("/effect/{effect_name}/preview")
+async def effect_preview(
+    effect_name: str,
+    file: Optional[UploadFile] = File(None),
+    session_id: Optional[str] = Form(None),
+    model: str = Form("small"),
+    colormap: str = Form("inferno"),
+    params_json: str = Form("{}"),
+):
+    if effect_name not in {"slice", "grade", "dof"}:
+        raise HTTPException(404, "Unknown effect.")
+    params = _coerce_params(json.loads(params_json))
+
+    if session_id and cache.get(session_id):
+        img, depth = cache.get(session_id)
+    elif file:
+        img, depth, _ = await _infer_frame(file, model)
+    else:
+        raise HTTPException(400, "Provide 'file' or valid 'session_id'.")
+
+    depth_vis   = Image.fromarray(apply_colormap(depth, colormap), "RGB")
+    effect_out  = apply_effect(effect_name, img, depth, params).convert("RGB")
+
+    h = min(img.height, 480)
+    w = int(img.width * h / img.height)
+    depth_vis  = depth_vis.resize((w, h), Image.LANCZOS)
+    effect_out = effect_out.resize((w, h), Image.LANCZOS)
+
+    combined = Image.new("RGB", (w * 2 + 4, h), (30, 30, 34))
+    combined.paste(depth_vis, (0, 0))
+    combined.paste(effect_out, (w + 4, 0))
+
+    buf = io.BytesIO()
+    combined.save(buf, "PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("server:app", host="127.0.0.1", port=7842, reload=False)

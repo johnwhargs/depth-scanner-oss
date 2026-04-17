@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Depth Scanner OSS - Documentation</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #1a1a1c;
+  --bg-elevated: #222225;
+  --bg-surface: #2a2a2e;
+  --bg-code: #16161a;
+  --border: #3a3a3e;
+  --text: #e0e0e4;
+  --text-dim: #9a9aa0;
+  --text-bright: #ffffff;
+  --accent: #5b8fff;
+  --accent-dim: #3a6ae0;
+  --accent-glow: rgba(91, 143, 255, 0.12);
+  --green: #4ade80;
+  --orange: #f59e0b;
+  --red: #f87171;
+  --purple: #a78bfa;
+  --sidebar-w: 260px;
+  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  font-size: 15px;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Sidebar */
+.sidebar {
+  position: fixed;
+  top: 0; left: 0;
+  width: var(--sidebar-w);
+  height: 100vh;
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  z-index: 100;
+  padding: 20px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.sidebar-logo {
+  padding: 10px 20px 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.sidebar-logo h2 {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-bright);
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.sidebar-logo span {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  display: block;
+  margin-top: 4px;
+}
+
+.sidebar nav { padding: 0 12px; }
+
+.sidebar nav .nav-section {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-dim);
+  padding: 16px 8px 6px;
+}
+
+.sidebar nav a {
+  display: block;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13.5px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar nav a:hover {
+  background: var(--accent-glow);
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.sidebar nav a.active {
+  background: var(--accent-glow);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Main */
+.main {
+  margin-left: var(--sidebar-w);
+  min-height: 100vh;
+}
+
+/* Hero */
+.hero {
+  background: linear-gradient(135deg, #1e1e22 0%, #1a1a2e 50%, #1a1a1c 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 80px 60px 60px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -120px; right: -120px;
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(91,143,255,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.hero h1 {
+  font-family: var(--font-mono);
+  font-size: 42px;
+  font-weight: 800;
+  color: var(--text-bright);
+  letter-spacing: -1px;
+  margin-bottom: 12px;
+}
+
+.hero h1 .accent { color: var(--accent); }
+
+.hero p {
+  font-size: 18px;
+  color: var(--text-dim);
+  max-width: 600px;
+  line-height: 1.6;
+}
+
+.hero .badge-row {
+  margin-top: 24px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-dim);
+}
+
+.badge .dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.badge .dot.green { background: var(--green); }
+.badge .dot.blue { background: var(--accent); }
+.badge .dot.orange { background: var(--orange); }
+.badge .dot.purple { background: var(--purple); }
+
+/* Content */
+.content {
+  max-width: 820px;
+  padding: 48px 60px 100px;
+}
+
+.content section { margin-bottom: 56px; }
+
+.content h2 {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-bright);
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  letter-spacing: -0.3px;
+}
+
+.content h3 {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin: 28px 0 12px;
+}
+
+.content h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  margin: 20px 0 8px;
+}
+
+.content p { margin-bottom: 14px; }
+
+.content ul, .content ol {
+  margin: 0 0 16px 24px;
+}
+
+.content li { margin-bottom: 6px; }
+
+.content li code, .content p code, .content td code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--bg-surface);
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--accent);
+}
+
+/* Code blocks */
+pre {
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 20px;
+  overflow-x: auto;
+  margin: 14px 0 18px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+pre .comment { color: #6a6a70; }
+pre .keyword { color: #c678dd; }
+pre .string { color: #98c379; }
+pre .flag { color: var(--orange); }
+pre .url { color: var(--accent); }
+pre .method { color: #e5c07b; }
+pre .endpoint { color: var(--green); }
+pre .arrow { color: var(--text-dim); }
+pre .prompt { color: var(--text-dim); user-select: none; }
+
+/* Step list */
+.step-list { counter-reset: step; list-style: none; margin-left: 0; }
+
+.step-list > li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 44px;
+  margin-bottom: 24px;
+}
+
+.step-list > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0; top: 1px;
+  width: 28px; height: 28px;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent-dim);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0 18px;
+  font-size: 13.5px;
+}
+
+th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+  padding: 10px 14px;
+  border-bottom: 2px solid var(--border);
+}
+
+td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+tr:last-child td { border-bottom: none; }
+
+/* Callout boxes */
+.callout {
+  padding: 16px 20px;
+  border-radius: 8px;
+  margin: 16px 0;
+  font-size: 14px;
+  border-left: 3px solid;
+}
+
+.callout.info {
+  background: rgba(91, 143, 255, 0.06);
+  border-left-color: var(--accent);
+}
+
+.callout.warn {
+  background: rgba(245, 158, 11, 0.06);
+  border-left-color: var(--orange);
+}
+
+.callout.tip {
+  background: rgba(74, 222, 128, 0.06);
+  border-left-color: var(--green);
+}
+
+.callout strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.callout.info strong { color: var(--accent); }
+.callout.warn strong { color: var(--orange); }
+.callout.tip strong { color: var(--green); }
+
+/* API method badges */
+.api-method {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  min-width: 44px;
+  text-align: center;
+}
+
+.api-method.get { background: rgba(74,222,128,0.15); color: var(--green); }
+.api-method.post { background: rgba(91,143,255,0.15); color: var(--accent); }
+
+.api-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.api-row:last-child { border-bottom: none; }
+
+.api-path {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-bright);
+  flex-shrink: 0;
+}
+
+.api-desc { color: var(--text-dim); font-size: 13px; }
+
+/* Footer */
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 32px 60px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+/* Hamburger */
+.hamburger {
+  display: none;
+  position: fixed;
+  top: 16px; left: 16px;
+  z-index: 200;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 90;
+}
+
+/* Architecture diagram */
+.arch-diagram {
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-dim);
+  overflow-x: auto;
+  white-space: pre;
+  margin: 14px 0 18px;
+}
+
+.arch-diagram .highlight { color: var(--accent); font-weight: 600; }
+.arch-diagram .green { color: var(--green); }
+.arch-diagram .orange { color: var(--orange); }
+.arch-diagram .purple { color: var(--purple); }
+
+/* Responsive */
+@media (max-width: 900px) {
+  :root { --sidebar-w: 240px; }
+  .hero { padding: 60px 32px 48px; }
+  .hero h1 { font-size: 32px; }
+  .content { padding: 36px 32px 80px; }
+  .footer { padding: 24px 32px; }
+}
+
+@media (max-width: 700px) {
+  .hamburger { display: block; }
+  .sidebar { transform: translateX(-100%); transition: transform 0.25s ease; }
+  .sidebar.open { transform: translateX(0); }
+  .overlay.open { display: block; }
+  .main { margin-left: 0; }
+  .hero { padding: 60px 20px 40px; }
+  .hero h1 { font-size: 26px; }
+  .hero p { font-size: 15px; }
+  .content { padding: 28px 20px 80px; }
+  .footer { padding: 24px 20px; }
+  .api-row { flex-direction: column; gap: 4px; }
+}
+</style>
+</head>
+<body>
+
+<button class="hamburger" onclick="toggleSidebar()" aria-label="Toggle menu">&#9776;</button>
+<div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <h2>Depth Scanner OSS</h2>
+    <span>v1.0 &middot; After Effects Plugin</span>
+  </div>
+  <nav>
+    <div class="nav-section">Getting Started</div>
+    <a href="#installation">Installation</a>
+    <a href="#quick-start">Quick Start</a>
+    <a href="#architecture">Architecture</a>
+    <div class="nav-section">Usage</div>
+    <a href="#frame-processing">Frame Processing</a>
+    <a href="#video-processing">Video Processing</a>
+    <a href="#effects">Effects</a>
+    <a href="#output-formats">Output Formats</a>
+    <div class="nav-section">Reference</div>
+    <a href="#hardware">Hardware &amp; Models</a>
+    <a href="#api-reference">API Reference</a>
+    <a href="#troubleshooting">Troubleshooting</a>
+  </nav>
+</aside>
+
+<div class="main">
+
+  <header class="hero">
+    <h1>Depth Scanner <span class="accent">OSS</span></h1>
+    <p>Open-source depth map generation for After Effects, powered by Depth Anything V2. Process single frames or full sequences with temporal stability, then apply depth-driven effects directly in your comp.</p>
+    <div class="badge-row">
+      <span class="badge"><span class="dot green"></span> Depth Anything V2</span>
+      <span class="badge"><span class="dot blue"></span> After Effects CEP</span>
+      <span class="badge"><span class="dot orange"></span> CUDA / MPS / CPU</span>
+      <span class="badge"><span class="dot purple"></span> MIT License</span>
+    </div>
+  </header>
+
+  <div class="content">
+
+    <!-- INSTALLATION -->
+    <section id="installation">
+      <h2>Installation</h2>
+
+      <ol class="step-list">
+        <li>
+          <h3>Clone the repository</h3>
+<pre><span class="prompt">$ </span>git clone https://github.com/your-org/depth-scanner-oss.git
+<span class="prompt">$ </span>cd depth-scanner-oss</pre>
+        </li>
+
+        <li>
+          <h3>Set up the backend</h3>
+          <p>Create a virtual environment and install dependencies.</p>
+<pre><span class="prompt">$ </span>cd backend
+<span class="prompt">$ </span>python3 <span class="flag">-m</span> venv .venv
+<span class="prompt">$ </span>source .venv/bin/activate          <span class="comment"># Windows: .venv\Scripts\activate</span>
+<span class="prompt">$ </span>pip install <span class="flag">-r</span> requirements.txt</pre>
+        </li>
+
+        <li>
+          <h3>Enable unsigned CEP extensions</h3>
+          <p>Adobe requires debug mode to load unsigned panels. Set it for every CSXS version you need.</p>
+
+          <h4>macOS</h4>
+<pre><span class="prompt">$ </span>defaults write com.adobe.CSXS.11 PlayerDebugMode 1
+<span class="prompt">$ </span>defaults write com.adobe.CSXS.12 PlayerDebugMode 1
+<span class="prompt">$ </span>defaults write com.adobe.CSXS.13 PlayerDebugMode 1
+<span class="prompt">$ </span>defaults write com.adobe.CSXS.14 PlayerDebugMode 1</pre>
+
+          <h4>Windows</h4>
+          <p>Open <strong>Registry Editor</strong> and create a string value <code>PlayerDebugMode</code> set to <code>1</code> in each of:</p>
+<pre>HKEY_CURRENT_USER\Software\Adobe\CSXS.11
+HKEY_CURRENT_USER\Software\Adobe\CSXS.12
+HKEY_CURRENT_USER\Software\Adobe\CSXS.13
+HKEY_CURRENT_USER\Software\Adobe\CSXS.14</pre>
+          <div class="callout info">
+            <strong>Note</strong>
+            CSXS.11 covers AE 2023. Versions 12-14 cover AE 2024 through 2026. Set all of them to be safe.
+          </div>
+        </li>
+
+        <li>
+          <h3>Install the panel into After Effects</h3>
+
+          <h4>macOS (symlink recommended)</h4>
+<pre><span class="prompt">$ </span>ln <span class="flag">-sf</span> /path/to/depth-scanner-oss/panel \
+    ~/Library/Application\ Support/Adobe/CEP/extensions/DepthScannerOSS</pre>
+
+          <h4>Windows (copy)</h4>
+          <p>Copy the entire <code>panel/</code> folder to:</p>
+<pre>%APPDATA%\Adobe\CEP\extensions\DepthScannerOSS\</pre>
+        </li>
+
+        <li>
+          <h3>Launch</h3>
+          <p>Start the backend server first, then open After Effects.</p>
+<pre><span class="prompt">$ </span>cd backend
+<span class="prompt">$ </span>source .venv/bin/activate
+<span class="prompt">$ </span>uvicorn server:app <span class="flag">--host</span> 127.0.0.1 <span class="flag">--port</span> 7842</pre>
+          <p>In After Effects: <strong>Window &rarr; Extensions &rarr; Depth Scanner OSS</strong></p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- QUICK START -->
+    <section id="quick-start">
+      <h2>Quick Start</h2>
+      <ol>
+        <li>Start the backend server (see above). The panel status dot turns green when connected.</li>
+        <li>Open a composition in After Effects and move the playhead to the frame you want.</li>
+        <li>In the Depth Scanner panel, choose a model size and output format.</li>
+        <li>Click <strong>Process Frame</strong>. The plugin exports the current frame, sends it to the server, and displays the depth map preview.</li>
+        <li>Click <strong>Import to Project</strong> to add the depth map as a footage item in your AE project.</li>
+      </ol>
+      <div class="callout tip">
+        <strong>Tip</strong>
+        The first time you use a model, it downloads from HuggingFace (100 MB - 800 MB depending on size). Subsequent runs use the cached model.
+      </div>
+    </section>
+
+    <!-- ARCHITECTURE -->
+    <section id="architecture">
+      <h2>Architecture</h2>
+      <p>The plugin has two components that communicate over HTTP on <code>localhost:7842</code>.</p>
+      <div class="arch-diagram"><span class="highlight">After Effects</span>
+  <span class="green">CEP Panel</span>  (panel/index.html + panel/js/panel.js)
+    |
+    |-- <span class="purple">ExtendScript bridge</span>  (panel/jsx/host.jsx)
+    |     |-- Exports frames via AE render queue
+    |     '-- Imports depth maps back into project
+    |
+    '-- <span class="orange">HTTP</span> --> localhost:7842
+          |
+          <span class="highlight">FastAPI Server</span>  (backend/server.py)
+            |-- depth_engine.py   Depth Anything V2 inference
+            |-- exporters.py      PNG / EXR output
+            '-- effects.py        DoF, grading, slicing</div>
+    </section>
+
+    <!-- FRAME PROCESSING -->
+    <section id="frame-processing">
+      <h2>Frame Processing</h2>
+      <p>The <strong>Frame</strong> tab processes a single frame from your current composition.</p>
+
+      <h3>Model selection</h3>
+      <table>
+        <thead><tr><th>Model</th><th>Size</th><th>Speed</th><th>Quality</th></tr></thead>
+        <tbody>
+          <tr><td><code>Small</code></td><td>~100 MB</td><td>Fastest</td><td>Good for previews</td></tr>
+          <tr><td><code>Base</code></td><td>~400 MB</td><td>Balanced</td><td>Recommended default</td></tr>
+          <tr><td><code>Large</code></td><td>~800 MB</td><td>Slowest</td><td>Best quality</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Output format</h3>
+      <ul>
+        <li><strong>PNG Grayscale</strong> &mdash; 8-bit single channel, ideal for mattes and AE effects</li>
+        <li><strong>PNG Colorized</strong> &mdash; 8-bit RGB with your choice of 20+ colormaps (inferno, viridis, turbo, rainbow, etc.)</li>
+        <li><strong>EXR 32-bit float</strong> &mdash; full precision for compositing, DoF, fog, and stereo-3D workflows</li>
+      </ul>
+
+      <h3>Workflow</h3>
+      <ol>
+        <li>Position the playhead on the frame you want to process.</li>
+        <li>Select your model and format.</li>
+        <li>Click <strong>Process Frame</strong>.</li>
+        <li>The depth map preview appears in the panel.</li>
+        <li>Click <strong>Import to Project</strong> to add the depth map as a layer in your comp.</li>
+      </ol>
+
+      <div class="callout info">
+        <strong>Note</strong>
+        Processing a frame also creates a session cache on the server. This lets you apply effects (DoF, grading, slicing) without re-running inference.
+      </div>
+    </section>
+
+    <!-- VIDEO PROCESSING -->
+    <section id="video-processing">
+      <h2>Video Processing</h2>
+      <p>The <strong>Video</strong> tab processes a range of frames with temporal stability.</p>
+
+      <h3>Settings</h3>
+      <table>
+        <thead><tr><th>Parameter</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Start frame</code></td><td>Work area start</td><td>First frame to process</td></tr>
+          <tr><td><code>End frame</code></td><td>Work area end</td><td>Last frame to process</td></tr>
+          <tr><td><code>Every N</code></td><td>1</td><td>Process every Nth frame (skip frames for speed)</td></tr>
+          <tr><td><code>Scale align</code></td><td>On</td><td>Align depth scale/bias between frames to prevent drift</td></tr>
+          <tr><td><code>Smoothing</code></td><td>0.4</td><td>Temporal smoothing 0 - 0.9 (higher = more stable, less detail)</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <strong>Important</strong>
+        Keep <strong>Scale align</strong> enabled for video work. It uses a least-squares affine transform to align each frame's depth to the previous frame, preventing the flickering that simple averaging would cause.
+      </div>
+
+      <h3>Workflow</h3>
+      <ol>
+        <li>Set your frame range and temporal settings.</li>
+        <li>Click <strong>Process Range</strong>. The panel exports all frames, bundles them as a ZIP, and sends them to the server.</li>
+        <li>The server processes all frames and returns a ZIP of depth maps.</li>
+        <li>Click <strong>Import Sequence</strong> to add the depth maps as an image sequence layer in your comp.</li>
+      </ol>
+    </section>
+
+    <!-- EFFECTS -->
+    <section id="effects">
+      <h2>Effects</h2>
+      <p>The <strong>Effects</strong> tab applies depth-driven image effects. You must process a frame first so the server has a cached depth map for the session.</p>
+
+      <h3>Depth of Field</h3>
+      <p>Simulates camera depth of field using layered blur keyed to distance from a focal plane.</p>
+      <table>
+        <thead><tr><th>Parameter</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Focal depth</code></td><td>The depth value (0-1) where the image is in focus</td></tr>
+          <tr><td><code>Focal range</code></td><td>Width of the in-focus zone around the focal depth</td></tr>
+          <tr><td><code>Max blur</code></td><td>Maximum blur radius in pixels</td></tr>
+          <tr><td><code>Bokeh shape</code></td><td>Gaussian (soft) or Disc (hard-edged circles)</td></tr>
+          <tr><td><code>Near blur</code></td><td>Enable/disable blur for objects closer than focal plane</td></tr>
+          <tr><td><code>Far blur</code></td><td>Enable/disable blur for objects beyond focal plane</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Depth Grading</h3>
+      <p>Blends a near-to-far colour ramp over the image for atmospheric effects like fog, haze, or colour separation.</p>
+      <table>
+        <thead><tr><th>Parameter</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Near color</code></td><td>Color applied to objects closest to camera</td></tr>
+          <tr><td><code>Far color</code></td><td>Color applied to distant objects</td></tr>
+          <tr><td><code>Opacity</code></td><td>Overall strength of the grade</td></tr>
+          <tr><td><code>Gamma</code></td><td>Controls falloff curve of the depth ramp</td></tr>
+          <tr><td><code>Blend mode</code></td><td>Overlay, Multiply, Screen, Add, or Normal</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Depth Slice</h3>
+      <p>Isolates a depth band from the image, useful for rotoscoping by depth or creating masks.</p>
+      <table>
+        <thead><tr><th>Parameter</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Near cut</code></td><td>Start of the visible depth band (0-1)</td></tr>
+          <tr><td><code>Far cut</code></td><td>End of the visible depth band (0-1)</td></tr>
+          <tr><td><code>Feather</code></td><td>Softness of the mask edges</td></tr>
+          <tr><td><code>Background</code></td><td>Transparent (RGBA) or solid colour</td></tr>
+          <tr><td><code>Invert</code></td><td>Flip the mask to show everything outside the band</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Preview vs Apply</h3>
+      <ul>
+        <li><strong>Preview</strong> &mdash; Returns a side-by-side image (depth map | effect result) displayed in the panel. No files written to disk.</li>
+        <li><strong>Apply &amp; Export</strong> &mdash; Saves the effect result to disk.</li>
+        <li><strong>Import Result</strong> &mdash; Adds the exported result to your AE project.</li>
+      </ul>
+    </section>
+
+    <!-- OUTPUT FORMATS -->
+    <section id="output-formats">
+      <h2>Output Formats</h2>
+
+      <h3>PNG Grayscale (8-bit)</h3>
+      <p>Single-channel luminance PNG. White = near, black = far. Best for quick previews, luma mattes, and feeding into other AE effects. Fast to process and small file size.</p>
+
+      <h3>PNG Colorized (8-bit RGB)</h3>
+      <p>Depth mapped through a colour LUT for visual reference. Over 20 colormaps available including:</p>
+      <ul>
+        <li><strong>inferno</strong>, <strong>magma</strong>, <strong>plasma</strong>, <strong>viridis</strong> &mdash; perceptually uniform, good for analysis</li>
+        <li><strong>turbo</strong>, <strong>rainbow</strong>, <strong>jet</strong> &mdash; high contrast, good for debugging depth</li>
+        <li><strong>bone</strong>, <strong>ocean</strong>, <strong>twilight</strong> &mdash; aesthetic options for overlays</li>
+      </ul>
+
+      <h3>EXR 32-bit Float</h3>
+      <p>Full-precision single-channel depth in OpenEXR format. Ideal for compositing, depth-based fog, stereo-3D conversion, and any workflow that needs more than 256 levels of depth.</p>
+      <div class="callout tip">
+        <strong>Tip</strong>
+        EXR export works even without the OpenEXR Python library installed. The server includes a built-in fallback writer that produces valid single-channel 32-bit EXR files compatible with After Effects and DaVinci Resolve.
+      </div>
+    </section>
+
+    <!-- HARDWARE -->
+    <section id="hardware">
+      <h2>Hardware &amp; Models</h2>
+
+      <h3>GPU acceleration</h3>
+      <p>The backend automatically detects and uses the best available device:</p>
+      <table>
+        <thead><tr><th>Device</th><th>Detection</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><strong>NVIDIA GPU</strong></td><td>Auto (CUDA)</td><td>Fastest option. Requires CUDA-compatible PyTorch.</td></tr>
+          <tr><td><strong>Apple Silicon</strong></td><td>Auto (MPS)</td><td>Good performance on M1/M2/M3/M4 Macs.</td></tr>
+          <tr><td><strong>CPU</strong></td><td>Fallback</td><td>Works on any machine but significantly slower.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Model downloads</h3>
+      <p>Models are downloaded from HuggingFace on first use and cached locally. The <code>/health</code> endpoint reports which device and model are currently loaded.</p>
+
+      <h3>Preloading a model</h3>
+      <p>You can preload a model before opening the panel to avoid the first-use delay:</p>
+<pre><span class="prompt">$ </span>curl <span class="flag">-X</span> POST <span class="url">http://127.0.0.1:7842/load</span> <span class="flag">-F</span> <span class="string">"model=base"</span></pre>
+    </section>
+
+    <!-- API REFERENCE -->
+    <section id="api-reference">
+      <h2>API Reference</h2>
+      <p>The backend exposes a REST API on <code>http://127.0.0.1:7842</code>. All endpoints accept and return standard HTTP content types.</p>
+
+      <h3>Status &amp; Configuration</h3>
+      <div class="api-row">
+        <span class="api-method get">GET</span>
+        <span class="api-path">/health</span>
+        <span class="api-desc">Server status, detected device, and loaded model name</span>
+      </div>
+      <div class="api-row">
+        <span class="api-method get">GET</span>
+        <span class="api-path">/models</span>
+        <span class="api-desc">List of available model sizes (small, base, large)</span>
+      </div>
+      <div class="api-row">
+        <span class="api-method get">GET</span>
+        <span class="api-path">/colormaps</span>
+        <span class="api-desc">List of 20+ available colormap names</span>
+      </div>
+      <div class="api-row">
+        <span class="api-method get">GET</span>
+        <span class="api-path">/effects</span>
+        <span class="api-desc">List of available effect names</span>
+      </div>
+      <div class="api-row">
+        <span class="api-method post">POST</span>
+        <span class="api-path">/load</span>
+        <span class="api-desc">Preload a model. Form: <code>model=small|base|large</code></span>
+      </div>
+
+      <h3>Processing</h3>
+      <div class="api-row">
+        <span class="api-method post">POST</span>
+        <span class="api-path">/process/frame</span>
+        <span class="api-desc">Single frame depth. Form: <code>file</code>, <code>model</code>, <code>format</code>, <code>colormap</code>. Returns depth image bytes + <code>X-Session-Id</code> header.</span>
+      </div>
+      <div class="api-row">
+        <span class="api-method post">POST</span>
+        <span class="api-path">/process/batch</span>
+        <span class="api-desc">Batch processing. Form: <code>file</code> (ZIP of frames), <code>model</code>, <code>format</code>, <code>colormap</code>, <code>smooth</code>, <code>align_scale</code>. Returns ZIP of depth maps.</span>
+      </div>
+
+      <h3>Effects</h3>
+      <div class="api-row">
+        <span class="api-method post">POST</span>
+        <span class="api-path">/effect/{name}</span>
+        <span class="api-desc">Apply an effect. Form: <code>session_id</code> or <code>file</code>, <code>params_json</code>. Returns result image.</span>
+      </div>
+      <div class="api-row">
+        <span class="api-method post">POST</span>
+        <span class="api-path">/effect/{name}/preview</span>
+        <span class="api-desc">Side-by-side preview (depth | result). Same params as above. Returns PNG.</span>
+      </div>
+
+      <h3>Session flow</h3>
+      <p>When you call <code>/process/frame</code>, the response includes an <code>X-Session-Id</code> header (8-character UUID). Send this ID with subsequent <code>/effect/*</code> requests to reuse the cached depth map without re-running inference. The server caches up to 20 sessions.</p>
+<pre><span class="comment"># 1. Process a frame</span>
+curl <span class="flag">-X</span> POST <span class="url">http://127.0.0.1:7842/process/frame</span> \
+  <span class="flag">-F</span> <span class="string">"file=@frame.png"</span> \
+  <span class="flag">-F</span> <span class="string">"model=base"</span> \
+  <span class="flag">-F</span> <span class="string">"format=png_gray"</span> \
+  <span class="flag">-D</span> - <span class="flag">-o</span> depth.png
+<span class="comment"># Response header: X-Session-Id: a1b2c3d4</span>
+
+<span class="comment"># 2. Apply an effect using the cached session</span>
+curl <span class="flag">-X</span> POST <span class="url">http://127.0.0.1:7842/effect/depth_of_field</span> \
+  <span class="flag">-F</span> <span class="string">"session_id=a1b2c3d4"</span> \
+  <span class="flag">-F</span> <span class="string">'params_json={"focal_depth":0.5,"max_blur":20}'</span> \
+  <span class="flag">-o</span> result.png</pre>
+    </section>
+
+    <!-- TROUBLESHOOTING -->
+    <section id="troubleshooting">
+      <h2>Troubleshooting</h2>
+
+      <h3>"Server offline" in the panel</h3>
+      <p>The panel polls <code>/health</code> every 4 seconds. If the status dot is red, the backend is not running or not reachable.</p>
+      <ul>
+        <li>Make sure you started the server <strong>before</strong> opening After Effects.</li>
+        <li>Verify the server is running: <code>curl http://127.0.0.1:7842/health</code></li>
+        <li>Check that nothing else is using port 7842.</li>
+      </ul>
+
+      <h3>Panel not appearing in Extensions menu</h3>
+      <ul>
+        <li>Confirm <code>PlayerDebugMode</code> is set to <code>1</code> for the correct CSXS version.</li>
+        <li>Restart After Effects after changing the registry/defaults.</li>
+        <li>Verify the panel folder is in the correct CEP extensions directory.</li>
+      </ul>
+
+      <h3>"Running outside CEP" error</h3>
+      <p>The panel uses <code>window.cep.fs</code> for file I/O, which is only available inside After Effects. You cannot open <code>index.html</code> directly in a browser.</p>
+
+      <h3>First model load is very slow</h3>
+      <p>This is normal. The model is being downloaded from HuggingFace. Subsequent loads use the local cache. You can preload the model with:</p>
+<pre><span class="prompt">$ </span>curl <span class="flag">-X</span> POST <span class="url">http://127.0.0.1:7842/load</span> <span class="flag">-F</span> <span class="string">"model=base"</span></pre>
+
+      <h3>29.97 fps export errors</h3>
+      <p>Older versions had issues with non-integer frame rates. This is fixed in the latest version, which uses <code>comp.frameDuration</code> for accurate frame stepping.</p>
+
+      <h3>EXR files not importing correctly</h3>
+      <p>The built-in EXR writer produces uncompressed single-channel 32-bit float files. These are compatible with After Effects and DaVinci Resolve. If you experience issues, ensure your AE project is set to 32-bit colour depth (Project Settings &rarr; Colour Settings).</p>
+
+      <h3>Out of memory errors</h3>
+      <ul>
+        <li>Use the <code>Small</code> model for lower memory usage.</li>
+        <li>For video processing, increase the <code>Every N</code> value to skip frames.</li>
+        <li>Close other GPU-intensive applications.</li>
+      </ul>
+    </section>
+
+  </div>
+
+  <footer class="footer">
+    Depth Scanner OSS &middot; MIT License &middot; Powered by Depth Anything V2
+  </footer>
+
+</div>
+
+<script>
+// Sidebar toggle (mobile)
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('open');
+}
+
+// Close sidebar on nav click (mobile)
+document.querySelectorAll('.sidebar nav a').forEach(function(link) {
+  link.addEventListener('click', function() {
+    if (window.innerWidth <= 700) toggleSidebar();
+  });
+});
+
+// Active nav highlight on scroll
+(function() {
+  var sections = document.querySelectorAll('section[id]');
+  var navLinks = document.querySelectorAll('.sidebar nav a');
+
+  function onScroll() {
+    var scrollY = window.scrollY + 120;
+    var current = '';
+    for (var i = 0; i < sections.length; i++) {
+      if (sections[i].offsetTop <= scrollY) {
+        current = sections[i].getAttribute('id');
+      }
+    }
+    for (var j = 0; j < navLinks.length; j++) {
+      navLinks[j].classList.remove('active');
+      if (navLinks[j].getAttribute('href') === '#' + current) {
+        navLinks[j].classList.add('active');
+      }
+    }
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+</script>
+
+</body>
+</html>

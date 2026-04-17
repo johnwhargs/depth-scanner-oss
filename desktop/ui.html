@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Depth Scanner OSS</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#1a1a1c;--surface:#242428;--raised:#2e2e34;--border:#3a3a42;
+  --accent:#5b8fff;--accent2:#ff6b35;--ok:#3ddc84;--warn:#f0a732;--err:#ff5c5c;
+  --text:#d8d8e0;--muted:#6e6e80;--radius:6px;
+  --mono:'SF Mono','Menlo','Consolas','Courier New',monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.5;display:flex;flex-direction:column}
+
+/* ── Header ───────────────────────────────────────────── */
+.header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--border);-webkit-app-region:drag;user-select:none}
+.header-left{display:flex;align-items:center;gap:10px}
+.logo{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.logo span{color:var(--accent);font-weight:700}
+.status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);-webkit-app-region:no-drag}
+.dot{width:7px;height:7px;border-radius:50%}
+.dot-on{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.dot-off{background:var(--err)}
+.dot-wait{background:var(--warn);animation:pulse 1.2s ease infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Layout ───────────────────────────────────────────── */
+.main{flex:1;display:flex;overflow:hidden}
+.sidebar{width:300px;min-width:280px;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+.canvas{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── Sidebar sections ─────────────────────────────────── */
+.sb-section{padding:14px 16px;border-bottom:1px solid var(--border)}
+.sb-title{font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.field{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.field label{width:80px;flex-shrink:0;color:var(--muted);font-size:11px}
+select,input[type="number"]{flex:1;background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:12px;padding:5px 8px;outline:none}
+select:focus,input:focus{border-color:var(--accent)}
+input[type="range"]{flex:1;padding:0;height:4px;accent-color:var(--accent);cursor:pointer}
+input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;border:1px solid var(--border);border-radius:var(--radius);background:var(--raised)}
+.range-val{font-family:var(--mono);font-size:11px;color:var(--text);min-width:32px;text-align:right}
+
+/* ── Buttons ──────────────────────────────────────────── */
+.btn{display:block;width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);color:var(--text);font-family:var(--sans);font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s;margin-bottom:6px}
+.btn:hover:not(:disabled){background:var(--border)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn-primary:hover:not(:disabled){background:#4070e0}
+.btn-accent2{background:var(--accent2);border-color:var(--accent2);color:#fff}
+.btn-accent2:hover:not(:disabled){background:#e05020}
+.btn-row{display:flex;gap:6px;margin-bottom:6px}
+.btn-row .btn{margin-bottom:0}
+.btn-sm{padding:5px 10px;font-size:11px}
+
+/* ── Mode tabs ────────────────────────────────────────── */
+.mode-tabs{display:flex;gap:2px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--border)}
+.mode-tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:10px 4px;transition:all .15s;text-align:center}
+.mode-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.mode-tab:hover:not(.active){color:var(--text)}
+.mode-pane{display:none}
+.mode-pane.active{display:block}
+
+/* ── Effect sub-tabs ──────────────────────────────────── */
+.fx-tabs{display:flex;gap:4px;margin-bottom:10px}
+.fx-tab{flex:1;background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer;font-size:10px;padding:6px;text-align:center;transition:all .15s}
+.fx-tab.active{border-color:var(--accent);color:var(--accent)}
+.fx-pane{display:none}
+.fx-pane.active{display:block}
+
+/* ── Canvas / preview ─────────────────────────────────── */
+.preview-area{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;background:#111113}
+.preview-area img{max-width:100%;max-height:100%;object-fit:contain}
+.drop-zone{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:12px;pointer-events:none}
+.drop-zone.hidden{display:none}
+.drop-icon{font-size:48px;opacity:.3}
+.drop-text{font-size:13px}
+.drop-sub{font-size:11px;color:var(--border)}
+.drop-active .drop-zone{background:rgba(91,143,255,.08);border:2px dashed var(--accent);pointer-events:none}
+/* Viewport bar */
+.viewport-bar{display:flex;gap:2px;padding:4px 8px;background:var(--surface);border-bottom:1px solid var(--border)}
+.vp-btn{background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;transition:all .15s}
+.vp-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.vp-btn:hover:not(.active){color:var(--text);border-color:var(--text)}
+.wipe-label{position:absolute;bottom:12px;background:rgba(0,0,0,.6);color:var(--muted);font-family:var(--mono);font-size:9px;letter-spacing:.15em;padding:3px 8px;border-radius:3px;z-index:4;pointer-events:none}
+
+/* ── Info bar ─────────────────────────────────────────── */
+.info-bar{display:flex;align-items:center;gap:12px;padding:6px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);background:var(--surface);flex-shrink:0}
+.info-bar .spacer{flex:1}
+
+/* ── Progress ─────────────────────────────────────────── */
+.progress-track{background:var(--raised);border-radius:2px;height:3px;overflow:hidden;margin-bottom:8px}
+.progress-bar{height:100%;background:var(--accent);transition:width .3s}
+.progress-wrap{display:none}
+.progress-wrap.show{display:block}
+.progress-indeterminate .progress-bar{animation:indeterminate 1.5s linear infinite}
+@keyframes indeterminate{0%{transform:translateX(-100%);width:60%}100%{transform:translateX(260%);width:60%}}
+
+/* ── Log ──────────────────────────────────────────────── */
+.log-area{height:100px;overflow-y:auto;border-top:1px solid var(--border);padding:6px 16px;font-family:var(--mono);font-size:10px;background:#111113;flex-shrink:0}
+.log-area::-webkit-scrollbar{width:4px}
+.log-area::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.log-line{padding:1px 0}
+.log-info{color:var(--muted)}.log-success{color:var(--ok)}.log-warn{color:var(--warn)}.log-error{color:var(--err)}
+
+/* ── Batch file list ──────────────────────────────────── */
+.file-list{max-height:120px;overflow-y:auto;margin-bottom:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)}
+.file-list:empty{display:none}
+.file-item{padding:4px 8px;font-size:10px;font-family:var(--mono);color:var(--muted);border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+.file-item:last-child{border-bottom:none}
+.file-item .status-icon{font-size:10px}
+.file-done{color:var(--ok)}
+.file-processing{color:var(--warn)}
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ══════════════════════════════════════════════════════ -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo"><span>DEPTH</span> SCANNER OSS</div>
+  </div>
+  <div class="status">
+    <span id="device-info"></span>
+    <div id="status-dot" class="dot dot-wait"></div>
+    <span id="status-text">connecting…</span>
+  </div>
+</div>
+
+<!-- ═══ MAIN ═══════════════════════════════════════════════════════ -->
+<div class="main">
+
+  <!-- ─── Sidebar ─────────────────────────────────────────────── -->
+  <div class="sidebar">
+
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="single">Single</button>
+      <button class="mode-tab" data-mode="video">Video</button>
+      <button class="mode-tab" data-mode="batch">Batch</button>
+      <button class="mode-tab" data-mode="effects">Effects</button>
+    </div>
+
+    <!-- ── Model & Output (shared) ──── -->
+    <div class="sb-section">
+      <div class="sb-title">Model & Output</div>
+      <div class="field">
+        <label>Model</label>
+        <select id="model">
+          <option value="small">Small — fast</option>
+          <option value="base">Base — balanced</option>
+          <option value="large">Large — best</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Format</label>
+        <select id="output-format">
+          <option value="png_gray">PNG Grayscale</option>
+          <option value="png_color">PNG Colorized</option>
+          <option value="exr">EXR 32-bit</option>
+        </select>
+      </div>
+      <div class="field" id="colormap-row" style="display:none">
+        <label>Colormap</label>
+        <select id="colormap"></select>
+      </div>
+    </div>
+
+    <!-- ═══ SINGLE MODE ═══ -->
+    <div class="mode-pane active" id="pane-single">
+      <div class="sb-section">
+        <button class="btn btn-primary" id="btn-open">Open Image</button>
+        <button class="btn" id="btn-process" disabled>Process Depth</button>
+        <button class="btn" id="btn-save" disabled>Save Result</button>
+      </div>
+    </div>
+
+    <!-- ═══ VIDEO MODE ═══ -->
+    <div class="mode-pane" id="pane-video">
+      <div class="sb-section">
+        <button class="btn btn-primary" id="btn-open-video">Open Video</button>
+        <div id="video-info-box" style="display:none;margin-bottom:10px">
+          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);line-height:1.8" id="video-meta"></div>
+        </div>
+      </div>
+      <div class="sb-section">
+        <div class="sb-title">Options</div>
+        <div class="field">
+          <label>Every N</label>
+          <input type="number" id="vid-every" value="1" min="1" max="60" step="1" style="width:60px"/>
+        </div>
+        <div class="field">
+          <label>Scale align</label>
+          <select id="vid-align">
+            <option value="true" selected>On</option>
+            <option value="false">Off</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Smooth</label>
+          <input type="range" id="vid-smooth" min="0" max="0.9" step="0.05" value="0.4"
+            oninput="document.getElementById('vid-smooth-val').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="vid-smooth-val">0.40</span>
+        </div>
+        <div class="field">
+          <label>Output</label>
+          <select id="vid-output">
+            <option value="video">MP4 Video</option>
+            <option value="sequence">Image Sequence (ZIP)</option>
+          </select>
+        </div>
+      </div>
+      <div class="sb-section">
+        <button class="btn btn-accent2" id="btn-process-video" disabled>Process Video</button>
+        <button class="btn" id="btn-save-video" disabled>Save Result</button>
+      </div>
+    </div>
+
+    <!-- ═══ BATCH MODE ═══ -->
+    <div class="mode-pane" id="pane-batch">
+      <div class="sb-section">
+        <div class="sb-title">Temporal Stability</div>
+        <div class="field">
+          <label>Scale align</label>
+          <select id="align-scale">
+            <option value="true" selected>On</option>
+            <option value="false">Off</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Smooth</label>
+          <input type="range" id="smooth" min="0" max="0.9" step="0.05" value="0.4"
+            oninput="document.getElementById('smooth-val').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="smooth-val">0.40</span>
+        </div>
+      </div>
+      <div class="sb-section">
+        <button class="btn btn-primary" id="btn-open-batch">Add Images</button>
+        <div class="file-list" id="batch-files"></div>
+        <button class="btn btn-accent2" id="btn-process-batch" disabled>Process All</button>
+        <button class="btn btn-sm" id="btn-clear-batch" disabled>Clear List</button>
+      </div>
+    </div>
+
+    <!-- ═══ EFFECTS MODE ═══ -->
+    <div class="mode-pane" id="pane-effects">
+      <div class="sb-section">
+        <div class="fx-tabs">
+          <button class="fx-tab active" data-fx="dof">DoF</button>
+          <button class="fx-tab" data-fx="grade">Grade</button>
+          <button class="fx-tab" data-fx="slice">Slice</button>
+        </div>
+
+        <!-- DoF -->
+        <div class="fx-pane active" id="fx-dof">
+          <div class="field">
+            <label>Focal depth</label>
+            <input type="range" id="dof-focal" min="0" max="1" step="0.01" value="0.3"
+              oninput="document.getElementById('dof-focal-v').textContent=parseFloat(this.value).toFixed(2)"/>
+            <span class="range-val" id="dof-focal-v">0.30</span>
+          </div>
+          <div class="field">
+            <label>Focal range</label>
+            <input type="range" id="dof-range" min="0.01" max="0.5" step="0.01" value="0.1"
+              oninput="document.getElementById('dof-range-v').textContent=parseFloat(this.value).toFixed(2)"/>
+            <span class="range-val" id="dof-range-v">0.10</span>
+          </div>
+          <div class="field">
+            <label>Max blur</label>
+            <input type="range" id="dof-blur" min="1" max="40" step="1" value="14"
+              oninput="document.getElementById('dof-blur-v').textContent=this.value+'px'"/>
+            <span class="range-val" id="dof-blur-v">14px</span>
+          </div>
+          <div class="field">
+            <label>Bokeh</label>
+            <select id="dof-bokeh"><option value="gaussian">Gaussian</option><option value="disc">Disc</option></select>
+          </div>
+        </div>
+
+        <!-- Grade -->
+        <div class="fx-pane" id="fx-grade">
+          <div class="field"><label>Near color</label><input type="color" id="grade-near" value="#ff4400"/></div>
+          <div class="field"><label>Far color</label><input type="color" id="grade-far" value="#0044ff"/></div>
+          <div class="field">
+            <label>Opacity</label>
+            <input type="range" id="grade-opacity" min="0" max="1" step="0.05" value="0.5"
+              oninput="document.getElementById('grade-opacity-v').textContent=parseFloat(this.value).toFixed(2)"/>
+            <span class="range-val" id="grade-opacity-v">0.50</span>
+          </div>
+          <div class="field">
+            <label>Blend</label>
+            <select id="grade-blend">
+              <option value="overlay">Overlay</option><option value="multiply">Multiply</option>
+              <option value="screen">Screen</option><option value="add">Add</option><option value="normal">Normal</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Slice -->
+        <div class="fx-pane" id="fx-slice">
+          <div class="field">
+            <label>Near cut</label>
+            <input type="range" id="slice-near" min="0" max="1" step="0.01" value="0.0"
+              oninput="document.getElementById('slice-near-v').textContent=parseFloat(this.value).toFixed(2)"/>
+            <span class="range-val" id="slice-near-v">0.00</span>
+          </div>
+          <div class="field">
+            <label>Far cut</label>
+            <input type="range" id="slice-far" min="0" max="1" step="0.01" value="0.5"
+              oninput="document.getElementById('slice-far-v').textContent=parseFloat(this.value).toFixed(2)"/>
+            <span class="range-val" id="slice-far-v">0.50</span>
+          </div>
+          <div class="field">
+            <label>Feather</label>
+            <input type="range" id="slice-feather" min="0" max="0.2" step="0.005" value="0.02"
+              oninput="document.getElementById('slice-feather-v').textContent=parseFloat(this.value).toFixed(3)"/>
+            <span class="range-val" id="slice-feather-v">0.020</span>
+          </div>
+        </div>
+
+        <div style="margin-top:10px">
+          <div class="btn-row">
+            <button class="btn btn-primary" id="btn-fx-preview" disabled>Preview</button>
+            <button class="btn" id="btn-fx-apply" disabled>Apply & Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ─── Canvas ──────────────────────────────────────────────── -->
+  <div class="canvas">
+    <!-- Viewport controls -->
+    <div class="viewport-bar" id="viewport-bar" style="display:none">
+      <button class="vp-btn active" data-view="depth" title="Depth only">Depth</button>
+      <button class="vp-btn" data-view="source" title="Original">Source</button>
+      <button class="vp-btn" data-view="side" title="Side by side">Side by Side</button>
+      <button class="vp-btn" data-view="wipe" title="Split wipe">Wipe</button>
+      <button class="vp-btn" data-view="overlay" title="Overlay blend">Overlay</button>
+    </div>
+
+    <div class="preview-area" id="preview-area">
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-icon">⬇</div>
+        <div class="drop-text">Drop image or video here</div>
+        <div class="drop-sub">PNG · JPG · TIFF · BMP · WebP · MP4 · MOV · AVI</div>
+      </div>
+      <img id="preview-img" style="display:none" alt="Preview"/>
+      <canvas id="compare-canvas" width="1920" height="1080" style="display:none;max-width:100%;max-height:100%;object-fit:contain;cursor:col-resize"></canvas>
+      <div id="frame-counter" style="display:none;position:absolute;top:10px;right:10px;background:rgba(0,0,0,.7);color:var(--ok);font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:4px"></div>
+      <!-- Wipe labels -->
+      <div id="wipe-label-left" class="wipe-label" style="display:none;left:8px">SOURCE</div>
+      <div id="wipe-label-right" class="wipe-label" style="display:none;right:8px">DEPTH</div>
+      <!-- Wipe handle line -->
+      <div id="wipe-handle" style="display:none;position:absolute;top:0;bottom:0;width:3px;background:var(--accent);pointer-events:none;z-index:5">
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;background:var(--accent);border-radius:50%;border:2px solid #fff;cursor:col-resize;pointer-events:auto"></div>
+      </div>
+    </div>
+
+    <div class="progress-wrap" id="progress">
+      <div class="progress-track"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
+    </div>
+
+    <div class="info-bar">
+      <span id="file-info">No file loaded</span>
+      <span class="spacer"></span>
+      <span id="depth-info"></span>
+    </div>
+
+    <div class="log-area" id="log"></div>
+  </div>
+
+</div>
+
+<script>
+const SERVER = "__SERVER_URL__";
+const $ = id => document.getElementById(id);
+
+const state = {
+  currentFile: null,
+  currentBlob: null,
+  depthBlob: null,
+  sessionId: null,
+  batchFiles: [],
+  processing: false,
+  videoBlob: null,
+  videoInfo: null,
+};
+
+const VIDEO_EXTS = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
+
+// ── Logging ──────────────────────────────────────────────────────
+function log(msg, type = "info") {
+  const el = $("log");
+  const line = document.createElement("div");
+  line.className = `log-line log-${type}`;
+  line.textContent = `› ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  while (el.children.length > 100) el.removeChild(el.firstChild);
+}
+
+function setStatus(ok) {
+  $("status-dot").className = "dot " + (ok ? "dot-on" : "dot-off");
+  $("status-text").textContent = ok ? "Server ready" : "Server offline";
+}
+
+function setProgress(pct, show = true) {
+  const wrap = $("progress");
+  const bar = $("progress-bar");
+  if (show) {
+    wrap.classList.add("show");
+    wrap.classList.remove("progress-indeterminate");
+    bar.style.width = pct + "%";
+  } else {
+    wrap.classList.remove("show");
+  }
+}
+
+function setIndeterminate(show) {
+  const wrap = $("progress");
+  if (show) {
+    wrap.classList.add("show", "progress-indeterminate");
+    $("progress-bar").style.width = "";
+  } else {
+    wrap.classList.remove("show", "progress-indeterminate");
+  }
+}
+
+// ── Server ───────────────────────────────────────────────────────
+let _lastEngineStatus = "";
+
+async function ping() {
+  try {
+    const r = await fetch(`${SERVER}/health`, { signal: AbortSignal.timeout(2000) });
+    if (!r.ok) return null;
+    const data = await r.json();
+    // Log engine status changes (model loading feedback)
+    if (data.engine_status && data.engine_status !== _lastEngineStatus) {
+      _lastEngineStatus = data.engine_status;
+      if (data.engine_status === "ready") {
+        log(`Model ready (${data.model_loaded})`, "success");
+      } else if (data.engine_status !== "idle") {
+        log(data.engine_status, "info");
+      }
+    }
+    return data;
+  } catch { return null; }
+}
+
+async function loadColormaps() {
+  try {
+    const { colormaps } = await (await fetch(`${SERVER}/colormaps`)).json();
+    $("colormap").innerHTML = colormaps.map(c =>
+      `<option value="${c}"${c === "inferno" ? " selected" : ""}>${c}</option>`
+    ).join("");
+  } catch {}
+}
+
+// ── File handling ────────────────────────────────────────────────
+function hideAllPreviews() {
+  $("preview-img").style.display = "none";
+  $("compare-canvas").style.display = "none";
+  $("frame-counter").style.display = "none";
+  $("wipe-handle").style.display = "none";
+  $("wipe-label-left").style.display = "none";
+  $("wipe-label-right").style.display = "none";
+}
+
+function showImage(blob, label) {
+  hideAllPreviews();
+  if (state._lastImgUrl) URL.revokeObjectURL(state._lastImgUrl);
+  const url = URL.createObjectURL(blob);
+  state._lastImgUrl = url;
+  const img = $("preview-img");
+  img.onload = () => {
+    $("file-info").textContent = label || state.currentFile?.name || "Image";
+  };
+  img.src = url;
+  img.style.display = "block";
+  $("drop-zone").classList.add("hidden");
+}
+
+function showDepthFrame(blob, frameIdx, total) {
+  // Store frames for compare views
+  state._latestDepthBlob = blob;
+  const view = state.viewMode || "depth";
+
+  if (view === "depth") {
+    hideAllPreviews();
+    const img = $("preview-img");
+    img.src = URL.createObjectURL(blob);
+    img.style.display = "block";
+  } else {
+    drawCompareView(view, frameIdx);
+  }
+
+  $("drop-zone").classList.add("hidden");
+  $("frame-counter").style.display = "block";
+  $("frame-counter").textContent = `${frameIdx + 1} / ${total}`;
+}
+
+// ── Viewport compare system ──────────────────────────────────────
+const compare = {
+  sourceImg: new Image(),
+  depthImg: new Image(),
+  wipePos: 0.5,   // 0–1
+  dragging: false,
+  sourceFrames: [],  // blob URLs for original frames
+  depthFrames: [],   // blob URLs for depth frames
+};
+
+function drawCompareView(mode, frameIdx) {
+  const canvas = $("compare-canvas");
+  const ctx = canvas.getContext("2d");
+
+  // Load current depth frame
+  if (state._latestDepthBlob) {
+    compare.depthImg.src = URL.createObjectURL(state._latestDepthBlob);
+  }
+
+  const srcW = compare.sourceImg.naturalWidth || 1920;
+  const srcH = compare.sourceImg.naturalHeight || 1080;
+
+  if (mode === "source") {
+    hideAllPreviews();
+    // Show original — grab from stored source frames or video
+    if (compare.sourceFrames[frameIdx]) {
+      $("preview-img").src = compare.sourceFrames[frameIdx];
+      $("preview-img").style.display = "block";
+    } else if (state.currentBlob) {
+      showImage(state.currentBlob, "Source");
+    }
+    return;
+  }
+
+  hideAllPreviews();
+  canvas.style.display = "block";
+
+  function render() {
+    const dw = compare.depthImg.naturalWidth;
+    const dh = compare.depthImg.naturalHeight;
+    if (!dw || !dh) return;
+
+    if (mode === "side") {
+      canvas.width = dw * 2 + 4;
+      canvas.height = dh;
+      // Source on left
+      if (compare.sourceImg.naturalWidth) {
+        ctx.drawImage(compare.sourceImg, 0, 0, dw, dh);
+      } else {
+        ctx.fillStyle = "#1a1a1c";
+        ctx.fillRect(0, 0, dw, dh);
+        ctx.fillStyle = "#6e6e80";
+        ctx.font = "14px monospace";
+        ctx.fillText("Source", dw/2 - 24, dh/2);
+      }
+      // Divider
+      ctx.fillStyle = "#3a3a42";
+      ctx.fillRect(dw, 0, 4, dh);
+      // Depth on right
+      ctx.drawImage(compare.depthImg, dw + 4, 0, dw, dh);
+
+    } else if (mode === "wipe") {
+      canvas.width = dw;
+      canvas.height = dh;
+      const splitX = Math.round(compare.wipePos * dw);
+      // Source left
+      if (compare.sourceImg.naturalWidth) {
+        ctx.drawImage(compare.sourceImg, 0, 0, dw, dh);
+      }
+      // Depth right (clipped)
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(splitX, 0, dw - splitX, dh);
+      ctx.clip();
+      ctx.drawImage(compare.depthImg, 0, 0, dw, dh);
+      ctx.restore();
+      // Divider line
+      ctx.strokeStyle = "#5b8fff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(splitX, 0);
+      ctx.lineTo(splitX, dh);
+      ctx.stroke();
+
+      // Position wipe handle
+      const canvasRect = canvas.getBoundingClientRect();
+      const handlePx = compare.wipePos * canvasRect.width;
+      $("wipe-handle").style.display = "block";
+      $("wipe-handle").style.left = (canvas.offsetLeft + handlePx - 1) + "px";
+      $("wipe-label-left").style.display = "block";
+      $("wipe-label-right").style.display = "block";
+
+    } else if (mode === "overlay") {
+      canvas.width = dw;
+      canvas.height = dh;
+      if (compare.sourceImg.naturalWidth) {
+        ctx.drawImage(compare.sourceImg, 0, 0, dw, dh);
+      }
+      ctx.globalAlpha = 0.5;
+      ctx.drawImage(compare.depthImg, 0, 0, dw, dh);
+      ctx.globalAlpha = 1.0;
+    }
+  }
+
+  if (compare.depthImg.complete && compare.depthImg.naturalWidth) {
+    render();
+  } else {
+    compare.depthImg.onload = render;
+  }
+}
+
+function setupWipeDrag() {
+  const canvas = $("compare-canvas");
+  const handle = $("wipe-handle");
+  const area = $("preview-area");
+
+  function updateWipe(clientX) {
+    const rect = canvas.getBoundingClientRect();
+    compare.wipePos = Math.max(0.02, Math.min(0.98, (clientX - rect.left) / rect.width));
+    if (state.viewMode === "wipe") {
+      drawCompareView("wipe", state._lastFrameIdx || 0);
+    }
+  }
+
+  handle.querySelector("div").addEventListener("mousedown", e => {
+    compare.dragging = true;
+    e.preventDefault();
+  });
+
+  canvas.addEventListener("mousedown", e => {
+    if (state.viewMode === "wipe") {
+      compare.dragging = true;
+      updateWipe(e.clientX);
+    }
+  });
+
+  window.addEventListener("mousemove", e => {
+    if (compare.dragging) updateWipe(e.clientX);
+  });
+
+  window.addEventListener("mouseup", () => { compare.dragging = false; });
+}
+
+function setupViewportButtons() {
+  document.querySelectorAll(".vp-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".vp-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.viewMode = btn.dataset.view;
+
+      // Redraw current view
+      if (state._latestDepthBlob) {
+        if (state.viewMode === "depth") {
+          hideAllPreviews();
+          $("preview-img").src = URL.createObjectURL(state._latestDepthBlob);
+          $("preview-img").style.display = "block";
+          $("drop-zone").classList.add("hidden");
+        } else if (state.viewMode === "source") {
+          hideAllPreviews();
+          if (state.currentBlob) {
+            showImage(state.currentBlob, "Source");
+          }
+        } else {
+          drawCompareView(state.viewMode, state._lastFrameIdx || 0);
+        }
+        if ($("frame-counter").dataset.text) {
+          $("frame-counter").style.display = "block";
+          $("frame-counter").textContent = $("frame-counter").dataset.text;
+        }
+      }
+    });
+  });
+}
+
+function showViewportBar(show) {
+  $("viewport-bar").style.display = show ? "flex" : "none";
+}
+
+async function openFile() {
+  try {
+    const paths = await window.pywebview.api.pick_files();
+    if (!paths || paths.length === 0) return;
+    await loadFileFromPath(paths[0]);
+  } catch {
+    // Fallback: use input element
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      state.currentFile = file;
+      state.currentBlob = file;
+      showImage(file, `${file.name} — ${formatSize(file.size)}`);
+      $("btn-process").disabled = false;
+      $("btn-save").disabled = true;
+      state.sessionId = null;
+      log(`Loaded: ${file.name}`);
+    };
+    input.click();
+  }
+}
+
+async function loadFileFromPath(path) {
+  const r = await fetch(path.startsWith("/") ? `file://${path}` : path);
+  const blob = await r.blob();
+  const name = path.split(/[/\\]/).pop();
+  state.currentFile = { name, path };
+  state.currentBlob = blob;
+  showImage(blob, `${name} — ${formatSize(blob.size)}`);
+  $("btn-process").disabled = false;
+  $("btn-save").disabled = true;
+  state.sessionId = null;
+  log(`Loaded: ${name}`);
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / 1048576).toFixed(1) + " MB";
+}
+
+// ── Status polling during processing ─────────────────────────────
+function startStatusPoll() {
+  state._statusPoll = setInterval(() => ping(), 1500);
+}
+function stopStatusPoll() {
+  if (state._statusPoll) { clearInterval(state._statusPoll); state._statusPoll = null; }
+}
+
+// ── Process single ───────────────────────────────────────────────
+async function processFrame() {
+  if (state.processing || !state.currentBlob) return;
+  state.processing = true;
+  $("btn-process").disabled = true;
+  $("btn-process").textContent = "Processing…";
+  setIndeterminate(true);
+  startStatusPoll();
+
+  try {
+    const model = $("model").value;
+    const format = $("output-format").value;
+    const colormap = $("colormap").value || "inferno";
+
+    log(`Depth Anything V2 (${model})…`);
+
+    const fd = new FormData();
+    fd.append("file", state.currentBlob, state.currentFile?.name || "image.png");
+    fd.append("model", model);
+    fd.append("format", format);
+    fd.append("colormap", colormap);
+
+    const r = await fetch(`${SERVER}/process/frame`, { method: "POST", body: fd });
+    if (!r.ok) throw new Error((await r.json()).detail || "Server error");
+
+    state.sessionId = r.headers.get("X-Session-Id");
+    const result = await r.blob();
+    state.depthBlob = result;
+
+    showImage(result, `Depth — ${state.currentFile?.name || "image"}`);
+    $("depth-info").textContent = `Session: ${state.sessionId}`;
+    $("btn-save").disabled = false;
+    $("btn-fx-preview").disabled = false;
+    $("btn-fx-apply").disabled = false;
+    log("Depth map ready", "success");
+
+  } catch (e) {
+    log(`Error: ${e.message}`, "error");
+  } finally {
+    stopStatusPoll();
+    state.processing = false;
+    $("btn-process").disabled = false;
+    $("btn-process").textContent = "Process Depth";
+    setIndeterminate(false);
+  }
+}
+
+// ── Save ─────────────────────────────────────────────────────────
+async function saveResult() {
+  if (!state.depthBlob) return;
+  const ext = $("output-format").value === "exr" ? "exr" : "png";
+  const defaultName = (state.currentFile?.name || "image").replace(/\.[^.]+$/, "") + `_depth.${ext}`;
+  const url = URL.createObjectURL(state.depthBlob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = defaultName;
+  a.click();
+  URL.revokeObjectURL(url);
+  log(`Saved: ${defaultName}`, "success");
+}
+
+// ── Save video result ────────────────────────────────────────────
+async function saveVideoResult() {
+  if (!state.videoResultBlob) return;
+  const name = state.videoResultName || "depth_output";
+  const url = URL.createObjectURL(state.videoResultBlob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+  log(`Saved: ${name}`, "success");
+}
+
+// ── Batch processing ─────────────────────────────────────────────
+async function openBatch() {
+  try {
+    let paths;
+    try {
+      paths = await window.pywebview.api.pick_files();
+    } catch {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.multiple = true;
+      return new Promise(resolve => {
+        input.onchange = (e) => {
+          for (const f of e.target.files) {
+            state.batchFiles.push({ name: f.name, blob: f, status: "pending" });
+          }
+          renderBatchList();
+          resolve();
+        };
+        input.click();
+      });
+    }
+    if (!paths || paths.length === 0) return;
+    for (const p of paths) {
+      const name = p.split(/[/\\]/).pop();
+      try {
+        const r = await fetch(p.startsWith("/") ? `file://${p}` : p);
+        const blob = await r.blob();
+        state.batchFiles.push({ name, path: p, blob, status: "pending" });
+      } catch {
+        state.batchFiles.push({ name, path: p, blob: null, status: "error" });
+      }
+    }
+    renderBatchList();
+  } catch (e) {
+    log(`Error adding files: ${e.message}`, "error");
+  }
+}
+
+function renderBatchList() {
+  const el = $("batch-files");
+  el.innerHTML = state.batchFiles.map((f, i) => {
+    const icon = f.status === "done" ? "✓" : f.status === "processing" ? "⟳" : f.status === "error" ? "✗" : "·";
+    const cls = f.status === "done" ? "file-done" : f.status === "processing" ? "file-processing" : "";
+    return `<div class="file-item"><span>${f.name}</span><span class="status-icon ${cls}">${icon}</span></div>`;
+  }).join("");
+  $("btn-process-batch").disabled = state.batchFiles.length === 0;
+  $("btn-clear-batch").disabled = state.batchFiles.length === 0;
+}
+
+async function processBatch() {
+  if (state.processing || state.batchFiles.length === 0) return;
+  state.processing = true;
+  $("btn-process-batch").disabled = true;
+  $("btn-open-batch").disabled = true;
+
+  const model = $("model").value;
+  const format = $("output-format").value;
+  const colormap = $("colormap").value || "inferno";
+  const total = state.batchFiles.length;
+
+  log(`Batch: ${total} files, model=${model}`);
+
+  for (let i = 0; i < total; i++) {
+    const f = state.batchFiles[i];
+    if (!f.blob) { f.status = "error"; renderBatchList(); continue; }
+
+    f.status = "processing";
+    renderBatchList();
+    setProgress(Math.round((i / total) * 100));
+    $("btn-process-batch").textContent = `Processing ${i + 1}/${total}`;
+
+    try {
+      const fd = new FormData();
+      fd.append("file", f.blob, f.name);
+      fd.append("model", model);
+      fd.append("format", format);
+      fd.append("colormap", colormap);
+
+      const r = await fetch(`${SERVER}/process/frame`, { method: "POST", body: fd });
+      if (!r.ok) throw new Error("Failed");
+
+      const result = await r.blob();
+      f.depthBlob = result;
+      f.status = "done";
+
+      // Auto-download each result
+      const ext = format === "exr" ? "exr" : "png";
+      const outName = f.name.replace(/\.[^.]+$/, "") + `_depth.${ext}`;
+      const url = URL.createObjectURL(result);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = outName;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      log(`[${i + 1}/${total}] ${outName}`, "success");
+    } catch (e) {
+      f.status = "error";
+      log(`[${i + 1}/${total}] ${f.name} — failed`, "error");
+    }
+    renderBatchList();
+  }
+
+  setProgress(100);
+  setTimeout(() => setProgress(0, false), 1000);
+  log(`Batch complete: ${state.batchFiles.filter(f => f.status === "done").length}/${total} succeeded`, "success");
+
+  state.processing = false;
+  $("btn-process-batch").disabled = false;
+  $("btn-process-batch").textContent = "Process All";
+  $("btn-open-batch").disabled = false;
+}
+
+function clearBatch() {
+  state.batchFiles = [];
+  renderBatchList();
+}
+
+// ── Video processing ─────────────────────────────────────────────
+function isVideoFile(name) {
+  const ext = "." + name.split(".").pop().toLowerCase();
+  return VIDEO_EXTS.includes(ext);
+}
+
+async function openVideo() {
+  try {
+    let file;
+    try {
+      const paths = await window.pywebview.api.pick_files();
+      if (!paths || paths.length === 0) return;
+      const path = paths[0];
+      const name = path.split(/[/\\]/).pop();
+      const r = await fetch(path.startsWith("/") ? `file://${path}` : path);
+      file = new File([await r.blob()], name);
+    } catch {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "video/*";
+      file = await new Promise(resolve => {
+        input.onchange = e => resolve(e.target.files[0]);
+        input.click();
+      });
+    }
+    if (!file) return;
+
+    state.videoBlob = file;
+    log(`Video loaded: ${file.name} (${formatSize(file.size)})`);
+    $("file-info").textContent = file.name;
+
+    // Get video info
+    setIndeterminate(true);
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    const r = await fetch(`${SERVER}/process/video/info`, { method: "POST", body: fd });
+    if (r.ok) {
+      state.videoInfo = await r.json();
+      const vi = state.videoInfo;
+      $("video-meta").innerHTML =
+        `${vi.width}×${vi.height} · ${vi.fps.toFixed(2)}fps<br>` +
+        `${vi.frames} frames · ${vi.duration.toFixed(1)}s`;
+      $("video-info-box").style.display = "block";
+      $("btn-process-video").disabled = false;
+      log(`Video: ${vi.width}×${vi.height}, ${vi.fps.toFixed(2)}fps, ${vi.frames} frames`, "success");
+    }
+    setIndeterminate(false);
+
+  } catch (e) {
+    log(`Video error: ${e.message}`, "error");
+    setIndeterminate(false);
+  }
+}
+
+async function processVideo() {
+  if (state.processing || !state.videoBlob) return;
+  state.processing = true;
+  $("btn-process-video").disabled = true;
+  $("btn-open-video").disabled = true;
+
+  const model = $("model").value;
+  const format = $("output-format").value;
+  const colormap = $("colormap").value || "inferno";
+  const smooth = parseFloat($("vid-smooth").value) || 0.4;
+  const alignScale = $("vid-align").value === "true";
+  const every = parseInt($("vid-every").value) || 1;
+  const output = $("vid-output").value;
+
+  // Use preview format for live display (always PNG for preview)
+  const previewFormat = format === "exr" ? "png_gray" : format;
+
+  try {
+    // Step 1: Upload video, extract frames, get session
+    $("btn-process-video").textContent = "Uploading…";
+    log("Uploading video & extracting frames…");
+    startStatusPoll();
+
+    const fd = new FormData();
+    fd.append("file", state.videoBlob, state.videoBlob.name);
+    fd.append("model", model);
+    fd.append("every", every.toString());
+
+    const startR = await fetch(`${SERVER}/process/video/start`, { method: "POST", body: fd });
+    if (!startR.ok) throw new Error((await startR.json()).detail || "Upload failed");
+
+    const session = await startR.json();
+    const total = session.frames;
+    log(`Session started: ${total} frames to process`);
+
+    // Step 2: Process frame by frame with live preview
+    showViewportBar(true);
+    compare.sourceFrames = [];
+    compare.depthFrames = [];
+
+    const depthBlobs = [];
+    for (let i = 0; i < total; i++) {
+      const pct = Math.round(((i + 1) / total) * 100);
+      setProgress(pct);
+      $("btn-process-video").textContent = `Frame ${i + 1}/${total}`;
+      state._lastFrameIdx = i;
+
+      // Get source frame for compare views
+      const srcR = await fetch(`${SERVER}/process/video/source/${session.session_id}/${i}`);
+      if (srcR.ok) {
+        const srcBlob = await srcR.blob();
+        const srcUrl = URL.createObjectURL(srcBlob);
+        compare.sourceFrames[i] = srcUrl;
+        compare.sourceImg.src = srcUrl;
+      }
+
+      // Get depth frame
+      const url = `${SERVER}/process/video/frame/${session.session_id}/${i}?format=${previewFormat}&colormap=${colormap}&smooth=${smooth}&align_scale=${alignScale}`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`Frame ${i} failed`);
+
+      const blob = await r.blob();
+      depthBlobs.push(blob);
+      compare.depthFrames[i] = URL.createObjectURL(blob);
+
+      // Live preview — show every frame
+      showDepthFrame(blob, i, total);
+    }
+
+    log(`All ${total} frames processed`, "success");
+
+    // Step 3: Render final output (video or sequence)
+    $("btn-process-video").textContent = "Rendering…";
+    setIndeterminate(true);
+
+    const renderFd = new FormData();
+    renderFd.append("format", format);
+    renderFd.append("colormap", colormap);
+    renderFd.append("smooth", smooth.toString());
+    renderFd.append("align_scale", alignScale.toString());
+    renderFd.append("output", output);
+
+    const renderR = await fetch(`${SERVER}/process/video/render/${session.session_id}`, {
+      method: "POST", body: renderFd,
+    });
+    if (!renderR.ok) throw new Error("Render failed");
+
+    const result = await renderR.blob();
+    const baseName = state.videoBlob.name.replace(/\.[^.]+$/, "");
+
+    // Store result for save button
+    state.videoResultBlob = result;
+    state.videoResultName = output === "video"
+      ? `${baseName}_depth.mp4`
+      : `${baseName}_depth_sequence.zip`;
+    $("btn-save-video").disabled = false;
+
+    // Show last depth frame as preview (don't use video element — breaks pywebview)
+    if (depthBlobs.length > 0) {
+      showImage(depthBlobs[depthBlobs.length - 1], `${state.videoResultName} — ${total} frames`);
+    }
+    log(`Processing complete — click Save Result to export`, "success");
+
+  } catch (e) {
+    log(`Video error: ${e.message}`, "error");
+  } finally {
+    stopStatusPoll();
+    state.processing = false;
+    $("btn-process-video").disabled = false;
+    $("btn-process-video").textContent = "Process Video";
+    $("btn-open-video").disabled = false;
+    $("frame-counter").style.display = "none";
+    setProgress(0, false);
+    setIndeterminate(false);
+  }
+}
+
+// ── Effects ──────────────────────────────────────────────────────
+function getActiveFx() {
+  return document.querySelector(".fx-tab.active")?.dataset.fx || "dof";
+}
+
+function getEffectParams(fx) {
+  if (fx === "dof") return {
+    focal_depth: parseFloat($("dof-focal").value),
+    focal_range: parseFloat($("dof-range").value),
+    max_blur: parseFloat($("dof-blur").value),
+    bokeh_shape: $("dof-bokeh").value,
+    near_blur: true, far_blur: true,
+  };
+  if (fx === "grade") return {
+    near_color: $("grade-near").value,
+    far_color: $("grade-far").value,
+    opacity: parseFloat($("grade-opacity").value),
+    gamma: 1.0,
+    blend_mode: $("grade-blend").value,
+  };
+  if (fx === "slice") return {
+    near: parseFloat($("slice-near").value),
+    far: parseFloat($("slice-far").value),
+    feather: parseFloat($("slice-feather").value),
+    invert_mask: false, bg_alpha: 0, bg_color: "#000000",
+  };
+}
+
+async function runEffect(preview) {
+  if (!state.sessionId) { log("Process an image first.", "warn"); return; }
+  const fx = getActiveFx();
+  const params = getEffectParams(fx);
+  setIndeterminate(true);
+
+  try {
+    const endpoint = preview
+      ? `${SERVER}/effect/${fx}/preview`
+      : `${SERVER}/effect/${fx}`;
+
+    const fd = new FormData();
+    fd.append("session_id", state.sessionId);
+    fd.append("colormap", $("colormap").value || "inferno");
+    fd.append("params_json", JSON.stringify(params));
+
+    const r = await fetch(endpoint, { method: "POST", body: fd });
+    if (!r.ok) throw new Error("Effect failed");
+
+    const result = await r.blob();
+    if (!preview) state.depthBlob = result;
+    showImage(result, `${fx} ${preview ? "preview" : "result"}`);
+    log(`${fx} ${preview ? "preview" : "applied"}`, "success");
+    if (!preview) $("btn-save").disabled = false;
+  } catch (e) {
+    log(`Effect error: ${e.message}`, "error");
+  } finally {
+    setIndeterminate(false);
+  }
+}
+
+// ── Drag & drop ──────────────────────────────────────────────────
+function setupDrop() {
+  const area = $("preview-area");
+  area.addEventListener("dragover", e => { e.preventDefault(); area.classList.add("drop-active"); });
+  area.addEventListener("dragleave", () => area.classList.remove("drop-active"));
+  area.addEventListener("drop", async e => {
+    e.preventDefault();
+    area.classList.remove("drop-active");
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+
+    if (isVideoFile(file.name) || file.type.startsWith("video/")) {
+      // Switch to video mode
+      document.querySelectorAll(".mode-tab").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".mode-pane").forEach(p => p.classList.remove("active"));
+      document.querySelector('[data-mode="video"]').classList.add("active");
+      $("pane-video").classList.add("active");
+
+      state.videoBlob = file;
+      $("file-info").textContent = file.name;
+      $("drop-zone").classList.add("hidden");
+      log(`Video dropped: ${file.name} (${formatSize(file.size)})`);
+
+      // Get info
+      setIndeterminate(true);
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      try {
+        const r = await fetch(`${SERVER}/process/video/info`, { method: "POST", body: fd });
+        if (r.ok) {
+          state.videoInfo = await r.json();
+          const vi = state.videoInfo;
+          $("video-meta").innerHTML =
+            `${vi.width}×${vi.height} · ${vi.fps.toFixed(2)}fps<br>` +
+            `${vi.frames} frames · ${vi.duration.toFixed(1)}s`;
+          $("video-info-box").style.display = "block";
+          $("btn-process-video").disabled = false;
+        }
+      } catch {}
+      setIndeterminate(false);
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) return;
+    state.currentFile = file;
+    state.currentBlob = file;
+    showImage(file, `${file.name} — ${formatSize(file.size)}`);
+    $("btn-process").disabled = false;
+    $("btn-save").disabled = true;
+    state.sessionId = null;
+    log(`Loaded: ${file.name}`);
+  });
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+async function init() {
+  // Wait for server
+  let attempts = 0;
+  while (attempts < 30) {
+    const data = await ping();
+    if (data) {
+      setStatus(true);
+      $("device-info").textContent = data.device;
+      await loadColormaps();
+      log(`Server ready (${data.device})`, "success");
+      break;
+    }
+    attempts++;
+    await new Promise(r => setTimeout(r, 500));
+  }
+  if (attempts >= 30) {
+    setStatus(false);
+    log("Server failed to start", "error");
+  }
+
+  // Event listeners
+  $("btn-open").addEventListener("click", openFile);
+  $("btn-process").addEventListener("click", processFrame);
+  $("btn-save").addEventListener("click", saveResult);
+  $("btn-open-video").addEventListener("click", openVideo);
+  $("btn-process-video").addEventListener("click", processVideo);
+  $("btn-save-video").addEventListener("click", saveVideoResult);
+  $("btn-open-batch").addEventListener("click", openBatch);
+  $("btn-process-batch").addEventListener("click", processBatch);
+  $("btn-clear-batch").addEventListener("click", clearBatch);
+  $("btn-fx-preview").addEventListener("click", () => runEffect(true));
+  $("btn-fx-apply").addEventListener("click", () => runEffect(false));
+
+  // Mode tabs
+  document.querySelectorAll(".mode-tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".mode-tab").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".mode-pane").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      $(`pane-${btn.dataset.mode}`).classList.add("active");
+    });
+  });
+
+  // FX tabs
+  document.querySelectorAll(".fx-tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".fx-tab").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".fx-pane").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      $(`fx-${btn.dataset.fx}`).classList.add("active");
+    });
+  });
+
+  // Format toggle
+  $("output-format").addEventListener("change", () => {
+    $("colormap-row").style.display = $("output-format").value === "png_color" ? "flex" : "none";
+  });
+
+  setupDrop();
+  setupViewportButtons();
+  setupWipeDrag();
+  state.viewMode = "depth";
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  init().catch(e => console.error("Init error:", e));
+});
+</script>
+</body>
+</html>
