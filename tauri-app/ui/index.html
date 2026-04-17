@@ -20,6 +20,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .header-left{display:flex;align-items:center;gap:10px}
 .logo{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
 .logo span{color:var(--accent);font-weight:700}
+.nav-btn{background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:4px 10px;transition:all .15s}
+.nav-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.nav-btn:hover:not(.active){color:var(--text);border-color:var(--text)}
 .status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);-webkit-app-region:no-drag}
 .dot{width:7px;height:7px;border-radius:50%}
 .dot-on{background:var(--ok);box-shadow:0 0 6px var(--ok)}
@@ -148,6 +151,10 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
 <div class="header">
   <div class="header-left">
     <div class="logo"><span>DEPTH</span> SCANNER OSS</div>
+    <div style="display:flex;gap:4px;margin-left:12px">
+      <button class="nav-btn active" id="nav-render">Render</button>
+      <button class="nav-btn" id="nav-3d">3D Space</button>
+    </div>
   </div>
   <div class="status">
     <span id="device-info"></span>
@@ -492,7 +499,7 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
         </div>
       </div>
       </div><!-- /fx-controls -->
-      <button class="btn" id="btn-3d" disabled style="margin-top:8px;border-color:var(--accent);color:var(--accent)">Open in 3D Workspace →</button>
+      <button class="btn" id="btn-3d" disabled style="margin-top:8px;border-color:var(--accent);color:var(--accent);font-size:10px">Open in 3D Workspace →</button>
     </div>
 
   </div>
@@ -1422,6 +1429,26 @@ async function processVideo() {
     if (depthBlobs.length > 0) {
       showImage(depthBlobs[depthBlobs.length - 1], `${state.videoResultName} — ${total} frames`);
     }
+
+    // Create a session from the last source frame so effects work
+    try {
+      const lastSrcR = await fetch(`${SERVER}/process/video/source/${session.session_id}/${total - 1}`);
+      if (lastSrcR.ok) {
+        const srcBlob = await lastSrcR.blob();
+        const sessFd = new FormData();
+        sessFd.append("file", srcBlob, "frame.png");
+        sessFd.append("model", model);
+        sessFd.append("format", "png_gray");
+        const sessR = await fetch(`${SERVER}/process/frame`, { method: "POST", body: sessFd });
+        if (sessR.ok) {
+          state.sessionId = sessR.headers.get("X-Session-Id");
+          state.depthBlob = await sessR.blob();
+          $("btn-3d").disabled = false;
+          log(`Effects session ready (${state.sessionId})`, "info");
+        }
+      }
+    } catch(e) {}
+
     log(`Processing complete — click Save Result to export`, "success");
 
   } catch (e) {
@@ -1873,11 +1900,16 @@ async function init() {
   });
   $("btn-fx-preview").addEventListener("click", () => runEffect(true));
   $("btn-fx-apply").addEventListener("click", () => runEffect(false));
-  $("btn-3d").addEventListener("click", () => {
+  $("btn-3d").addEventListener("click", goTo3D);
+  $("nav-3d").addEventListener("click", goTo3D);
+
+  function goTo3D() {
     if (state.sessionId) {
       window.location.href = `workspace.html?session=${state.sessionId}&server=${encodeURIComponent(SERVER)}`;
+    } else {
+      log("Process a depth map first to open 3D Workspace", "warn");
     }
-  });
+  }
 
   // FX toggle
   state.fxEnabled = false;
