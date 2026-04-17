@@ -162,6 +162,7 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
         <button class="fx-tab" data-fx="spatial">Spatial</button>
         <button class="fx-tab" data-fx="bokeh">Bokeh</button>
         <button class="fx-tab" data-fx="fog">Fog</button>
+        <button class="fx-tab" data-fx="terrain">Terrain</button>
       </div>
 
       <!-- Parallax -->
@@ -324,6 +325,55 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
             oninput="document.getElementById('fog-noise-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="fog-noise-v">0.10</span>
         </div>
+      </div>
+
+      <!-- Terrain -->
+      <div class="fx-pane" id="fx-terrain">
+        <div class="field">
+          <label>Elevation</label>
+          <input type="range" id="ter-height" min="0.05" max="1.0" step="0.01" value="0.3"
+            oninput="document.getElementById('ter-height-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="ter-height-v">0.30</span>
+        </div>
+        <div class="field">
+          <label>Rotate X</label>
+          <input type="range" id="ter-rx" min="-90" max="90" step="1" value="-35"
+            oninput="document.getElementById('ter-rx-v').textContent=this.value+'°'"/>
+          <span class="range-val" id="ter-rx-v">-35°</span>
+        </div>
+        <div class="field">
+          <label>Rotate Y</label>
+          <input type="range" id="ter-ry" min="-180" max="180" step="1" value="15"
+            oninput="document.getElementById('ter-ry-v').textContent=this.value+'°'"/>
+          <span class="range-val" id="ter-ry-v">15°</span>
+        </div>
+        <div class="field">
+          <label>Zoom</label>
+          <input type="range" id="ter-zoom" min="0.5" max="3.0" step="0.05" value="1.2"
+            oninput="document.getElementById('ter-zoom-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="ter-zoom-v">1.20</span>
+        </div>
+        <div class="field">
+          <label>Light angle</label>
+          <input type="range" id="ter-light" min="0" max="360" step="1" value="45"
+            oninput="document.getElementById('ter-light-v').textContent=this.value+'°'"/>
+          <span class="range-val" id="ter-light-v">45°</span>
+        </div>
+        <div class="field">
+          <label>Colormap</label>
+          <select id="ter-colormap">
+            <option value="source">Source Image</option>
+            <option value="terrain">Terrain (green-brown)</option>
+            <option value="inferno">Inferno</option>
+            <option value="viridis">Viridis</option>
+            <option value="grayscale">Grayscale</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Wireframe</label>
+          <select id="ter-wire"><option value="0">Off</option><option value="1">On</option></select>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">Click + drag on canvas to orbit</div>
       </div>
     </div>
 
@@ -1088,6 +1138,231 @@ function renderBokehMultiPass() {
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
 
+// ── Terrain 3D Renderer ──────────────────────────────────────────
+const TERRAIN_VS = `#version 300 es
+precision highp float;
+uniform sampler2D u_depth;
+uniform float u_height;
+uniform float u_rotX;
+uniform float u_rotY;
+uniform float u_zoom;
+uniform vec2 u_resolution;
+in vec2 a_position; // grid position 0-1
+
+out vec2 v_uv;
+out vec3 v_normal;
+out vec3 v_pos;
+out float v_depth;
+
+mat3 rotX(float a){float c=cos(a),s=sin(a);return mat3(1,0,0,0,c,-s,0,s,c);}
+mat3 rotY(float a){float c=cos(a),s=sin(a);return mat3(c,0,s,0,1,0,-s,0,c);}
+
+void main() {
+    v_uv = a_position;
+    float d = texture(u_depth, a_position).r;
+    v_depth = d;
+
+    // Sample neighbors for normal calculation
+    float dx = 1.0 / 256.0;
+    float dl = texture(u_depth, a_position + vec2(-dx, 0.0)).r;
+    float dr = texture(u_depth, a_position + vec2(dx, 0.0)).r;
+    float du = texture(u_depth, a_position + vec2(0.0, -dx)).r;
+    float dd = texture(u_depth, a_position + vec2(0.0, dx)).r;
+    v_normal = normalize(vec3((dl - dr) * u_height * 4.0, (du - dd) * u_height * 4.0, 0.1));
+
+    // Position in 3D: x/z from grid, y from depth
+    vec3 pos = vec3(a_position.x - 0.5, d * u_height, a_position.y - 0.5);
+    v_pos = pos;
+
+    // Apply rotation
+    pos = rotX(u_rotX) * rotY(u_rotY) * pos;
+
+    // Perspective projection
+    float aspect = u_resolution.x / u_resolution.y;
+    float fov = 1.5 / u_zoom;
+    pos.z += 1.2;
+    gl_Position = vec4(pos.x / (pos.z * fov * aspect), pos.y / (pos.z * fov), pos.z * 0.1 - 0.5, pos.z);
+}`;
+
+const TERRAIN_FS = `#version 300 es
+precision highp float;
+uniform sampler2D u_source;
+uniform sampler2D u_depth;
+uniform float u_lightAngle;
+uniform int u_colorMode; // 0=source, 1=terrain, 2=inferno, 3=viridis, 4=grayscale
+uniform int u_wireframe;
+
+in vec2 v_uv;
+in vec3 v_normal;
+in vec3 v_pos;
+in float v_depth;
+out vec4 fragColor;
+
+vec3 terrainColor(float d) {
+    // green-brown terrain colormap
+    vec3 c1 = vec3(0.1, 0.4, 0.15); // deep green
+    vec3 c2 = vec3(0.3, 0.6, 0.2);  // green
+    vec3 c3 = vec3(0.7, 0.6, 0.3);  // brown
+    vec3 c4 = vec3(0.9, 0.85, 0.7); // sand/snow
+    if (d < 0.33) return mix(c1, c2, d / 0.33);
+    if (d < 0.66) return mix(c2, c3, (d - 0.33) / 0.33);
+    return mix(c3, c4, (d - 0.66) / 0.34);
+}
+
+vec3 infernoColor(float d) {
+    vec3 c1 = vec3(0.0, 0.0, 0.02);
+    vec3 c2 = vec3(0.53, 0.13, 0.33);
+    vec3 c3 = vec3(0.9, 0.36, 0.19);
+    vec3 c4 = vec3(0.99, 1.0, 0.64);
+    if (d < 0.33) return mix(c1, c2, d / 0.33);
+    if (d < 0.66) return mix(c2, c3, (d - 0.33) / 0.33);
+    return mix(c3, c4, (d - 0.66) / 0.34);
+}
+
+vec3 viridisColor(float d) {
+    vec3 c1 = vec3(0.27, 0.0, 0.33);
+    vec3 c2 = vec3(0.13, 0.56, 0.55);
+    vec3 c3 = vec3(0.37, 0.79, 0.38);
+    vec3 c4 = vec3(0.99, 0.91, 0.14);
+    if (d < 0.33) return mix(c1, c2, d / 0.33);
+    if (d < 0.66) return mix(c2, c3, (d - 0.33) / 0.33);
+    return mix(c3, c4, (d - 0.66) / 0.34);
+}
+
+void main() {
+    vec3 color;
+    if (u_colorMode == 0) color = texture(u_source, v_uv).rgb;
+    else if (u_colorMode == 1) color = terrainColor(v_depth);
+    else if (u_colorMode == 2) color = infernoColor(v_depth);
+    else if (u_colorMode == 3) color = viridisColor(v_depth);
+    else color = vec3(v_depth);
+
+    // Directional lighting
+    float la = u_lightAngle * 3.14159 / 180.0;
+    vec3 lightDir = normalize(vec3(cos(la), 0.8, sin(la)));
+    float diff = max(dot(v_normal, lightDir), 0.0);
+    float ambient = 0.3;
+    color *= ambient + diff * 0.7;
+
+    // Wireframe overlay
+    if (u_wireframe == 1) {
+        vec2 grid = fract(v_uv * 128.0);
+        float wire = step(0.95, max(grid.x, grid.y));
+        color = mix(color, vec3(0.3, 0.7, 1.0), wire * 0.5);
+    }
+
+    fragColor = vec4(color, 1.0);
+}`;
+
+let terrainProg = null;
+let terrainVBO = null;
+let terrainIBO = null;
+let terrainIndexCount = 0;
+
+function initTerrain(gl) {
+    if (terrainProg) return;
+
+    // Compile shaders
+    const vs = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vs, TERRAIN_VS);
+    gl.compileShader(vs);
+    if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
+        console.error("Terrain VS:", gl.getShaderInfoLog(vs));
+        return;
+    }
+    const fs = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fs, TERRAIN_FS);
+    gl.compileShader(fs);
+    if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+        console.error("Terrain FS:", gl.getShaderInfoLog(fs));
+        return;
+    }
+    terrainProg = gl.createProgram();
+    gl.attachShader(terrainProg, vs);
+    gl.attachShader(terrainProg, fs);
+    gl.bindAttribLocation(terrainProg, 0, "a_position");
+    gl.linkProgram(terrainProg);
+    if (!gl.getProgramParameter(terrainProg, gl.LINK_STATUS)) {
+        console.error("Terrain program:", gl.getProgramInfoLog(terrainProg));
+        terrainProg = null;
+        return;
+    }
+
+    // Generate grid mesh (256x256 subdivisions)
+    const res = 256;
+    const verts = [];
+    const indices = [];
+    for (let y = 0; y <= res; y++) {
+        for (let x = 0; x <= res; x++) {
+            verts.push(x / res, y / res);
+        }
+    }
+    for (let y = 0; y < res; y++) {
+        for (let x = 0; x < res; x++) {
+            const i = y * (res + 1) + x;
+            indices.push(i, i + 1, i + res + 1);
+            indices.push(i + 1, i + res + 2, i + res + 1);
+        }
+    }
+    terrainIndexCount = indices.length;
+
+    terrainVBO = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, terrainVBO);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
+
+    terrainIBO = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, terrainIBO);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(indices), gl.STATIC_DRAW);
+}
+
+function renderTerrain(gl, t) {
+    initTerrain(gl);
+    if (!terrainProg) return;
+
+    const canvas = $("gl-canvas");
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(0.1, 0.1, 0.11, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+
+    gl.useProgram(terrainProg);
+
+    // Bind textures
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, state.sourceTex);
+    gl.uniform1i(gl.getUniformLocation(terrainProg, "u_source"), 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, state.depthTex);
+    gl.uniform1i(gl.getUniformLocation(terrainProg, "u_depth"), 1);
+
+    // Uniforms
+    const height = parseFloat($("ter-height").value);
+    const rx = parseFloat($("ter-rx").value) * Math.PI / 180;
+    const ry = parseFloat($("ter-ry").value) * Math.PI / 180 + t * 0.1; // slow auto-rotate
+    const zoom = parseFloat($("ter-zoom").value);
+    const lightAngle = parseFloat($("ter-light").value);
+    const colormapIdx = $("ter-colormap").selectedIndex;
+    const wireframe = parseInt($("ter-wire").value);
+
+    gl.uniform1f(gl.getUniformLocation(terrainProg, "u_height"), height);
+    gl.uniform1f(gl.getUniformLocation(terrainProg, "u_rotX"), rx);
+    gl.uniform1f(gl.getUniformLocation(terrainProg, "u_rotY"), ry);
+    gl.uniform1f(gl.getUniformLocation(terrainProg, "u_zoom"), zoom);
+    gl.uniform2f(gl.getUniformLocation(terrainProg, "u_resolution"), canvas.width, canvas.height);
+    gl.uniform1f(gl.getUniformLocation(terrainProg, "u_lightAngle"), lightAngle);
+    gl.uniform1i(gl.getUniformLocation(terrainProg, "u_colorMode"), colormapIdx);
+    gl.uniform1i(gl.getUniformLocation(terrainProg, "u_wireframe"), wireframe);
+
+    // Draw mesh
+    gl.bindBuffer(gl.ARRAY_BUFFER, terrainVBO);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, terrainIBO);
+    gl.drawElements(gl.TRIANGLES, terrainIndexCount, gl.UNSIGNED_INT, 0);
+
+    gl.disable(gl.DEPTH_TEST);
+}
+
 function render() {
   const gl = state.gl;
   if (!gl) return;
@@ -1151,12 +1426,19 @@ function render() {
   }
 
   // determine if we need to render
-  const isAnimating = (state.effect === "wiggle" && state.wigglePlaying) || state.effect === "fog" || (state.isVideo && state.videoPlaying);
+  const isAnimating = (state.effect === "wiggle" && state.wigglePlaying) || state.effect === "fog" || state.effect === "terrain" || (state.isVideo && state.videoPlaying);
   if (!state.needsRender && !isAnimating) {
     state.animId = requestAnimationFrame(render);
     return;
   }
   state.needsRender = false;
+
+  // ── Terrain rendering (separate pipeline) ──
+  if (state.effect === "terrain" && state.sourceTex && state.depthTex) {
+    renderTerrain(gl, t);
+    state.animId = requestAnimationFrame(render);
+    return;
+  }
 
   if (!state.sourceTex || !state.depthTex) {
     gl.viewport(0, 0, canvas.width, canvas.height);
