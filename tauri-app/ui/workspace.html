@@ -185,13 +185,6 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
             oninput="document.getElementById('par-scale-v').textContent=parseFloat(this.value).toFixed(1)+'x'"/>
           <span class="range-val" id="par-scale-v">1.0x</span>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)">
-          <input type="checkbox" id="par-3d" style="accent-color:var(--accent);cursor:pointer"/>
-          <label for="par-3d" style="font-size:10px;color:var(--muted);cursor:pointer">3D Elevation</label>
-          <input type="range" id="par-elev" min="0.05" max="0.8" step="0.01" value="0.2" style="flex:1"
-            oninput="document.getElementById('par-elev-v').textContent=parseFloat(this.value).toFixed(2)"/>
-          <span class="range-val" id="par-elev-v" style="font-size:10px">0.20</span>
-        </div>
         <div style="font-size:10px;color:var(--muted);margin-top:4px">Click + drag or move mouse to shift view.</div>
       </div>
 
@@ -226,6 +219,12 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
           <span class="range-val" id="wig-loops-v">3</span>
         </div>
         <div class="field">
+          <label>Focal point</label>
+          <input type="range" id="wig-focal" min="0" max="1" step="0.01" value="0.5"
+            oninput="document.getElementById('wig-focal-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="wig-focal-v">0.50</span>
+        </div>
+        <div class="field">
           <label>Motion blur</label>
           <input type="range" id="wig-mblur" min="0" max="1" step="0.05" value="0.3"
             oninput="document.getElementById('wig-mblur-v').textContent=parseFloat(this.value).toFixed(2)"/>
@@ -236,13 +235,6 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
           <input type="range" id="wig-comb" min="1" max="5" step="1" value="3"
             oninput="document.getElementById('wig-comb-v').textContent=this.value"/>
           <span class="range-val" id="wig-comb-v">3</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)">
-          <input type="checkbox" id="wig-3d" style="accent-color:var(--accent);cursor:pointer"/>
-          <label for="wig-3d" style="font-size:10px;color:var(--muted);cursor:pointer">3D Elevation</label>
-          <input type="range" id="wig-elev" min="0.05" max="0.8" step="0.01" value="0.2" style="flex:1"
-            oninput="document.getElementById('wig-elev-v').textContent=parseFloat(this.value).toFixed(2)"/>
-          <span class="range-val" id="wig-elev-v" style="font-size:10px">0.20</span>
         </div>
         <div class="estimate-box" id="wig-estimate">Est. export: calculating...</div>
         <div class="btn-row">
@@ -390,8 +382,8 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
         <div class="field">
           <label>Auto orbit</label>
           <select id="ter-orbit">
-            <option value="none">None</option>
-            <option value="slow" selected>Slow</option>
+            <option value="none" selected>None</option>
+            <option value="slow">Slow</option>
             <option value="medium">Medium</option>
             <option value="fast">Fast</option>
           </select>
@@ -584,6 +576,7 @@ uniform float u_shiftY;
 uniform float u_depthScale;
 uniform float u_motionBlur; // 0=off, 0.1-1.0 = motion blur amount
 uniform float u_prevShiftX; // previous frame shift for motion direction
+uniform float u_focalPoint; // 0-1 depth where wiggle convergence is (stays still)
 
 // spatial
 uniform float u_eyeSep;
@@ -607,7 +600,9 @@ uniform int u_bkShape;
 vec2 parallaxUV(vec2 uv, float sx, float sy) {
     float d = texture(u_depth, uv).r;
     float scale = u_depthScale;
-    vec2 offset = vec2(sx, sy) * d * scale / u_texSize;
+    // Subtract focal point so objects at focal depth stay still
+    float disp = (d - u_focalPoint) * scale;
+    vec2 offset = vec2(sx, sy) * disp / u_texSize;
     return uv + offset;
 }
 
@@ -1359,11 +1354,20 @@ function renderTerrain(gl, t) {
     gl.uniform1i(gl.getUniformLocation(terrainProg, "u_depth"), 1);
 
     // Uniforms
-    const height = parseFloat($("ter-height").value);
+    // Use effect-specific elevation if in wiggle/parallax 3D mode
+    var height;
+    if (state.effect === "wiggle" && $("wig-elev")) {
+      height = parseFloat($("wig-elev").value);
+    } else if (state.effect === "parallax" && $("par-elev")) {
+      height = parseFloat($("par-elev").value);
+    } else {
+      height = parseFloat($("ter-height").value);
+    }
     const rx = parseFloat($("ter-rx").value) * Math.PI / 180;
     const orbitMode = $("ter-orbit").value;
     const orbitSpeed = orbitMode === "fast" ? 0.5 : orbitMode === "medium" ? 0.25 : orbitMode === "slow" ? 0.1 : 0;
-    const ry = parseFloat($("ter-ry").value) * Math.PI / 180 + t * orbitSpeed;
+    const wigOffset = state._wigTerrainRY || 0;
+    const ry = parseFloat($("ter-ry").value) * Math.PI / 180 + t * orbitSpeed + wigOffset;
     const zoom = parseFloat($("ter-zoom").value);
     const lightAngle = parseFloat($("ter-light").value);
     const colormapIdx = $("ter-colormap").selectedIndex;
@@ -1518,16 +1522,18 @@ function render() {
   state.needsRender = false;
 
   // ── Terrain rendering (separate pipeline) ──
-  // Use terrain renderer for terrain effect, or when 3D toggle is on for wiggle/parallax
-  const use3D = state.effect === "terrain"
-    || (state.effect === "wiggle" && $("wig-3d") && $("wig-3d").checked)
-    || (state.effect === "parallax" && $("par-3d") && $("par-3d").checked);
-
-  if (use3D && state.sourceTex && state.depthTex) {
+  if (state.effect === "terrain" && state.sourceTex && state.depthTex) {
+    state._wigTerrainRY = 0;
     renderTerrain(gl, t);
     state.animId = requestAnimationFrame(render);
     return;
   }
+
+  // ── Full GL state reset for 2D rendering ──
+  gl.disable(gl.DEPTH_TEST);
+  gl.disable(gl.CULL_FACE);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+  if (state.vao) gl.bindVertexArray(state.vao);
 
   if (!state.sourceTex || !state.depthTex) {
     gl.viewport(0, 0, canvas.width, canvas.height);
@@ -1585,6 +1591,7 @@ function render() {
   gl.uniform1f(getUniformLoc(prog, "u_shiftY"), shiftY);
   gl.uniform1f(getUniformLoc(prog, "u_depthScale"), parseFloat($("par-scale").value));
   gl.uniform1f(getUniformLoc(prog, "u_motionBlur"), parseFloat($("wig-mblur")?.value || "0"));
+  gl.uniform1f(getUniformLoc(prog, "u_focalPoint"), parseFloat($("wig-focal")?.value || "0.5"));
   state._prevShiftX = shiftX;
 
   // spatial
