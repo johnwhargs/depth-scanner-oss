@@ -237,6 +237,9 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
 
     <!-- ── Actions ──── -->
     <div class="sb-section">
+      <div id="estimate-box" style="display:none;margin-bottom:8px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-size:10px;font-family:var(--mono);color:var(--muted);line-height:1.6">
+        <div id="estimate-text"></div>
+      </div>
       <button class="btn btn-accent2" id="btn-process" disabled>Process Depth Map</button>
       <button class="btn" id="btn-save" disabled>Save Result</button>
     </div>
@@ -952,7 +955,60 @@ async function loadFile(file) {
   }
 
   $("btn-process").disabled = false;
+  updateEstimate();
 }
+
+function updateEstimate() {
+  const box = $("estimate-box");
+  const text = $("estimate-text");
+
+  if (state._fileType === "image") {
+    const size = state.currentBlob?.size || 0;
+    const mp = size > 5000000 ? "~3-5s" : "~1-3s";
+    text.innerHTML = `<span style="color:var(--text)">Image</span> · ${formatSize(size)}<br>Est. processing: ${mp} (${$("model").value})`;
+    box.style.display = "block";
+  } else if (state._fileType === "video" && state.videoInfo) {
+    const vi = state.videoInfo;
+    const every = parseInt($("vid-every")?.value || "1");
+    const trimFrames = Math.round((state.trimOut - state.trimIn) * vi.frames);
+    const processFrames = Math.ceil(trimFrames / every);
+
+    // Rough estimates: small~0.3s/frame, base~0.8s/frame, large~2s/frame on MPS
+    const model = $("model").value;
+    const secPerFrame = model === "large" ? 2.0 : model === "base" ? 0.8 : 0.3;
+    const estSec = Math.round(processFrames * secPerFrame);
+    const estMin = Math.floor(estSec / 60);
+    const estRemSec = estSec % 60;
+    const estStr = estMin > 0 ? `~${estMin}m ${estRemSec}s` : `~${estSec}s`;
+
+    // Memory estimate
+    const pixPerFrame = vi.width * vi.height * 3;
+    const uploadMB = Math.round(state.videoBlob?.size / 1048576) || 0;
+
+    let warning = "";
+    if (vi.width >= 3840) {
+      warning = '<br><span style="color:var(--warn)">⚠ 4K video — consider Every N=2+ for faster processing</span>';
+    }
+    if (processFrames > 500) {
+      warning += '<br><span style="color:var(--warn)">⚠ ' + processFrames + ' frames — this will take a while</span>';
+    }
+
+    text.innerHTML =
+      `<span style="color:var(--text)">${vi.width}×${vi.height}</span> · ${processFrames} frames to process` +
+      `<br>Est. time: <span style="color:var(--text)">${estStr}</span> (${model})` +
+      `<br>Upload: ${uploadMB}MB` +
+      warning;
+    box.style.display = "block";
+  } else {
+    box.style.display = "none";
+  }
+}
+
+// Re-estimate when model or every-N changes
+["model", "vid-every"].forEach(id => {
+  const el = $(id);
+  if (el) el.addEventListener("change", updateEstimate);
+});
 
 function formatSize(bytes) {
   if (bytes < 1024) return bytes + " B";
@@ -986,8 +1042,10 @@ async function processImage() {
     const model = $("model").value;
     const format = $("output-format").value;
     const colormap = $("colormap").value || "inferno";
+    const imgStart = Date.now();
 
-    log(`Depth Anything V2 (${model})…`);
+    log(`Processing image with Depth Anything V2 (${model})…`);
+    log("Sending to server for inference…", "info");
 
     const fd = new FormData();
     fd.append("file", state.currentBlob, state.currentFile?.name || "image.png");
@@ -1017,7 +1075,8 @@ async function processImage() {
     $("btn-fx-preview").disabled = false;
     $("btn-fx-apply").disabled = false;
     // effects section always visible;
-    log("Depth map ready", "success");
+    const imgTime = ((Date.now() - imgStart) / 1000).toFixed(1);
+    log(`Depth map ready (${imgTime}s)`, "success");
 
   } catch (e) {
     log(`Error: ${e.message}`, "error");
@@ -1276,9 +1335,11 @@ async function processVideo() {
 
   try {
     // Step 1: Upload video, extract frames, get session
+    const fileSize = formatSize(state.videoBlob.size);
     $("btn-process").textContent = "Uploading…";
     setIndeterminate(true);
-    log("Uploading video & extracting frames (this may take a moment for large files)…");
+    log(`Uploading video (${fileSize})…`, "info");
+    log("This may take a moment for large files. The app is working — please wait.", "info");
     startStatusPoll();
 
     // Elapsed time counter during upload
@@ -1286,6 +1347,9 @@ async function processVideo() {
     const uploadTimer = setInterval(() => {
       const elapsed = Math.round((Date.now() - uploadStart) / 1000);
       $("btn-process").textContent = `Uploading… ${elapsed}s`;
+      if (elapsed % 10 === 0 && elapsed > 0) {
+        log(`Still uploading… ${elapsed}s elapsed (${fileSize})`, "info");
+      }
     }, 1000);
 
     // Calculate trim frame range
@@ -1306,8 +1370,10 @@ async function processVideo() {
 
     const session = await startR.json();
     const total = session.frames;
+    const uploadTime = Math.round((Date.now() - uploadStart) / 1000);
     setIndeterminate(false);
-    log(`Session started: ${total} frames to process`);
+    log(`Upload complete (${uploadTime}s). Extracted ${total} frames.`, "success");
+    log(`Starting depth inference — ${total} frames, model: ${model}`, "info");
 
     // Step 2: Process frame by frame with live preview
     showViewportBar(true);
@@ -1315,10 +1381,17 @@ async function processVideo() {
     compare.depthFrames = [];
 
     const depthBlobs = [];
+    const inferStart = Date.now();
     for (let i = 0; i < total; i++) {
       const pct = Math.round(((i + 1) / total) * 100);
       setProgress(pct);
-      $("btn-process").textContent = `Frame ${i + 1}/${total}`;
+
+      // ETA calculation
+      const elapsed = (Date.now() - inferStart) / 1000;
+      const perFrame = i > 0 ? elapsed / i : 0;
+      const remaining = Math.round(perFrame * (total - i));
+      const etaStr = remaining > 60 ? `${Math.floor(remaining/60)}m ${remaining%60}s` : `${remaining}s`;
+      $("btn-process").textContent = i > 0 ? `Frame ${i + 1}/${total} · ETA ${etaStr}` : `Frame ${i + 1}/${total}`;
       logProgress(i + 1, total, "Depth");
       state._lastFrameIdx = i;
 
@@ -1348,7 +1421,9 @@ async function processVideo() {
       updateTimelineDisplay(state.videoInfo);
     }
 
-    log(`All ${total} frames processed`, "success");
+    const totalInferTime = Math.round((Date.now() - inferStart) / 1000);
+    const avgPerFrame = (totalInferTime / total).toFixed(1);
+    log(`All ${total} frames processed in ${totalInferTime}s (${avgPerFrame}s/frame)`, "success");
 
     // Step 3: Render final output (video or sequence)
     $("btn-process").textContent = "Rendering…";
@@ -1383,7 +1458,14 @@ async function processVideo() {
     log(`Processing complete — click Save Result to export`, "success");
 
   } catch (e) {
-    log(`Video error: ${e.message}`, "error");
+    log(`Error: ${e.message}`, "error");
+    if (e.message.includes("Upload failed") || e.message.includes("Failed to fetch")) {
+      log("The server may have run out of memory or crashed.", "error");
+      log("Try: reduce resolution, increase Every N, or use a shorter trim range.", "warn");
+    } else if (e.message.includes("Frame")) {
+      log("A frame failed to process. The depth model may have encountered an issue.", "error");
+      log("Try restarting the app and processing again.", "warn");
+    }
   } finally {
     stopStatusPoll();
     state.processing = false;
