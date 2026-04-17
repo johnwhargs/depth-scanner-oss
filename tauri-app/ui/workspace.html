@@ -598,6 +598,8 @@ uniform float u_depthScale;
 uniform float u_motionBlur; // 0=off, 0.1-1.0 = motion blur amount
 uniform float u_prevShiftX; // previous frame shift for motion direction
 uniform float u_focalPoint; // 0-1 depth where wiggle convergence is (stays still)
+uniform vec2 u_focalPos; // XY position (0-1) to sample depth for focal point
+uniform int u_focalCustom; // 1=use XY position to sample depth, 0=use u_focalPoint directly
 
 // spatial
 uniform float u_eyeSep;
@@ -621,8 +623,12 @@ uniform int u_bkShape;
 vec2 parallaxUV(vec2 uv, float sx, float sy) {
     float d = texture(u_depth, uv).r;
     float scale = u_depthScale;
-    // Subtract focal point so objects at focal depth stay still
-    float disp = (d - u_focalPoint) * scale;
+    // Focal depth: either direct value or sampled from depth at XY position
+    float focalD = u_focalPoint;
+    if (u_focalCustom == 1) {
+        focalD = texture(u_depth, u_focalPos).r;
+    }
+    float disp = (d - focalD) * scale;
     vec2 offset = vec2(sx, sy) * disp / u_texSize;
     return uv + offset;
 }
@@ -1668,6 +1674,10 @@ function render() {
   // Focal point: use custom if enabled, otherwise default 0.5
   const focalOn = $("wig-focal-on")?.checked;
   gl.uniform1f(getUniformLoc(prog, "u_focalPoint"), focalOn ? parseFloat($("wig-focal")?.value || "0.5") : 0.5);
+  gl.uniform1i(getUniformLoc(prog, "u_focalCustom"), focalOn ? 1 : 0);
+  gl.uniform2f(getUniformLoc(prog, "u_focalPos"),
+    parseFloat($("wig-focal-x")?.value || "0.5"),
+    parseFloat($("wig-focal-y")?.value || "0.5"));
   updateFocalDot();
   state._prevShiftX = shiftX;
 
