@@ -1,171 +1,143 @@
-# AE Depth Map Plugin — Brainstorm
+# Depth Scanner OSS — Research & Plugin Roadmap
 
-Status: **Planning** — collecting tutorials and reference workflows before building.
-
----
-
-## Concept
-
-Desktop app generates depth maps. Separate AE plugin consumes them.
-No server dependency — pure AE-side processing.
+Status: **Active research** — tutorials analyzed, references collected, architecture planned.
 
 ---
 
-## Plugin Features (Candidates)
+## 1. Product Vision
 
-### Depth Fog / Atmosphere
-- Fog, haze, volumetric light falloff driven by depth
-- Near/far color + density controls
-- Better than AE's built-in fog
+**Depth Scanner** is an AI depth map generator + creative effects suite. Three delivery channels:
 
-### Rack Focus (DoF)
-- Camera Lens Blur driven by depth map with keyframeable focal point
-- Click-to-focus: pick a point, read depth value, animate focus pull
-- Better than manual lens blur masks
-
-### Depth Matte / Isolation
-- Rotoscoping by depth — isolate foreground/background without masks
-- Feathered depth cutoff, output as track matte
-- Like depth slice but native in AE timeline
-
-### Parallax / 2.5D
-- Displacement map driven camera moves
-- Fake dolly zoom, push-in, orbital from single frame
-- Ken Burns on steroids
-
-### Depth-Aware Color Grade
-- Separate grade for foreground vs background
-- Atmospheric perspective (desaturate + hue shift with distance)
-- Teal/orange split by depth instead of luminance
-
-### Stereo 3D / Wigglegram
-- Generate left/right eye views from depth + source via displacement
-- Output modes: side-by-side, anaglyph (red/cyan), interlaced, VR180
-- **Wigglegram**: generate N views (3–7), export as looping GIF/MP4
-- Controllable eye separation, convergence point
-- Depth-aware inpainting for disoccluded regions (stretch or smear fill)
-- Could run entirely in desktop app (no AE needed) or as MisregAE effect
+| Channel | Status | Purpose |
+|---------|--------|---------|
+| Desktop app (Tauri) | Built | Generate depth maps from images/video |
+| AE automation plugin (JSX) | Planned | Auto-setup depth workflows inside After Effects |
+| MisregAE integration | Planned | Depth-driven halftone/riso/dither effects via GPU plugin |
+| Playground demo | Planned | Free browser demo with pre-computed clips |
 
 ---
 
-## Build Options
+## 2. Effects — What Depth Maps Unlock
 
-### Option A: Expression + Script Bundle (easiest)
-- JSX script auto-imports depth map, creates adjustment layers with expressions
-- Expressions read pixel values from depth layer to drive native effects
-- No compilation, works everywhere, modifiable
-- **Ship fast, prove the workflow**
+### Built (in desktop app backend)
+- **Depth of Field** — layered blur, focal depth/range, gaussian/disc bokeh
+- **Depth Grade** — near/far color tint, blend modes, gamma
+- **Depth Slice** — isolate depth band, feathered matte, transparent/solid bg
+- **Depth Fog** — atmospheric haze, density/near/far controls, noise
+- **Parallax / 2.5D** — displacement from depth, XY shift, zoom, smoothing
 
-### Option B: .ffx Effect Presets (medium)
-- Pre-built effect stacks using AE native effects
-- Camera Lens Blur + depth map as blur map
-- Fill + depth map as gradient for fog
-- Installable presets
+### Planned — Desktop App
+- **Wigglegram** — multi-view displacement loop, export GIF/MP4
+- **Depth Transition** — wipe between clips through Z-space (Gradient Wipe pattern)
+- **Posterize Depth** — stepped depth bands for stylized effects
+- **Spatial Photo/Video** — export MV-HEVC for Apple Vision Pro
 
-### Option C: Native .aex Plugin (most powerful)
-- C++ After Effects SDK
-- Full pixel access, GPU acceleration
-- Custom UI in Effect Controls
-- Proper bokeh, displacement, things expressions can't do
+### Planned — AE Plugin (JSX Automation)
+- **EZ Matte** — auto-create precomp with depth as luma matte + Essential Properties (brightness=depth, contrast=feather)
+- **Depth DoF** — apply Camera Lens Blur with depth map as blur map, add focal distance control
+- **Depth Fog** — create solid + Fractal Noise, depth as luma matte, essential properties for density/color
+- **Depth Parallax** — apply Displacement Map, connect depth layer, blur depth for smooth displacement
+- **Stereo Comp** — create left/right eye comps with displacement, separation/convergence null
+- **Depth Transition** — Gradient Wipe driven by depth pass between two clips
 
-### Option D: Integrate into MisregAE (best leverage)
-- Already have a shipping native GPU plugin with 6 effects
-- Already handles layer inputs, Metal/OpenCL compute, parameter structs
-- Add "Depth Map Layer" input to each effect
-- Depth modulates existing parameters per-pixel on GPU
-- **Fastest path to a real product — no new plugin infrastructure needed**
-
-### Recommended Path
-**Option D first** — add depth map support to MisregAE effects. Then Option C for standalone depth-only effects (fog, DoF, parallax) that don't fit MisregAE's scope.
+### Planned — MisregAE GPU Integration
+- Depth map layer input per effect → modulates LPI, dot size, density, misregistration per-pixel on GPU
 
 ---
 
-## MisregAE Integration — Depth Map Support
+## 3. Wigglegram — Deep Dive
 
-### What MisregAE Is
-Native C++ GPU plugin (Metal + OpenCL). 6 effects in one `.aeplugin` bundle:
-- **Riso** — 6-ink halftone separation (~150 params, per-ink source layers)
-- **Halftone** — 5 lattice types, 35+ params
-- **Dither** — 16 methods, 20 retro palettes, custom palette layer
-- **Stipple** — Luminance-driven particle rendering
-- **Grain** — Chunky animated grain with color mapping
-- **Memphis** — Pattern generator with 10 shape slots
+### What It Is
+A Nishika camera takes 4 photos from slightly different viewpoints simultaneously. Flipping between them creates a 3D wiggle effect. We simulate this digitally from a single image + depth map.
 
-### How Layer Inputs Already Work
-Each effect already checks out optional layers (paper texture, highlight, custom palette) via:
-```cpp
-PF_CHECKOUT_PARAM → check .u.ld.data != NULL → checkout_layer_pixels → GetGPUWorldData → bind to Metal buffer
+### Approaches (from research)
+
+| Method | Quality | Speed | Occlusion Handling |
+|--------|---------|-------|--------------------|
+| Displacement map (current) | Good | Real-time | Stretchy at edges |
+| Monocular Gaussian splat (SHARP) | Great | <1s setup, real-time render | Slightly blurry bg |
+| Full Gaussian splat (multi-image) | Best | Minutes | Clean |
+| Depth ray marching + smoothing | Good | Real-time | Stretchy |
+
+### Implementation Plan
+1. **V1 (now):** Displacement-based parallax — generate 3–7 views by shifting depth, loop as GIF/MP4. Fast, stretchy edges acceptable.
+2. **V2 (SHARP):** Apple's monocular splatting — single photo → 3D Gaussians → render novel views. Better occlusion, sub-second.
+3. **Controls:** Number of views (3–7), eye separation, curve path (linear/arc/orbit), loop style (bounce/forward), export format (GIF/MP4/image sequence)
+
+### Key Insight from Research
+> "Depth Anything is a bit jumpy frame-to-frame because it processes frames independently. So I implemented a per-pixel depth smoother."
+
+We already have this — `_align_depth()` in `depth_engine.py` does exactly this via least-squares affine alignment.
+
+> "For now, there's no way to get a Wigglegram that works both in real-time and doesn't suffer from the occlusion issue."
+
+SHARP solves this — 3D Gaussian representation handles occlusion properly.
+
+---
+
+## 4. AE Plugin Architecture (JSX Automation)
+
+Based on tutorial analysis, most depth workflows in AE follow one pattern:
+**Depth map → control layer (luma matte or map input) → native AE effect**
+
+No native C++ plugin needed for most effects. A JSX script that auto-builds the comp structure is faster to ship and works everywhere.
+
+### What the Script Does
 ```
-Adding depth map follows identical pattern.
-
-### What Depth Would Control (per effect)
-
-**Halftone + Depth:**
-- LPI varies with depth (finer halftone near camera, coarser far)
-- Dot size scales with depth
-- Screen angle rotates with depth
-- Density/opacity fades with depth
-
-**Riso + Depth:**
-- Per-ink misregistration increases with distance
-- Ink opacity varies by depth (foreground crisp, background washed)
-- LPI per-ink driven by depth
-- Bleed amount increases with distance
-
-**Dither + Depth:**
-- Dither method changes with depth (e.g. fine near, coarse far)
-- Color count reduces with depth (more colors near, fewer far)
-- Threshold shifts with depth
-
-**Stipple + Depth:**
-- Dot density varies with depth
-- Dot size scales with depth
-- Jitter/randomness increases with distance
-
-**Grain + Depth:**
-- Grain size scales with depth
-- Grain amount varies (more grain = farther)
-- Color mapping shifts with depth
-
-**Memphis + Depth:**
-- Shape density varies with depth
-- Shape size scales with depth
-- Shapes avoid foreground (depth-aware safe area)
-
-### Implementation Steps (Per Effect)
-
-1. **Misreg.h** — Add `EFFECT_DEPTH_MAP` param enum + `mHasDepthMap` to struct + depth control fields
-2. **Misreg.cpp** — Add `PF_ADD_LAYER("Depth Map", ...)` in ParamsSetup, checkout in PreRender
-3. **SmartRender** — Bind depth buffer to Metal/OpenCL at new buffer index
-4. **Metal kernel** — Sample depth per-pixel, multiply into relevant calculations
-5. **OpenCL kernel** — Same changes, identical struct layout
-
-### Example: Depth-Driven Halftone (Metal)
-
-```metal
-kernel void HalftoneKernel(
-    device const float4 *src [[buffer(0)]],
-    device float4 *dst [[buffer(1)]],
-    constant HalftoneParams &p [[buffer(2)]],
-    device const float4 *depthMap [[buffer(6)]],  // new
-    uint2 gid [[thread_position_in_grid]])
-{
-    uint idx = gid.y * p.mWidth + gid.x;
-
-    float depth = p.mHasDepthMap ? depthMap[idx].x : 0.5f;
-
-    // Depth modulates LPI: near=fine, far=coarse
-    float lpi = p.mLPI * mix(1.5f, 0.5f, depth);
-
-    // Depth modulates dot size
-    float dotScale = mix(0.7f, 1.3f, depth);
-
-    // ... render halftone with modulated params
-}
+User has: footage.mp4 + footage_depth.exr (from Depth Scanner)
+Script creates:
+├── Sources/ (footage + depth)
+├── EZ Matte Comps/
+│   └── footage_matte (precomp with Essential Properties)
+├── Depth Effects/
+│   ├── DoF comp (Camera Lens Blur + depth as blur map)
+│   ├── Fog comp (solid + fractal noise + depth luma matte)
+│   ├── Parallax comp (Displacement Map + blurred depth)
+│   └── Stereo comp (left eye + right eye + viewer)
+└── Control null with keyframeable depth sliders
 ```
 
-### UI: New "Depth Map" Accordion Per Effect
+### AE Effects Mapping
 
+| Our Effect | AE Native Effect | Depth Map Role |
+|------------|-----------------|----------------|
+| EZ Matte | Brightness & Contrast on depth layer | Luma Matte for source |
+| DoF | Camera Lens Blur / Universe Bokeh | Blur Map Layer input |
+| Fog | Fractal Noise solid | Luma Matte (depth controls fog density) |
+| Parallax | Displacement Map | Displacement Layer input |
+| Transition | Gradient Wipe | Gradient Layer input |
+| Color grade | Tint / Levels per depth band | Multiple luma mattes at different cutoffs |
+| Stereo 3D | Displacement Map (left/right shift) | Displacement Layer input |
+
+### Essential Properties Pattern
+Key workflow from tutorials: precomp with brightness/contrast on depth layer, exposed as Essential Properties. This gives user two sliders (depth cutoff + feather) on a single layer that works in any comp.
+
+---
+
+## 5. MisregAE Depth Integration
+
+### Architecture
+Native C++ GPU plugin (Metal + OpenCL). 6 effects. Add depth map as optional layer input.
+
+### Per Effect — What Depth Controls
+
+| Effect | Depth → Parameter | Creative Result |
+|--------|-------------------|-----------------|
+| Halftone | LPI, dot size | Finer halftone near camera, coarser far |
+| Riso | Per-ink misreg, opacity, LPI | Foreground crisp, background washed/misaligned |
+| Dither | Color count, threshold | More detail near, posterized far |
+| Stipple | Dot density, dot size | Dense near, sparse far |
+| Grain | Grain size, amount | More grain = farther |
+| Memphis | Shape density, size | Depth-aware pattern distribution |
+
+### Implementation (5 steps per effect)
+1. `Misreg.h` — Add param enum + struct fields
+2. `Misreg.cpp` — `PF_ADD_LAYER("Depth Map")` + checkout in PreRender
+3. SmartRender — Bind depth buffer to Metal/OpenCL
+4. Metal kernel — Sample depth per-pixel, modulate parameters
+5. OpenCL kernel — Mirror Metal changes (identical struct layout)
+
+### UI Per Effect
 ```
 ▼ Depth Map
   Depth Map Layer     [None ▾]
@@ -177,71 +149,147 @@ kernel void HalftoneKernel(
   Depth Gamma         [1.0]
 ```
 
-### Struct Sync Rule
-C++ struct, Metal struct, OpenCL struct must have **identical field order and types**. GPU receives raw bytes. Any mismatch = garbage rendering or crash.
+---
+
+## 6. Depth Model Research
+
+### Current: Depth Anything V2
+- Relative depth (not metric)
+- Small/Base/Large variants
+- Good quality, fast on GPU
+- Frame-to-frame jitter (solved by our `_align_depth()`)
+
+### Next: Apple SHARP
+- **Paper:** `/2512.10685v2.pdf`
+- **Repo:** https://github.com/apple/ml-sharp.git
+- **Review:** https://www.themoonlight.io/en/review/depth-pro-sharp-monocular-metric-depth-in-less-than-a-second
+- Single photo → 3D Gaussian representation in <1 second
+- **Metric depth** — absolute scale, correct stereo baseline
+- **Novel view rendering** at 100+ fps
+- Replaces DA V2 AND enables proper wigglegram/spatial video
+- **Upgrade path:** Keep DA V2 as "fast" mode, add SHARP as "quality/3D" mode
 
 ---
 
-## Workflow
+## 7. Bokeh Research — DoF Upgrade Path
 
-```
-Desktop App                    After Effects
-┌─────────────┐    depth.exr   ┌──────────────────┐
-│ Drop video   │ ──────────►  │ Depth Utility     │
-│ Process depth│               │ Plugin            │
-│ Export .exr  │               │  ├─ Fog           │
-└─────────────┘               │  ├─ Rack Focus    │
-                               │  ├─ Depth Matte   │
-                               │  ├─ Parallax      │
-                               │  └─ Stereo 3D     │
-                               └──────────────────┘
-```
+| Tier | Method | Quality | Speed | Reference |
+|------|--------|---------|-------|-----------|
+| Current | Layered Gaussian blur | Preview | Fast | Built-in |
+| Next | Scattering CoC + aperture shapes | Accurate | Medium | CAIP 2015, Bokehlicious |
+| Advanced | Real-time gather/scatter with hex shapes | Good | Real-time | MJP post |
+| Future | Neural/diffusion bokeh | Photorealistic | Slow | Neural Bokeh, BokehDiff, PyNET |
 
----
-
-## Tutorial References
-
-_Add tutorial transcripts and reference workflows below. These will inform which features to build first and how to match existing AE depth map workflows._
-
-### Tutorial 1
-- **Title:**
-- **Source:**
-- **Key workflow:**
-- **Effects used:**
-- **Notes:**
-
-### Tutorial 2
-- **Title:**
-- **Source:**
-- **Key workflow:**
-- **Effects used:**
-- **Notes:**
-
-### Tutorial 3
-- **Title:**
-- **Source:**
-- **Key workflow:**
-- **Effects used:**
-- **Notes:**
+### References
+- **Bokehlicious** — https://github.com/TimSeizinger/Bokehlicious.git — Scatter-based, custom aperture shapes from images. No ML. Best "next" candidate.
+- **BokehDiff** — https://github.com/FreeButUselessSoul/bokehdiff.git — Diffusion-based photorealistic bokeh.
+- **PyNET-Bokeh** — https://github.com/aiff22/PyNET-Bokeh.git — ML trained on real lens data.
+- **Neural Bokeh** — https://immersive-technology-lab.github.io/projects/neuralbokeh/ — Paper: https://immersive-technology-lab.github.io/projects/neuralbokeh/assets/vr24_mandl_paper.pdf
+- **CAIP 2015** — `/CAIP_2015.pdf` — Scattering-based CoC from depth. `CoC = f·b/(D+Δ)`. Joint bilateral filter for depth edge refinement.
+- **MJP Bokeh** — https://therealmjp.github.io/posts/bokeh/ — Deep technical breakdown: gather vs scatter, real-time techniques.
+- **Bokeh types** — https://www.thephoblographer.com/2022/02/02/a-visual-guide-to-the-different-types-of-bokeh/ — Cat-eye, onion ring, soap bubble, swirly, creamy.
 
 ---
 
-## Decision Log
+## 8. Apple Spatial / Vision Pro
+
+### Opportunity
+"Convert any photo or video to spatial" — depth map → stereo views → MV-HEVC spatial format → viewable on Vision Pro / iPhone 3D.
+
+### Pipeline
+1. Depth Scanner generates depth map
+2. SHARP (or displacement) creates left/right eye views
+3. Encode as MV-HEVC spatial video or spatial photo with ImageIO metadata
+4. View on Vision Pro / iPhone Spatial mode
+
+### References
+- **WWDC 2024** — https://developer.apple.com/videos/play/wwdc2024/10166/
+- **Creating spatial photos** — https://developer.apple.com/documentation/ImageIO/Creating-spatial-photos-and-videos-with-spatial-metadata
+- **Writing spatial photos** — https://developer.apple.com/documentation/ImageIO/writing-spatial-photos
+- **SBS to MV-HEVC** — https://developer.apple.com/documentation/AVFoundation/converting-side-by-side-3d-video-to-multiview-hevc-and-spatial-video
+- **Spatial forums** — https://developer.apple.com/forums/topics/spatial-computing
+- **AVCam** — https://developer.apple.com/documentation/AVFoundation/avcam-building-a-camera-app
+- **vision-utils** — https://github.com/studiolanes/vision-utils
+- **spatial-image** — https://github.com/orgs/spatial-image/repositories
+- **SpatialEdit** — https://github.com/EasonXiao-888/SpatialEdit.git
+- **WebXR Viewer** — https://github.com/zfox23/spatial-photo-webxr-viewer.git
+- **3D spatial scenes** — https://www.idownloadblog.com/2025/07/25/view-2d-images-3d-spatial-scenes-iphone-ipad-tutorial/
+- **ISPR analysis** — https://ispr.info/2025/09/08/apples-3d-spatial-scenes-a-step-toward-a-future-where-all-digital-interactions-are-spatial/
+
+---
+
+## 9. Tutorial Workflows Analyzed
+
+### Tutorial 1: Depth Wish Script (Action Movie Dad)
+- EZ Matte precomp with Essential Properties
+- Stereo 3D with separation/convergence null
+- Trapcode Mir 3D extrusion from depth
+- **Pattern:** Depth → luma matte → Essential Properties precomp
+
+### Tutorial 2: Lincoln Parallax (Displacement Map)
+- Displacement Map + blurred depth layer
+- Keyframe XY displacement for camera move
+- Layer with textures, 3D text, spotlight
+- **Pattern:** Depth → blur → displacement → keyframe
+
+### Tutorial 3: 3D Lightning (Blender + AE)
+- Depth → Blender geometry nodes → 3D mesh
+- Light 3D scene → render passes → composite in AE
+- **Pattern:** Depth → 3D extrusion → lighting → composite
+
+### Tutorial 4: Comprehensive Depth Compositing (Action Movie Dad)
+- Text behind characters (EZ Matte)
+- Depth transitions (Gradient Wipe)
+- Tilt-shift bokeh (Camera Lens Blur / Universe Bokeh)
+- City blackout (Gradient Wipe + posterizeTime)
+- Atmospheric fog (Fractal Noise + depth matte)
+- Z-space particles (Particular + depth zones)
+- Color grading by depth
+- **Pattern:** Native AE effect + depth as control layer
+
+### Wigglegram Research (TouchDesigner artist)
+- Nishika camera: 4 simultaneous viewpoints → wiggle loop
+- Methods: displacement (fast, stretchy), monocular splat (better, blurry bg), full splat (best, slow)
+- Depth Anything V2 ray marching with per-pixel depth smoother = real-time but stretchy occlusions
+- SHARP monocular splatting = best single-image quality
+- **Key insight:** No real-time method fully solves occlusion yet — SHARP is closest
+
+---
+
+## 10. Decision Log
 
 | Date | Decision | Reason |
 |------|----------|--------|
 | 2026-04-17 | Desktop app separate from AE plugin | Better UX, no server dependency in AE |
-| 2026-04-17 | MisregAE is best integration target | Already shipping GPU plugin with layer inputs, Metal/OpenCL kernels, and parameter infrastructure. Adding depth map layer follows existing pattern exactly. |
-| | | |
+| 2026-04-17 | MisregAE is best GPU integration target | Already shipping with layer inputs, Metal/OpenCL, parameter infrastructure |
+| 2026-04-17 | JSX script for AE automation (not native plugin) | Most depth workflows = native AE effects + depth as control layer. Script auto-builds comp structure. |
+| 2026-04-17 | Tauri for desktop (not Electron/pywebview) | 12MB vs 150MB+. Native WebKit, proper file dialogs. |
+| 2026-04-17 | SHARP as V2 depth engine | Metric depth + 3D Gaussians + novel views in <1s. Enables spatial video. |
+| 2026-04-17 | Scattering CoC for bokeh V2 | Bokehlicious/CAIP approach — physically accurate, no ML, GPU-friendly |
 
 ---
 
-## Next Steps
+## 11. Next Steps
 
-- [ ] Collect 3-5 tutorial transcripts showing AE depth map workflows
-- [ ] Identify most common effects/techniques across tutorials
-- [ ] Decide standalone depth plugin vs MisregAE integration vs both
-- [ ] Add depth map layer input to one MisregAE effect as proof of concept (Halftone recommended — simplest)
-- [ ] Test: Desktop app → export EXR → AE import → MisregAE Halftone with depth map driving LPI
-- [ ] If workflow works, roll out to remaining 5 effects
-- [ ] Evaluate standalone depth effects (fog, DoF, parallax) as separate plugin
+### Immediate
+- [ ] Fix Tauri file picker (label+input approach)
+- [ ] Test new effects (fog, parallax) in desktop app
+- [ ] Build AE JSX automation script (EZ Matte + DoF + Fog)
+- [ ] Add depth map layer to MisregAE Halftone as proof of concept
+
+### Short-term
+- [ ] Wigglegram effect (displacement-based V1)
+- [ ] Spatial photo export (SBS → MV-HEVC)
+- [ ] Playground demo with 5 pre-computed clips
+- [ ] Scattering CoC bokeh (Bokehlicious approach)
+
+### Medium-term
+- [ ] Integrate Apple SHARP as depth engine option
+- [ ] Spatial video export pipeline
+- [ ] Roll out depth map to all 6 MisregAE effects
+- [ ] Neural bokeh option (PyNET or BokehDiff)
+
+### Long-term
+- [ ] Real-time wigglegram via SHARP 3D Gaussians
+- [ ] WebXR spatial photo viewer
+- [ ] Full AE workflow automation suite

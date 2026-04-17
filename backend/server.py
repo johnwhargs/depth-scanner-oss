@@ -21,10 +21,10 @@ from PIL import Image
 
 from depth_engine import engine, COLORMAPS, MODEL_MAP
 from exporters import export, apply_colormap
-from effects import apply_effect
+from effects import apply_effect, create_wigglegram, create_spatial_pair, depth_transition, posterize_depth_array
 
 app = FastAPI(title="Depth Scanner OSS", version="1.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"], expose_headers=["X-Session-Id", "X-Width", "X-Height", "X-Frame-Count", "X-FPS", "X-Frame", "X-Total"])
 
 CONTENT_TYPES = {"png_gray": "image/png", "png_color": "image/png", "exr": "image/x-exr"}
 
@@ -61,10 +61,10 @@ async def _infer_frame(file, model):
 
 
 def _coerce_params(params):
-    for k in ("invert_mask", "near_blur", "far_blur"):
+    for k in ("invert_mask", "near_blur", "far_blur", "colorize"):
         if k in params and isinstance(params[k], str):
             params[k] = params[k].lower() in ("true", "1", "yes")
-    for k in ("bg_alpha",):
+    for k in ("bg_alpha", "levels", "num_views"):
         if k in params and isinstance(params[k], str):
             params[k] = int(params[k])
     return params
@@ -88,7 +88,7 @@ def list_colormaps():
 
 @app.get("/effects")
 def list_effects():
-    return {"effects": ["slice", "grade", "dof"]}
+    return {"effects": ["slice", "grade", "dof", "fog", "parallax", "posterize"]}
 
 @app.post("/load")
 def load_model(model: str = Form("small")):
@@ -165,8 +165,10 @@ async def video_start(
     file: UploadFile = File(...),
     model: str = Form("small"),
     every: int = Form(1),
+    start_frame: int = Form(0),
+    end_frame: int = Form(-1),
 ):
-    """Upload video, extract frames, return session_id + metadata."""
+    """Upload video, extract frames within trim range, return session_id + metadata."""
     raw = await file.read()
     suffix = os.path.splitext(file.filename or "video.mp4")[1] or ".mp4"
     tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
@@ -179,8 +181,12 @@ async def video_start(
             raise HTTPException(400, "Could not open video.")
 
         fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        if end_frame < 0:
+            end_frame = total_frames
 
         frames = []
         idx = 0
@@ -188,7 +194,7 @@ async def video_start(
             ret, bgr = cap.read()
             if not ret:
                 break
-            if idx % every == 0:
+            if idx >= start_frame and idx < end_frame and (idx - start_frame) % every == 0:
                 rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
                 frames.append(Image.fromarray(rgb))
             idx += 1
@@ -452,7 +458,7 @@ async def process_video(
 
 @app.post("/process/video/info")
 async def video_info(file: UploadFile = File(...)):
-    """Get video metadata without processing."""
+    """Get video metadata + first frame thumbnail."""
     raw = await file.read()
     suffix = os.path.splitext(file.filename or "video.mp4")[1] or ".mp4"
     tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
@@ -462,17 +468,49 @@ async def video_info(file: UploadFile = File(...)):
         cap = cv2.VideoCapture(tmp.name)
         if not cap.isOpened():
             raise HTTPException(400, "Could not open video.")
+
+        fps = cap.get(cv2.CAP_PROP_FPS)
         info = {
-            "fps": cap.get(cv2.CAP_PROP_FPS),
+            "fps": fps,
             "frames": int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
             "width": int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
             "height": int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-            "duration": cap.get(cv2.CAP_PROP_FRAME_COUNT) / max(cap.get(cv2.CAP_PROP_FPS), 1),
+            "duration": cap.get(cv2.CAP_PROP_FRAME_COUNT) / max(fps, 1),
         }
+
+        # Extract first frame as base64 thumbnail
+        ret, bgr = cap.read()
+        if ret:
+            import base64
+            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+            thumb = Image.fromarray(rgb)
+            # Resize for quick transfer
+            max_dim = 800
+            if thumb.width > max_dim or thumb.height > max_dim:
+                ratio = min(max_dim / thumb.width, max_dim / thumb.height)
+                thumb = thumb.resize((int(thumb.width * ratio), int(thumb.height * ratio)), Image.LANCZOS)
+            buf = io.BytesIO()
+            thumb.save(buf, format="JPEG", quality=80)
+            info["thumbnail"] = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
         cap.release()
         return info
     finally:
         os.unlink(tmp.name)
+
+
+@app.post("/save")
+async def save_file(
+    file: UploadFile = File(...),
+    path: str = Form(...),
+):
+    """Save uploaded file to disk at the given path."""
+    raw = await file.read()
+    # Ensure parent directory exists
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(raw)
+    return {"saved": path, "size": len(raw)}
 
 
 @app.post("/effect/{effect_name}")
@@ -483,9 +521,17 @@ async def run_effect(
     model: str = Form("small"),
     params_json: str = Form("{}"),
 ):
-    if effect_name not in {"slice", "grade", "dof"}:
+    if effect_name not in {"slice", "grade", "dof", "fog", "parallax", "posterize"}:
         raise HTTPException(404, "Unknown effect.")
     params = _coerce_params(json.loads(params_json))
+
+    # Extract posterize modifier if present
+    posterize_on = params.pop("_posterize", False)
+    posterize_levels = params.pop("_posterize_levels", 4)
+    if isinstance(posterize_on, str):
+        posterize_on = posterize_on.lower() in ("true", "1", "yes")
+    if isinstance(posterize_levels, str):
+        posterize_levels = int(posterize_levels)
 
     if session_id and cache.get(session_id):
         img, depth = cache.get(session_id)
@@ -493,6 +539,9 @@ async def run_effect(
         img, depth, _ = await _infer_frame(file, model)
     else:
         raise HTTPException(400, "Provide 'file' or valid 'session_id'.")
+
+    if posterize_on:
+        depth = posterize_depth_array(depth, posterize_levels)
 
     result = apply_effect(effect_name, img, depth, params)
     buf = io.BytesIO()
@@ -508,9 +557,17 @@ async def effect_preview(
     colormap: str = Form("inferno"),
     params_json: str = Form("{}"),
 ):
-    if effect_name not in {"slice", "grade", "dof"}:
+    if effect_name not in {"slice", "grade", "dof", "fog", "parallax", "posterize"}:
         raise HTTPException(404, "Unknown effect.")
     params = _coerce_params(json.loads(params_json))
+
+    # Extract posterize modifier if present
+    posterize_on = params.pop("_posterize", False)
+    posterize_levels = params.pop("_posterize_levels", 4)
+    if isinstance(posterize_on, str):
+        posterize_on = posterize_on.lower() in ("true", "1", "yes")
+    if isinstance(posterize_levels, str):
+        posterize_levels = int(posterize_levels)
 
     if session_id and cache.get(session_id):
         img, depth = cache.get(session_id)
@@ -518,6 +575,9 @@ async def effect_preview(
         img, depth, _ = await _infer_frame(file, model)
     else:
         raise HTTPException(400, "Provide 'file' or valid 'session_id'.")
+
+    if posterize_on:
+        depth = posterize_depth_array(depth, posterize_levels)
 
     depth_vis   = Image.fromarray(apply_colormap(depth, colormap), "RGB")
     effect_out  = apply_effect(effect_name, img, depth, params).convert("RGB")
@@ -534,6 +594,161 @@ async def effect_preview(
     buf = io.BytesIO()
     combined.save(buf, "PNG")
     return Response(content=buf.getvalue(), media_type="image/png")
+
+# ── Wigglegram endpoint ──────────────────────────────────────────────────────
+
+@app.post("/wigglegram")
+async def wigglegram(
+    file: Optional[UploadFile] = File(None),
+    session_id: Optional[str] = Form(None),
+    model: str = Form("small"),
+    num_views: int = Form(5),
+    separation: float = Form(15),
+    blur_depth: float = Form(5),
+    path: str = Form("linear"),
+    fps: int = Form(12),
+    format: str = Form("gif"),
+):
+    """Generate a wigglegram GIF or MP4 from an image and its depth map."""
+    if session_id and cache.get(session_id):
+        img, depth = cache.get(session_id)
+    elif file:
+        img, depth, _ = await _infer_frame(file, model)
+    else:
+        raise HTTPException(400, "Provide 'file' or valid 'session_id'.")
+
+    views = create_wigglegram(img, depth, num_views=num_views,
+                              separation=separation, path=path, blur_depth=blur_depth)
+
+    if format == "mp4":
+        # Bounce loop: forward + reverse (minus endpoints to avoid double)
+        bounce = views + views[-2:0:-1]
+        tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        tmp.close()
+        w, h = views[0].size
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(tmp.name, fourcc, float(fps), (w, h))
+        for frame in bounce:
+            bgr = cv2.cvtColor(np.array(frame), cv2.COLOR_RGB2BGR)
+            writer.write(bgr)
+        writer.release()
+        with open(tmp.name, "rb") as f:
+            data = f.read()
+        os.unlink(tmp.name)
+        return Response(content=data, media_type="video/mp4",
+                        headers={"Content-Disposition": "attachment; filename=wigglegram.mp4"})
+    else:
+        # GIF with loop
+        buf = io.BytesIO()
+        duration = max(1, int(1000 / fps))
+        # Bounce loop for GIF too
+        bounce = views + views[-2:0:-1]
+        bounce[0].save(buf, format="GIF", save_all=True,
+                       append_images=bounce[1:], duration=duration, loop=0)
+        return Response(content=buf.getvalue(), media_type="image/gif",
+                        headers={"Content-Disposition": "attachment; filename=wigglegram.gif"})
+
+
+# ── Spatial photo endpoint ───────────────────────────────────────────────────
+
+@app.post("/spatial")
+async def spatial(
+    file: Optional[UploadFile] = File(None),
+    session_id: Optional[str] = Form(None),
+    model: str = Form("small"),
+    eye_separation: float = Form(30),
+    convergence: float = Form(0.5),
+    output: str = Form("sbs"),
+):
+    """Generate spatial stereo pair. output='sbs' returns side-by-side PNG, 'zip' returns separate L/R."""
+    if session_id and cache.get(session_id):
+        img, depth = cache.get(session_id)
+    elif file:
+        img, depth, _ = await _infer_frame(file, model)
+    else:
+        raise HTTPException(400, "Provide 'file' or valid 'session_id'.")
+
+    left, right = create_spatial_pair(img, depth, eye_separation=eye_separation,
+                                      convergence=convergence)
+
+    if output == "zip":
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zout:
+            lbuf = io.BytesIO()
+            left.save(lbuf, format="PNG")
+            zout.writestr("left.png", lbuf.getvalue())
+            rbuf = io.BytesIO()
+            right.save(rbuf, format="PNG")
+            zout.writestr("right.png", rbuf.getvalue())
+        return Response(content=buf.getvalue(), media_type="application/zip",
+                        headers={"Content-Disposition": "attachment; filename=spatial_pair.zip"})
+    else:
+        # Side-by-side
+        w, h = left.size
+        combined = Image.new("RGB", (w * 2, h))
+        combined.paste(left, (0, 0))
+        combined.paste(right, (w, 0))
+        buf = io.BytesIO()
+        combined.save(buf, format="PNG")
+        return Response(content=buf.getvalue(), media_type="image/png",
+                        headers={"Content-Disposition": "attachment; filename=spatial_sbs.png"})
+
+
+# ── Transition endpoint ─────────────────────────────────────────────────────
+
+@app.post("/transition")
+async def transition(
+    file_a: UploadFile = File(...),
+    file_b: UploadFile = File(...),
+    model: str = Form("small"),
+    transition_val: float = Form(0.5),
+    softness: float = Form(0.1),
+):
+    """Depth-driven transition between two images using depth of image A as wipe gradient."""
+    raw_a = await file_a.read()
+    raw_b = await file_b.read()
+    try:
+        img_a = Image.open(io.BytesIO(raw_a)).convert("RGB")
+        img_b = Image.open(io.BytesIO(raw_b)).convert("RGB")
+    except Exception as e:
+        raise HTTPException(400, f"Could not decode images: {e}")
+
+    engine.load_model(model)
+    depth_a = engine.process_frame(img_a)
+
+    result = depth_transition(img_a, img_b, depth_a,
+                              transition=transition_val, softness=softness)
+    buf = io.BytesIO()
+    result.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@app.post("/transition/preview")
+async def transition_preview(
+    file_a: UploadFile = File(...),
+    file_b: UploadFile = File(...),
+    model: str = Form("small"),
+    transition_val: float = Form(0.5),
+    softness: float = Form(0.1),
+):
+    """Preview depth transition — returns the result image."""
+    raw_a = await file_a.read()
+    raw_b = await file_b.read()
+    try:
+        img_a = Image.open(io.BytesIO(raw_a)).convert("RGB")
+        img_b = Image.open(io.BytesIO(raw_b)).convert("RGB")
+    except Exception as e:
+        raise HTTPException(400, f"Could not decode images: {e}")
+
+    engine.load_model(model)
+    depth_a = engine.process_frame(img_a)
+
+    result = depth_transition(img_a, img_b, depth_a,
+                              transition=transition_val, softness=softness)
+    buf = io.BytesIO()
+    result.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -22,6 +22,19 @@ desktop/icon.iconset/
 # Claude
 .claude/
 
+# Rust / Tauri build artifacts
+target/
+tauri-app/src-tauri/target/
+
+# Tauri temp
+tauri-app/ui/_app.html
+
+# Desktop app bundle (built, not committed)
+Depth Scanner.app/
+
+# PDFs (research, not code)
+*.pdf
+
 # Models (downloaded at runtime)
 *.bin
 *.safetensors

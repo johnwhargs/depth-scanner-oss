@@ -113,6 +113,33 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
 .file-item .status-icon{font-size:10px}
 .file-done{color:var(--ok)}
 .file-processing{color:var(--warn)}
+
+/* ── Toggle switch ───────────────────────────────────── */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.toggle-label{font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.toggle{position:relative;width:36px;height:20px;background:var(--border);border-radius:10px;cursor:pointer;transition:background .2s;flex-shrink:0}
+.toggle.on{background:var(--accent)}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .2s}
+.toggle.on::after{transform:translateX(16px)}
+.fx-disabled{opacity:.4;pointer-events:none}
+
+/* ── Timeline ────────────────────────────────────────── */
+.timeline{display:none;padding:0 16px 8px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
+.timeline.show{display:block}
+.tl-header{display:flex;align-items:center;justify-content:space-between;padding:6px 0 4px;font-family:var(--mono);font-size:10px;color:var(--muted)}
+.tl-time{color:var(--text);font-size:11px}
+.tl-track{position:relative;height:40px;background:var(--bg);border-radius:3px;margin-bottom:4px;cursor:pointer;overflow:visible;user-select:none}
+.tl-fill{position:absolute;top:0;height:100%;background:var(--raised);border-radius:3px}
+.tl-trim{position:absolute;top:0;height:100%;background:rgba(91,143,255,.15);border:1px solid var(--accent);border-radius:3px;pointer-events:none}
+.tl-handle{position:absolute;top:-4px;width:14px;height:48px;background:var(--accent);border-radius:3px;cursor:col-resize;z-index:3;transition:background .1s}
+.tl-handle:hover,.tl-handle:active{background:#4070e0;width:16px}
+.tl-handle-left{left:-7px;border-radius:3px 0 0 3px}
+.tl-handle-right{right:-7px;border-radius:0 3px 3px 0}
+.tl-playhead{position:absolute;top:-6px;width:2px;height:52px;background:var(--ok);z-index:4;pointer-events:none}
+.tl-playhead::before{content:"";position:absolute;top:0;left:-5px;width:12px;height:8px;background:var(--ok);border-radius:3px 3px 0 0}
+.tl-thumbs{position:absolute;top:0;left:0;right:0;height:100%;display:flex;overflow:hidden;border-radius:3px;pointer-events:none}
+.tl-thumbs img{height:100%;flex-shrink:0;object-fit:cover;opacity:.6}
+.tl-ruler{display:flex;justify-content:space-between;font-family:var(--mono);font-size:8px;color:var(--border);padding:0 2px}
 </style>
 </head>
 <body>
@@ -135,23 +162,35 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
   <!-- ─── Sidebar ─────────────────────────────────────────────── -->
   <div class="sidebar">
 
-    <div class="mode-tabs">
-      <button class="mode-tab active" data-mode="single">Single</button>
-      <button class="mode-tab" data-mode="video">Video</button>
-      <button class="mode-tab" data-mode="batch">Batch</button>
-      <button class="mode-tab" data-mode="effects">Effects</button>
+    <!-- ── Open / File info ──── -->
+    <div class="sb-section">
+      <label class="btn btn-primary" for="file-input" style="cursor:pointer">Open File</label>
+      <input type="file" id="file-input" accept="image/*,video/*,.mp4,.mov,.avi,.mkv,.webm" multiple style="position:absolute;width:0;height:0;opacity:0;pointer-events:none"/>
+      <!-- Batch file list -->
+      <div class="file-list" id="batch-files"></div>
+      <div id="batch-controls" style="display:none">
+        <button class="btn btn-accent2 btn-sm" id="btn-process-batch">Process All</button>
+        <button class="btn btn-sm" id="btn-clear-batch">Clear Batch</button>
+      </div>
+      <div id="file-type-badge" style="display:none;margin-bottom:8px">
+        <span id="file-badge" style="display:inline-block;background:var(--accent);color:#fff;font-family:var(--mono);font-size:9px;letter-spacing:.1em;padding:2px 8px;border-radius:3px;text-transform:uppercase"></span>
+      </div>
+      <div id="video-info-box" style="display:none">
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);line-height:1.8" id="video-meta"></div>
+      </div>
     </div>
 
-    <!-- ── Model & Output (shared) ──── -->
+    <!-- ── Model & Output ──── -->
     <div class="sb-section">
       <div class="sb-title">Model & Output</div>
       <div class="field">
         <label>Model</label>
         <select id="model">
-          <option value="small">Small — fast</option>
+          <option value="small">Small — fastest</option>
           <option value="base">Base — balanced</option>
-          <option value="large">Large — best</option>
+          <option value="large">Large — best quality</option>
         </select>
+        <span id="model-hint" style="display:none;font-size:9px;color:var(--ok);margin-top:-4px">recommended</span>
       </div>
       <div class="field">
         <label>Format</label>
@@ -167,165 +206,272 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
       </div>
     </div>
 
-    <!-- ═══ SINGLE MODE ═══ -->
-    <div class="mode-pane active" id="pane-single">
-      <div class="sb-section">
-        <button class="btn btn-primary" id="btn-open">Open Image</button>
-        <button class="btn" id="btn-process" disabled>Process Depth</button>
-        <button class="btn" id="btn-save" disabled>Save Result</button>
+    <!-- ── Video options (shown only for video) ──── -->
+    <div class="sb-section" id="video-options" style="display:none">
+      <div class="sb-title">Video Options</div>
+      <div class="field">
+        <label>Every N</label>
+        <input type="number" id="vid-every" value="1" min="1" max="60" step="1" style="width:60px"/>
+      </div>
+      <div class="field">
+        <label>Scale align</label>
+        <select id="vid-align">
+          <option value="true" selected>On</option>
+          <option value="false">Off</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Smooth</label>
+        <input type="range" id="vid-smooth" min="0" max="0.9" step="0.05" value="0.4"
+          oninput="document.getElementById('vid-smooth-val').textContent=parseFloat(this.value).toFixed(2)"/>
+        <span class="range-val" id="vid-smooth-val">0.40</span>
+      </div>
+      <div class="field">
+        <label>Output</label>
+        <select id="vid-output">
+          <option value="video">MP4 Video</option>
+          <option value="sequence">Image Sequence (ZIP)</option>
+        </select>
       </div>
     </div>
 
-    <!-- ═══ VIDEO MODE ═══ -->
-    <div class="mode-pane" id="pane-video">
-      <div class="sb-section">
-        <button class="btn btn-primary" id="btn-open-video">Open Video</button>
-        <div id="video-info-box" style="display:none;margin-bottom:10px">
-          <div style="font-size:10px;color:var(--muted);font-family:var(--mono);line-height:1.8" id="video-meta"></div>
+    <!-- ── Actions ──── -->
+    <div class="sb-section">
+      <button class="btn btn-accent2" id="btn-process" disabled>Process Depth Map</button>
+      <button class="btn" id="btn-save" disabled>Save Result</button>
+    </div>
+
+    <!-- ── Effects (shown after processing) ──── -->
+    <div class="sb-section" id="effects-section">
+      <div class="toggle-row">
+        <span class="toggle-label">Effects</span>
+        <div class="toggle" id="fx-toggle" title="Enable live effect preview"></div>
+      </div>
+      <div id="fx-controls" class="fx-disabled">
+      <!-- Posterize modifier (global) -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:6px 8px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border)">
+        <input type="checkbox" id="posterize-on" style="accent-color:var(--accent);cursor:pointer"/>
+        <label for="posterize-on" style="font-size:10px;color:var(--muted);cursor:pointer;flex-shrink:0">Posterize</label>
+        <input type="range" id="posterize-levels" min="2" max="10" step="1" value="4" style="flex:1"
+          oninput="document.getElementById('posterize-levels-v').textContent=this.value"/>
+        <span class="range-val" id="posterize-levels-v">4</span>
+      </div>
+      <div class="fx-tabs" style="flex-wrap:wrap">
+        <button class="fx-tab active" data-fx="dof">DoF</button>
+        <button class="fx-tab" data-fx="grade">Grade</button>
+        <button class="fx-tab" data-fx="slice">Slice</button>
+        <button class="fx-tab" data-fx="fog">Fog</button>
+        <button class="fx-tab" data-fx="parallax">Parallax</button>
+        <button class="fx-tab" data-fx="wiggle">Wiggle</button>
+        <button class="fx-tab" data-fx="spatial">Spatial</button>
+        <button class="fx-tab" data-fx="transition">Transition</button>
+      </div>
+
+      <!-- DoF -->
+      <div class="fx-pane active" id="fx-dof">
+        <div class="field">
+          <label>Focal depth</label>
+          <input type="range" id="dof-focal" min="0" max="1" step="0.01" value="0.3"
+            oninput="document.getElementById('dof-focal-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="dof-focal-v">0.30</span>
+        </div>
+        <div class="field">
+          <label>Focal range</label>
+          <input type="range" id="dof-range" min="0.01" max="0.5" step="0.01" value="0.1"
+            oninput="document.getElementById('dof-range-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="dof-range-v">0.10</span>
+        </div>
+        <div class="field">
+          <label>Max blur</label>
+          <input type="range" id="dof-blur" min="1" max="40" step="1" value="14"
+            oninput="document.getElementById('dof-blur-v').textContent=this.value+'px'"/>
+          <span class="range-val" id="dof-blur-v">14px</span>
+        </div>
+        <div class="field">
+          <label>Bokeh</label>
+          <select id="dof-bokeh"><option value="gaussian">Gaussian</option><option value="disc">Disc</option></select>
         </div>
       </div>
-      <div class="sb-section">
-        <div class="sb-title">Options</div>
+
+      <!-- Grade -->
+      <div class="fx-pane" id="fx-grade">
+        <div class="field"><label>Near color</label><input type="color" id="grade-near" value="#ff4400"/></div>
+        <div class="field"><label>Far color</label><input type="color" id="grade-far" value="#0044ff"/></div>
         <div class="field">
-          <label>Every N</label>
-          <input type="number" id="vid-every" value="1" min="1" max="60" step="1" style="width:60px"/>
+          <label>Opacity</label>
+          <input type="range" id="grade-opacity" min="0" max="1" step="0.05" value="0.5"
+            oninput="document.getElementById('grade-opacity-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="grade-opacity-v">0.50</span>
         </div>
         <div class="field">
-          <label>Scale align</label>
-          <select id="vid-align">
-            <option value="true" selected>On</option>
-            <option value="false">Off</option>
+          <label>Blend</label>
+          <select id="grade-blend">
+            <option value="overlay">Overlay</option><option value="multiply">Multiply</option>
+            <option value="screen">Screen</option><option value="add">Add</option><option value="normal">Normal</option>
           </select>
+        </div>
+      </div>
+
+      <!-- Slice -->
+      <div class="fx-pane" id="fx-slice">
+        <div class="field">
+          <label>Near cut</label>
+          <input type="range" id="slice-near" min="0" max="1" step="0.01" value="0.0"
+            oninput="document.getElementById('slice-near-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="slice-near-v">0.00</span>
+        </div>
+        <div class="field">
+          <label>Far cut</label>
+          <input type="range" id="slice-far" min="0" max="1" step="0.01" value="0.5"
+            oninput="document.getElementById('slice-far-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="slice-far-v">0.50</span>
+        </div>
+        <div class="field">
+          <label>Feather</label>
+          <input type="range" id="slice-feather" min="0" max="0.2" step="0.005" value="0.02"
+            oninput="document.getElementById('slice-feather-v').textContent=parseFloat(this.value).toFixed(3)"/>
+          <span class="range-val" id="slice-feather-v">0.020</span>
+        </div>
+      </div>
+
+      <!-- Fog -->
+      <div class="fx-pane" id="fx-fog">
+        <div class="field"><label>Fog color</label><input type="color" id="fog-color" value="#c8c8d0"/></div>
+        <div class="field">
+          <label>Density</label>
+          <input type="range" id="fog-density" min="0" max="1" step="0.05" value="0.7"
+            oninput="document.getElementById('fog-density-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="fog-density-v">0.70</span>
+        </div>
+        <div class="field">
+          <label>Near start</label>
+          <input type="range" id="fog-near" min="0" max="1" step="0.01" value="0.3"
+            oninput="document.getElementById('fog-near-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="fog-near-v">0.30</span>
+        </div>
+        <div class="field">
+          <label>Far end</label>
+          <input type="range" id="fog-far" min="0" max="1" step="0.01" value="1.0"
+            oninput="document.getElementById('fog-far-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="fog-far-v">1.00</span>
+        </div>
+        <div class="field">
+          <label>Noise</label>
+          <input type="range" id="fog-noise" min="0" max="0.5" step="0.01" value="0.1"
+            oninput="document.getElementById('fog-noise-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="fog-noise-v">0.10</span>
+        </div>
+      </div>
+
+      <!-- Parallax -->
+      <div class="fx-pane" id="fx-parallax">
+        <div class="field">
+          <label>Shift X</label>
+          <input type="range" id="par-x" min="-60" max="60" step="1" value="20"
+            oninput="document.getElementById('par-x-v').textContent=this.value+'px'"/>
+          <span class="range-val" id="par-x-v">20px</span>
+        </div>
+        <div class="field">
+          <label>Shift Y</label>
+          <input type="range" id="par-y" min="-60" max="60" step="1" value="0"
+            oninput="document.getElementById('par-y-v').textContent=this.value+'px'"/>
+          <span class="range-val" id="par-y-v">0px</span>
+        </div>
+        <div class="field">
+          <label>Zoom</label>
+          <input type="range" id="par-zoom" min="-50" max="50" step="1" value="0"
+            oninput="document.getElementById('par-zoom-v').textContent=this.value"/>
+          <span class="range-val" id="par-zoom-v">0</span>
         </div>
         <div class="field">
           <label>Smooth</label>
-          <input type="range" id="vid-smooth" min="0" max="0.9" step="0.05" value="0.4"
-            oninput="document.getElementById('vid-smooth-val').textContent=parseFloat(this.value).toFixed(2)"/>
-          <span class="range-val" id="vid-smooth-val">0.40</span>
+          <input type="range" id="par-blur" min="0" max="20" step="0.5" value="5"
+            oninput="document.getElementById('par-blur-v').textContent=parseFloat(this.value).toFixed(1)"/>
+          <span class="range-val" id="par-blur-v">5.0</span>
+        </div>
+      </div>
+
+      <!-- Wiggle -->
+      <div class="fx-pane" id="fx-wiggle">
+        <div class="field">
+          <label>Views</label>
+          <input type="range" id="wig-views" min="3" max="7" step="1" value="5"
+            oninput="document.getElementById('wig-views-v').textContent=this.value"/>
+          <span class="range-val" id="wig-views-v">5</span>
+        </div>
+        <div class="field">
+          <label>Separation</label>
+          <input type="range" id="wig-sep" min="1" max="40" step="1" value="15"
+            oninput="document.getElementById('wig-sep-v').textContent=this.value+'px'"/>
+          <span class="range-val" id="wig-sep-v">15px</span>
+        </div>
+        <div class="field">
+          <label>Speed</label>
+          <input type="range" id="wig-fps" min="5" max="30" step="1" value="12"
+            oninput="document.getElementById('wig-fps-v').textContent=this.value+'fps'"/>
+          <span class="range-val" id="wig-fps-v">12fps</span>
+        </div>
+        <div class="field">
+          <label>Format</label>
+          <select id="wig-format"><option value="gif">GIF</option><option value="mp4">MP4</option></select>
+        </div>
+        <div class="field">
+          <label>Path</label>
+          <select id="wig-path"><option value="linear">Linear</option><option value="arc">Arc</option></select>
+        </div>
+      </div>
+
+      <!-- Spatial -->
+      <div class="fx-pane" id="fx-spatial">
+        <div class="field">
+          <label>Eye sep.</label>
+          <input type="range" id="sp-sep" min="5" max="60" step="1" value="30"
+            oninput="document.getElementById('sp-sep-v').textContent=this.value+'px'"/>
+          <span class="range-val" id="sp-sep-v">30px</span>
+        </div>
+        <div class="field">
+          <label>Convergence</label>
+          <input type="range" id="sp-conv" min="0" max="1" step="0.01" value="0.5"
+            oninput="document.getElementById('sp-conv-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="sp-conv-v">0.50</span>
         </div>
         <div class="field">
           <label>Output</label>
-          <select id="vid-output">
-            <option value="video">MP4 Video</option>
-            <option value="sequence">Image Sequence (ZIP)</option>
-          </select>
+          <select id="sp-output"><option value="sbs">SBS PNG</option><option value="zip">Separate ZIP</option></select>
         </div>
       </div>
-      <div class="sb-section">
-        <button class="btn btn-accent2" id="btn-process-video" disabled>Process Video</button>
-        <button class="btn" id="btn-save-video" disabled>Save Result</button>
-      </div>
-    </div>
 
-    <!-- ═══ BATCH MODE ═══ -->
-    <div class="mode-pane" id="pane-batch">
-      <div class="sb-section">
-        <div class="sb-title">Temporal Stability</div>
-        <div class="field">
-          <label>Scale align</label>
-          <select id="align-scale">
-            <option value="true" selected>On</option>
-            <option value="false">Off</option>
-          </select>
+      <!-- Transition -->
+      <div class="fx-pane" id="fx-transition">
+        <div id="transition-note" style="font-size:10px;color:var(--warn);margin-bottom:8px;display:none">
+          Transition works with single images only, not video.
+        </div>
+        <div style="margin-bottom:8px">
+          <label class="btn btn-sm" for="file-b-input" style="cursor:pointer;display:inline-block;width:auto;padding:5px 12px">Load Second Image</label>
+          <input type="file" id="file-b-input" accept="image/*" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none"/>
+          <span id="file-b-name" style="font-size:10px;color:var(--muted);margin-left:6px"></span>
         </div>
         <div class="field">
-          <label>Smooth</label>
-          <input type="range" id="smooth" min="0" max="0.9" step="0.05" value="0.4"
-            oninput="document.getElementById('smooth-val').textContent=parseFloat(this.value).toFixed(2)"/>
-          <span class="range-val" id="smooth-val">0.40</span>
+          <label>Transition</label>
+          <input type="range" id="tr-val" min="0" max="1" step="0.01" value="0.5"
+            oninput="document.getElementById('tr-val-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="tr-val-v">0.50</span>
+        </div>
+        <div class="field">
+          <label>Softness</label>
+          <input type="range" id="tr-soft" min="0" max="0.5" step="0.01" value="0.1"
+            oninput="document.getElementById('tr-soft-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="tr-soft-v">0.10</span>
         </div>
       </div>
-      <div class="sb-section">
-        <button class="btn btn-primary" id="btn-open-batch">Add Images</button>
-        <div class="file-list" id="batch-files"></div>
-        <button class="btn btn-accent2" id="btn-process-batch" disabled>Process All</button>
-        <button class="btn btn-sm" id="btn-clear-batch" disabled>Clear List</button>
-      </div>
-    </div>
 
-    <!-- ═══ EFFECTS MODE ═══ -->
-    <div class="mode-pane" id="pane-effects">
-      <div class="sb-section">
-        <div class="fx-tabs">
-          <button class="fx-tab active" data-fx="dof">DoF</button>
-          <button class="fx-tab" data-fx="grade">Grade</button>
-          <button class="fx-tab" data-fx="slice">Slice</button>
-        </div>
-
-        <!-- DoF -->
-        <div class="fx-pane active" id="fx-dof">
-          <div class="field">
-            <label>Focal depth</label>
-            <input type="range" id="dof-focal" min="0" max="1" step="0.01" value="0.3"
-              oninput="document.getElementById('dof-focal-v').textContent=parseFloat(this.value).toFixed(2)"/>
-            <span class="range-val" id="dof-focal-v">0.30</span>
-          </div>
-          <div class="field">
-            <label>Focal range</label>
-            <input type="range" id="dof-range" min="0.01" max="0.5" step="0.01" value="0.1"
-              oninput="document.getElementById('dof-range-v').textContent=parseFloat(this.value).toFixed(2)"/>
-            <span class="range-val" id="dof-range-v">0.10</span>
-          </div>
-          <div class="field">
-            <label>Max blur</label>
-            <input type="range" id="dof-blur" min="1" max="40" step="1" value="14"
-              oninput="document.getElementById('dof-blur-v').textContent=this.value+'px'"/>
-            <span class="range-val" id="dof-blur-v">14px</span>
-          </div>
-          <div class="field">
-            <label>Bokeh</label>
-            <select id="dof-bokeh"><option value="gaussian">Gaussian</option><option value="disc">Disc</option></select>
-          </div>
-        </div>
-
-        <!-- Grade -->
-        <div class="fx-pane" id="fx-grade">
-          <div class="field"><label>Near color</label><input type="color" id="grade-near" value="#ff4400"/></div>
-          <div class="field"><label>Far color</label><input type="color" id="grade-far" value="#0044ff"/></div>
-          <div class="field">
-            <label>Opacity</label>
-            <input type="range" id="grade-opacity" min="0" max="1" step="0.05" value="0.5"
-              oninput="document.getElementById('grade-opacity-v').textContent=parseFloat(this.value).toFixed(2)"/>
-            <span class="range-val" id="grade-opacity-v">0.50</span>
-          </div>
-          <div class="field">
-            <label>Blend</label>
-            <select id="grade-blend">
-              <option value="overlay">Overlay</option><option value="multiply">Multiply</option>
-              <option value="screen">Screen</option><option value="add">Add</option><option value="normal">Normal</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Slice -->
-        <div class="fx-pane" id="fx-slice">
-          <div class="field">
-            <label>Near cut</label>
-            <input type="range" id="slice-near" min="0" max="1" step="0.01" value="0.0"
-              oninput="document.getElementById('slice-near-v').textContent=parseFloat(this.value).toFixed(2)"/>
-            <span class="range-val" id="slice-near-v">0.00</span>
-          </div>
-          <div class="field">
-            <label>Far cut</label>
-            <input type="range" id="slice-far" min="0" max="1" step="0.01" value="0.5"
-              oninput="document.getElementById('slice-far-v').textContent=parseFloat(this.value).toFixed(2)"/>
-            <span class="range-val" id="slice-far-v">0.50</span>
-          </div>
-          <div class="field">
-            <label>Feather</label>
-            <input type="range" id="slice-feather" min="0" max="0.2" step="0.005" value="0.02"
-              oninput="document.getElementById('slice-feather-v').textContent=parseFloat(this.value).toFixed(3)"/>
-            <span class="range-val" id="slice-feather-v">0.020</span>
-          </div>
-        </div>
-
-        <div style="margin-top:10px">
-          <div class="btn-row">
-            <button class="btn btn-primary" id="btn-fx-preview" disabled>Preview</button>
-            <button class="btn" id="btn-fx-apply" disabled>Apply & Save</button>
-          </div>
+      <div style="margin-top:10px">
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-fx-preview" disabled>Preview</button>
+          <button class="btn" id="btn-fx-apply" disabled>Apply & Save</button>
         </div>
       </div>
+      </div><!-- /fx-controls -->
     </div>
 
   </div>
@@ -359,6 +505,23 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
       </div>
     </div>
 
+    <!-- Timeline -->
+    <div class="timeline" id="timeline">
+      <div class="tl-header">
+        <span><span class="tl-time" id="tl-in">0:00</span> — <span class="tl-time" id="tl-out">0:00</span></span>
+        <span id="tl-range-info"></span>
+      </div>
+      <div class="tl-track" id="tl-track">
+        <div class="tl-thumbs" id="tl-thumbs"></div>
+        <div class="tl-trim" id="tl-trim" style="left:0%;right:0%">
+          <div class="tl-handle tl-handle-left" id="tl-handle-in"></div>
+          <div class="tl-handle tl-handle-right" id="tl-handle-out"></div>
+        </div>
+        <div class="tl-playhead" id="tl-playhead" style="left:0%"></div>
+      </div>
+      <div class="tl-ruler" id="tl-ruler"></div>
+    </div>
+
     <div class="progress-wrap" id="progress">
       <div class="progress-track"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
     </div>
@@ -375,7 +538,7 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
 </div>
 
 <script>
-const SERVER = "__SERVER_URL__";
+const SERVER = "http://127.0.0.1:7843";
 const $ = id => document.getElementById(id);
 
 const state = {
@@ -387,6 +550,11 @@ const state = {
   processing: false,
   videoBlob: null,
   videoInfo: null,
+  trimIn: 0,      // 0–1 normalized
+  trimOut: 1,     // 0–1 normalized
+  playheadPos: 0, // 0–1 normalized
+  fileB: null,       // second image for transition
+  fileBName: null,
 };
 
 const VIDEO_EXTS = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
@@ -448,6 +616,15 @@ async function ping() {
     }
     return data;
   } catch { return null; }
+}
+
+function suggestModel(device) {
+  // cuda = dedicated GPU, can handle large
+  // mps = Apple Silicon, base is sweet spot
+  // cpu = slow, stick with small
+  if (device === "cuda") return "large";
+  if (device === "mps") return "base";
+  return "small";
 }
 
 async function loadColormaps() {
@@ -530,6 +707,7 @@ function drawCompareView(mode, frameIdx) {
     if (compare.sourceFrames[frameIdx]) {
       $("preview-img").src = compare.sourceFrames[frameIdx];
       $("preview-img").style.display = "block";
+      $("drop-zone").classList.add("hidden");
     } else if (state.currentBlob) {
       showImage(state.currentBlob, "Source");
     }
@@ -680,42 +858,78 @@ function showViewportBar(show) {
   $("viewport-bar").style.display = show ? "flex" : "none";
 }
 
-async function openFile() {
-  try {
-    const paths = await window.pywebview.api.pick_files();
-    if (!paths || paths.length === 0) return;
-    await loadFileFromPath(paths[0]);
-  } catch {
-    // Fallback: use input element
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      state.currentFile = file;
-      state.currentBlob = file;
-      showImage(file, `${file.name} — ${formatSize(file.size)}`);
-      $("btn-process").disabled = false;
-      $("btn-save").disabled = true;
-      state.sessionId = null;
-      log(`Loaded: ${file.name}`);
-    };
-    input.click();
-  }
-}
+// openFile is now handled by <label for="file-input"> + change event on #file-input
 
-async function loadFileFromPath(path) {
-  const r = await fetch(path.startsWith("/") ? `file://${path}` : path);
-  const blob = await r.blob();
-  const name = path.split(/[/\\]/).pop();
-  state.currentFile = { name, path };
-  state.currentBlob = blob;
-  showImage(blob, `${name} — ${formatSize(blob.size)}`);
-  $("btn-process").disabled = false;
-  $("btn-save").disabled = true;
+async function loadFile(file) {
+  // Reset state
+  state.currentFile = file;
+  state.currentBlob = file;
+  state.depthBlob = null;
   state.sessionId = null;
-  log(`Loaded: ${name}`);
+  state.videoBlob = null;
+  state.videoResultBlob = null;
+  state.videoInfo = null;
+  $("btn-save").disabled = true;
+  $("btn-fx-preview").disabled = true;
+  $("btn-fx-apply").disabled = true;
+  // effects section always visible;
+  $("viewport-bar").style.display = "none";
+  $("depth-info").textContent = "";
+  hideAllPreviews();
+  $("drop-zone").classList.remove("hidden");
+
+  const isVideo = isVideoFile(file.name) || file.type.startsWith("video/");
+  state._fileType = isVideo ? "video" : "image";
+
+  // Show badge
+  $("file-badge").textContent = isVideo ? "Video" : "Image";
+  $("file-badge").style.background = isVideo ? "var(--accent2)" : "var(--accent)";
+  $("file-type-badge").style.display = "block";
+
+  // Show/hide video options
+  $("video-options").style.display = isVideo ? "block" : "none";
+
+  if (isVideo) {
+    state.videoBlob = file;
+    $("file-info").textContent = file.name;
+    $("btn-process").disabled = true;
+    log(`Video loaded: ${file.name} (${formatSize(file.size)})`);
+
+    // Get video metadata
+    setIndeterminate(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      const r = await fetch(`${SERVER}/process/video/info`, { method: "POST", body: fd });
+      if (r.ok) {
+        state.videoInfo = await r.json();
+        const vi = state.videoInfo;
+        $("video-meta").innerHTML =
+          `${vi.width}×${vi.height} · ${vi.fps.toFixed(2)}fps<br>` +
+          `${vi.frames} frames · ${vi.duration.toFixed(1)}s`;
+        $("video-info-box").style.display = "block";
+        // Show first frame thumbnail
+        if (vi.thumbnail) {
+          hideAllPreviews();
+          $("preview-img").src = vi.thumbnail;
+          $("preview-img").style.display = "block";
+          $("drop-zone").classList.add("hidden");
+        }
+        showTimeline(vi);
+        log(`${vi.width}×${vi.height}, ${vi.fps.toFixed(2)}fps, ${vi.frames} frames`, "success");
+      }
+    } catch (e) {
+      log(`Could not read video info: ${e.message}`, "warn");
+    }
+    setIndeterminate(false);
+  } else {
+    $("video-info-box").style.display = "none";
+    hideTimeline();
+    showImage(file, `${file.name} — ${formatSize(file.size)}`);
+    log(`Image loaded: ${file.name}`);
+  }
+
+  $("btn-process").disabled = false;
 }
 
 function formatSize(bytes) {
@@ -732,8 +946,13 @@ function stopStatusPoll() {
   if (state._statusPoll) { clearInterval(state._statusPoll); state._statusPoll = null; }
 }
 
-// ── Process single ───────────────────────────────────────────────
-async function processFrame() {
+// ── Process depth map (auto-detects image vs video) ──────────────
+async function processDepthMap() {
+  if (state._fileType === "video") return processVideo();
+  return processImage();
+}
+
+async function processImage() {
   if (state.processing || !state.currentBlob) return;
   state.processing = true;
   $("btn-process").disabled = true;
@@ -760,12 +979,22 @@ async function processFrame() {
     state.sessionId = r.headers.get("X-Session-Id");
     const result = await r.blob();
     state.depthBlob = result;
+    state._latestDepthBlob = result;
+
+    // Store source image for compare views
+    if (state.currentBlob) {
+      const srcUrl = URL.createObjectURL(state.currentBlob);
+      compare.sourceImg.src = srcUrl;
+      compare.sourceFrames[0] = srcUrl;
+    }
 
     showImage(result, `Depth — ${state.currentFile?.name || "image"}`);
+    showViewportBar(true);
     $("depth-info").textContent = `Session: ${state.sessionId}`;
     $("btn-save").disabled = false;
     $("btn-fx-preview").disabled = false;
     $("btn-fx-apply").disabled = false;
+    // effects section always visible;
     log("Depth map ready", "success");
 
   } catch (e) {
@@ -774,34 +1003,55 @@ async function processFrame() {
     stopStatusPoll();
     state.processing = false;
     $("btn-process").disabled = false;
-    $("btn-process").textContent = "Process Depth";
+    $("btn-process").textContent = "Process Depth Map";
     setIndeterminate(false);
   }
 }
 
 // ── Save ─────────────────────────────────────────────────────────
+async function saveBlob(blob, defaultName) {
+  try {
+    // Try Tauri dialog
+    if (window.__TAURI__) {
+      const { save } = window.__TAURI__.dialog;
+      const path = await save({ defaultPath: defaultName });
+      if (!path) return;
+      const fd = new FormData();
+      fd.append("file", blob, defaultName);
+      fd.append("path", path);
+      const r = await fetch(`${SERVER}/save`, { method: "POST", body: fd });
+      if (!r.ok) throw new Error("Save failed");
+      const result = await r.json();
+      log(`Saved: ${path.split(/[/\\]/).pop()} (${formatSize(result.size)})`, "success");
+      return;
+    }
+  } catch (e) {
+    if (e.message === "Save failed") { log(`Save error`, "error"); return; }
+  }
+  // Fallback: browser download
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = defaultName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  log(`Downloaded: ${defaultName}`, "success");
+}
+
 async function saveResult() {
   if (!state.depthBlob) return;
   const ext = $("output-format").value === "exr" ? "exr" : "png";
   const defaultName = (state.currentFile?.name || "image").replace(/\.[^.]+$/, "") + `_depth.${ext}`;
-  const url = URL.createObjectURL(state.depthBlob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = defaultName;
-  a.click();
-  URL.revokeObjectURL(url);
-  log(`Saved: ${defaultName}`, "success");
+  await saveBlob(state.depthBlob, defaultName);
 }
 
 // ── Save video result ────────────────────────────────────────────
 async function saveVideoResult() {
   if (!state.videoResultBlob) return;
   const name = state.videoResultName || "depth_output";
-  const url = URL.createObjectURL(state.videoResultBlob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
+  await saveBlob(state.videoResultBlob, name);
   URL.revokeObjectURL(url);
   log(`Saved: ${name}`, "success");
 }
@@ -811,7 +1061,7 @@ async function openBatch() {
   try {
     let paths;
     try {
-      paths = await window.pywebview.api.pick_files();
+      paths = await Promise.reject("use file input");
     } catch {
       const input = document.createElement("input");
       input.type = "file";
@@ -935,7 +1185,7 @@ async function openVideo() {
   try {
     let file;
     try {
-      const paths = await window.pywebview.api.pick_files();
+      const paths = await Promise.reject("use file input");
       if (!paths || paths.length === 0) return;
       const path = paths[0];
       const name = path.split(/[/\\]/).pop();
@@ -953,6 +1203,11 @@ async function openVideo() {
     if (!file) return;
 
     state.videoBlob = file;
+    state.videoResultBlob = null;
+    $("btn-save").disabled = true;
+    hideAllPreviews();
+    $("drop-zone").classList.remove("hidden");
+    $("viewport-bar").style.display = "none";
     log(`Video loaded: ${file.name} (${formatSize(file.size)})`);
     $("file-info").textContent = file.name;
 
@@ -968,7 +1223,7 @@ async function openVideo() {
         `${vi.width}×${vi.height} · ${vi.fps.toFixed(2)}fps<br>` +
         `${vi.frames} frames · ${vi.duration.toFixed(1)}s`;
       $("video-info-box").style.display = "block";
-      $("btn-process-video").disabled = false;
+      $("btn-process").disabled = false;
       log(`Video: ${vi.width}×${vi.height}, ${vi.fps.toFixed(2)}fps, ${vi.frames} frames`, "success");
     }
     setIndeterminate(false);
@@ -982,8 +1237,8 @@ async function openVideo() {
 async function processVideo() {
   if (state.processing || !state.videoBlob) return;
   state.processing = true;
-  $("btn-process-video").disabled = true;
-  $("btn-open-video").disabled = true;
+  $("btn-process").disabled = true;
+  $("btn-open").disabled = true;
 
   const model = $("model").value;
   const format = $("output-format").value;
@@ -998,14 +1253,21 @@ async function processVideo() {
 
   try {
     // Step 1: Upload video, extract frames, get session
-    $("btn-process-video").textContent = "Uploading…";
+    $("btn-process").textContent = "Uploading…";
     log("Uploading video & extracting frames…");
     startStatusPoll();
+
+    // Calculate trim frame range
+    const totalVideoFrames = state.videoInfo?.frames || 0;
+    const trimStartFrame = Math.round(state.trimIn * totalVideoFrames);
+    const trimEndFrame = Math.round(state.trimOut * totalVideoFrames);
 
     const fd = new FormData();
     fd.append("file", state.videoBlob, state.videoBlob.name);
     fd.append("model", model);
     fd.append("every", every.toString());
+    fd.append("start_frame", trimStartFrame.toString());
+    fd.append("end_frame", trimEndFrame.toString());
 
     const startR = await fetch(`${SERVER}/process/video/start`, { method: "POST", body: fd });
     if (!startR.ok) throw new Error((await startR.json()).detail || "Upload failed");
@@ -1023,7 +1285,7 @@ async function processVideo() {
     for (let i = 0; i < total; i++) {
       const pct = Math.round(((i + 1) / total) * 100);
       setProgress(pct);
-      $("btn-process-video").textContent = `Frame ${i + 1}/${total}`;
+      $("btn-process").textContent = `Frame ${i + 1}/${total}`;
       state._lastFrameIdx = i;
 
       // Get source frame for compare views
@@ -1046,12 +1308,16 @@ async function processVideo() {
 
       // Live preview — show every frame
       showDepthFrame(blob, i, total);
+
+      // Update timeline playhead
+      state.playheadPos = state.trimIn + (i / total) * (state.trimOut - state.trimIn);
+      updateTimelineDisplay(state.videoInfo);
     }
 
     log(`All ${total} frames processed`, "success");
 
     // Step 3: Render final output (video or sequence)
-    $("btn-process-video").textContent = "Rendering…";
+    $("btn-process").textContent = "Rendering…";
     setIndeterminate(true);
 
     const renderFd = new FormData();
@@ -1074,9 +1340,9 @@ async function processVideo() {
     state.videoResultName = output === "video"
       ? `${baseName}_depth.mp4`
       : `${baseName}_depth_sequence.zip`;
-    $("btn-save-video").disabled = false;
+    $("btn-save").disabled = false;
 
-    // Show last depth frame as preview (don't use video element — breaks pywebview)
+    // Show last depth frame as preview
     if (depthBlobs.length > 0) {
       showImage(depthBlobs[depthBlobs.length - 1], `${state.videoResultName} — ${total} frames`);
     }
@@ -1087,9 +1353,9 @@ async function processVideo() {
   } finally {
     stopStatusPoll();
     state.processing = false;
-    $("btn-process-video").disabled = false;
-    $("btn-process-video").textContent = "Process Video";
-    $("btn-open-video").disabled = false;
+    $("btn-process").disabled = false;
+    $("btn-process").textContent = "Process Depth Map";
+    $("btn-open").disabled = false;
     $("frame-counter").style.display = "none";
     setProgress(0, false);
     setIndeterminate(false);
@@ -1122,18 +1388,139 @@ function getEffectParams(fx) {
     feather: parseFloat($("slice-feather").value),
     invert_mask: false, bg_alpha: 0, bg_color: "#000000",
   };
+  if (fx === "fog") return {
+    fog_color: $("fog-color").value,
+    density: parseFloat($("fog-density").value),
+    near_start: parseFloat($("fog-near").value),
+    far_end: parseFloat($("fog-far").value),
+    noise_amount: parseFloat($("fog-noise").value),
+  };
+  if (fx === "parallax") return {
+    shift_x: parseFloat($("par-x").value),
+    shift_y: parseFloat($("par-y").value),
+    zoom: parseFloat($("par-zoom").value),
+    blur_depth: parseFloat($("par-blur").value),
+  };
+  if (fx === "wiggle") return {
+    num_views: parseInt($("wig-views").value),
+    separation: parseFloat($("wig-sep").value),
+    fps: parseInt($("wig-fps").value),
+    format: $("wig-format").value,
+    path: $("wig-path").value,
+  };
+  if (fx === "spatial") return {
+    eye_separation: parseFloat($("sp-sep").value),
+    convergence: parseFloat($("sp-conv").value),
+    output: $("sp-output").value,
+  };
+  if (fx === "transition") return {
+    transition_val: parseFloat($("tr-val").value),
+    softness: parseFloat($("tr-soft").value),
+  };
+  if (fx === "posterize") return {
+    levels: parseInt($("posterize-levels").value),
+    colorize: false,
+  };
 }
 
 async function runEffect(preview) {
-  if (!state.sessionId) { log("Process an image first.", "warn"); return; }
+  if (!state.sessionId && getActiveFx() !== "transition") {
+    log("Process an image first.", "warn"); return;
+  }
   const fx = getActiveFx();
   const params = getEffectParams(fx);
   setIndeterminate(true);
 
   try {
+    // Wigglegram — uses its own endpoint
+    if (fx === "wiggle") {
+      const fd = new FormData();
+      fd.append("session_id", state.sessionId);
+      fd.append("num_views", params.num_views.toString());
+      fd.append("separation", params.separation.toString());
+      fd.append("fps", params.fps.toString());
+      fd.append("format", preview ? "gif" : params.format);
+      fd.append("path", params.path);
+      fd.append("blur_depth", "5");
+
+      const r = await fetch(`${SERVER}/wigglegram`, { method: "POST", body: fd });
+      if (!r.ok) throw new Error("Wigglegram failed");
+      const result = await r.blob();
+
+      if (preview) {
+        showImage(result, "Wigglegram preview");
+      } else {
+        const ext = params.format === "mp4" ? "mp4" : "gif";
+        const name = (state.currentFile?.name || "image").replace(/\.[^.]+$/, "") + `_wiggle.${ext}`;
+        await saveBlob(result, name);
+      }
+      log(`Wigglegram ${preview ? "preview" : "saved"}`, "success");
+      setIndeterminate(false);
+      return;
+    }
+
+    // Spatial — uses its own endpoint
+    if (fx === "spatial") {
+      const fd = new FormData();
+      fd.append("session_id", state.sessionId);
+      fd.append("eye_separation", params.eye_separation.toString());
+      fd.append("convergence", params.convergence.toString());
+      fd.append("output", preview ? "sbs" : params.output);
+
+      const r = await fetch(`${SERVER}/spatial`, { method: "POST", body: fd });
+      if (!r.ok) throw new Error("Spatial failed");
+      const result = await r.blob();
+
+      if (preview) {
+        showImage(result, "Spatial preview (SBS)");
+      } else {
+        const ext = params.output === "zip" ? "zip" : "png";
+        const name = (state.currentFile?.name || "image").replace(/\.[^.]+$/, "") + `_spatial.${ext}`;
+        await saveBlob(result, name);
+      }
+      log(`Spatial ${preview ? "preview" : "saved"}`, "success");
+      setIndeterminate(false);
+      return;
+    }
+
+    // Transition — uses its own endpoint, requires two images
+    if (fx === "transition") {
+      if (!state.currentBlob || !state.fileB) {
+        log("Load both images first (use 'Load Second Image').", "warn");
+        setIndeterminate(false);
+        return;
+      }
+      const fd = new FormData();
+      fd.append("file_a", state.currentBlob, state.currentFile?.name || "image_a.png");
+      fd.append("file_b", state.fileB, state.fileBName || "image_b.png");
+      fd.append("model", $("model").value);
+      fd.append("transition_val", params.transition_val.toString());
+      fd.append("softness", params.softness.toString());
+
+      const endpoint = preview ? `${SERVER}/transition/preview` : `${SERVER}/transition`;
+      const r = await fetch(endpoint, { method: "POST", body: fd });
+      if (!r.ok) throw new Error("Transition failed");
+      const result = await r.blob();
+
+      if (!preview) state.depthBlob = result;
+      showImage(result, `Transition ${preview ? "preview" : "result"}`);
+      log(`Transition ${preview ? "preview" : "applied"}`, "success");
+      if (!preview) $("btn-save").disabled = false;
+      setIndeterminate(false);
+      return;
+    }
+
+    // Standard effects (dof, grade, slice, fog, parallax, posterize)
     const endpoint = preview
       ? `${SERVER}/effect/${fx}/preview`
       : `${SERVER}/effect/${fx}`;
+
+    // Inject posterize modifier into params
+    const posterizeOn = $("posterize-on").checked;
+    if (posterizeOn) {
+      params._posterize = true;
+      params._posterize_levels = parseInt($("posterize-levels").value);
+    }
 
     const fd = new FormData();
     fd.append("session_id", state.sessionId);
@@ -1156,6 +1543,142 @@ async function runEffect(preview) {
 }
 
 // ── Drag & drop ──────────────────────────────────────────────────
+// ── Timeline ─────────────────────────────────────────────────────
+function showTimeline(vi) {
+  state.trimIn = 0;
+  state.trimOut = 1;
+  state.playheadPos = 0;
+  $("timeline").classList.add("show");
+  updateTimelineDisplay(vi);
+  // Build ruler marks
+  const dur = vi.duration;
+  const marks = Math.min(10, Math.ceil(dur));
+  let ruler = "";
+  for (let i = 0; i <= marks; i++) {
+    const t = (i / marks) * dur;
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    ruler += `<span>${m}:${s.toString().padStart(2, "0")}</span>`;
+  }
+  $("tl-ruler").innerHTML = ruler;
+}
+
+function hideTimeline() {
+  $("timeline").classList.remove("show");
+}
+
+function updateTimelineDisplay(vi) {
+  if (!vi) return;
+  const dur = vi.duration;
+  const inTime = state.trimIn * dur;
+  const outTime = state.trimOut * dur;
+  const inFrame = Math.round(state.trimIn * vi.frames);
+  const outFrame = Math.round(state.trimOut * vi.frames);
+  const rangeFrames = outFrame - inFrame;
+
+  $("tl-in").textContent = fmtTime(inTime);
+  $("tl-out").textContent = fmtTime(outTime);
+  $("tl-range-info").textContent = `${rangeFrames} frames · ${fmtTime(outTime - inTime)}`;
+
+  $("tl-trim").style.left = (state.trimIn * 100) + "%";
+  $("tl-trim").style.right = ((1 - state.trimOut) * 100) + "%";
+  $("tl-playhead").style.left = (state.playheadPos * 100) + "%";
+}
+
+function fmtTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  const fr = Math.floor((s % 1) * 100);
+  return `${m}:${sec.toString().padStart(2, "0")}.${fr.toString().padStart(2, "0")}`;
+}
+
+function setupTimeline() {
+  const track = $("tl-track");
+  const handleIn = $("tl-handle-in");
+  const handleOut = $("tl-handle-out");
+  const playhead = $("tl-playhead");
+  let dragging = null; // "in", "out", "playhead"
+
+  function getPos(e) {
+    const rect = track.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  }
+
+  function nearHandle(pos, handlePos) {
+    // 20px grab zone
+    const rect = track.getBoundingClientRect();
+    const pxDist = Math.abs(pos - handlePos) * rect.width;
+    return pxDist < 20;
+  }
+
+  function scrubToFrame(pos) {
+    state.playheadPos = pos;
+    updateTimelineDisplay(state.videoInfo);
+    // Show frame at playhead if we have cached frames
+    if (state.videoInfo && (compare.depthFrames.length > 0 || compare.sourceFrames.length > 0)) {
+      const totalFrames = compare.depthFrames.length || compare.sourceFrames.length;
+      const idx = Math.min(totalFrames - 1, Math.max(0, Math.round(pos * (totalFrames - 1))));
+      if (compare.depthFrames[idx]) {
+        $("preview-img").src = compare.depthFrames[idx];
+        $("preview-img").style.display = "block";
+        $("drop-zone").classList.add("hidden");
+      } else if (compare.sourceFrames[idx]) {
+        $("preview-img").src = compare.sourceFrames[idx];
+        $("preview-img").style.display = "block";
+        $("drop-zone").classList.add("hidden");
+      }
+    }
+  }
+
+  // Mouse down on track — detect what to drag
+  track.addEventListener("mousedown", e => {
+    e.preventDefault();
+    const pos = getPos(e);
+
+    // Check handles first (wider grab zone)
+    if (nearHandle(pos, state.trimIn)) {
+      dragging = "in";
+    } else if (nearHandle(pos, state.trimOut)) {
+      dragging = "out";
+    } else {
+      // Click anywhere else = playhead
+      dragging = "playhead";
+      scrubToFrame(pos);
+    }
+  });
+
+  // Handle-specific mousedown (for direct clicks on handles)
+  handleIn.addEventListener("mousedown", e => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragging = "in";
+  });
+  handleOut.addEventListener("mousedown", e => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragging = "out";
+  });
+
+  window.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    e.preventDefault();
+    const pos = getPos(e);
+
+    if (dragging === "in") {
+      state.trimIn = Math.max(0, Math.min(pos, state.trimOut - 0.02));
+    } else if (dragging === "out") {
+      state.trimOut = Math.min(1, Math.max(pos, state.trimIn + 0.02));
+    } else if (dragging === "playhead") {
+      scrubToFrame(pos);
+    }
+    updateTimelineDisplay(state.videoInfo);
+  });
+
+  window.addEventListener("mouseup", () => {
+    dragging = null;
+  });
+}
+
 function setupDrop() {
   const area = $("preview-area");
   area.addEventListener("dragover", e => { e.preventDefault(); area.classList.add("drop-active"); });
@@ -1165,47 +1688,9 @@ function setupDrop() {
     area.classList.remove("drop-active");
     const file = e.dataTransfer.files[0];
     if (!file) return;
-
-    if (isVideoFile(file.name) || file.type.startsWith("video/")) {
-      // Switch to video mode
-      document.querySelectorAll(".mode-tab").forEach(b => b.classList.remove("active"));
-      document.querySelectorAll(".mode-pane").forEach(p => p.classList.remove("active"));
-      document.querySelector('[data-mode="video"]').classList.add("active");
-      $("pane-video").classList.add("active");
-
-      state.videoBlob = file;
-      $("file-info").textContent = file.name;
-      $("drop-zone").classList.add("hidden");
-      log(`Video dropped: ${file.name} (${formatSize(file.size)})`);
-
-      // Get info
-      setIndeterminate(true);
-      const fd = new FormData();
-      fd.append("file", file, file.name);
-      try {
-        const r = await fetch(`${SERVER}/process/video/info`, { method: "POST", body: fd });
-        if (r.ok) {
-          state.videoInfo = await r.json();
-          const vi = state.videoInfo;
-          $("video-meta").innerHTML =
-            `${vi.width}×${vi.height} · ${vi.fps.toFixed(2)}fps<br>` +
-            `${vi.frames} frames · ${vi.duration.toFixed(1)}s`;
-          $("video-info-box").style.display = "block";
-          $("btn-process-video").disabled = false;
-        }
-      } catch {}
-      setIndeterminate(false);
-      return;
+    if (file.type.startsWith("image/") || file.type.startsWith("video/") || isVideoFile(file.name)) {
+      await loadFile(file);
     }
-
-    if (!file.type.startsWith("image/")) return;
-    state.currentFile = file;
-    state.currentBlob = file;
-    showImage(file, `${file.name} — ${formatSize(file.size)}`);
-    $("btn-process").disabled = false;
-    $("btn-save").disabled = true;
-    state.sessionId = null;
-    log(`Loaded: ${file.name}`);
   });
 }
 
@@ -1219,7 +1704,12 @@ async function init() {
       setStatus(true);
       $("device-info").textContent = data.device;
       await loadColormaps();
-      log(`Server ready (${data.device})`, "success");
+      // Auto-suggest model based on device
+      const suggested = suggestModel(data.device);
+      $("model").value = suggested;
+      $("model-hint").style.display = "block";
+      $("model-hint").textContent = `✓ ${suggested} recommended for ${data.device}`;
+      log(`Server ready (${data.device}) — suggested: ${suggested}`, "success");
       break;
     }
     attempts++;
@@ -1231,26 +1721,71 @@ async function init() {
   }
 
   // Event listeners
-  $("btn-open").addEventListener("click", openFile);
-  $("btn-process").addEventListener("click", processFrame);
-  $("btn-save").addEventListener("click", saveResult);
-  $("btn-open-video").addEventListener("click", openVideo);
-  $("btn-process-video").addEventListener("click", processVideo);
-  $("btn-save-video").addEventListener("click", saveVideoResult);
-  $("btn-open-batch").addEventListener("click", openBatch);
+  $("file-input").addEventListener("change", async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    if (files.length > 1) {
+      // Batch mode: multiple images
+      state.batchFiles = [];
+      for (let i = 0; i < files.length; i++) {
+        state.batchFiles.push({ name: files[i].name, blob: files[i], status: "pending" });
+      }
+      renderBatchList();
+      $("batch-controls").style.display = "block";
+      log(`Batch: ${files.length} files loaded`);
+      // Also load first file as preview
+      await loadFile(files[0]);
+    } else {
+      $("batch-controls").style.display = "none";
+      $("batch-files").innerHTML = "";
+      state.batchFiles = [];
+      await loadFile(files[0]);
+    }
+    e.target.value = "";  // reset so same file can be re-selected
+  });
+  // Batch buttons
   $("btn-process-batch").addEventListener("click", processBatch);
-  $("btn-clear-batch").addEventListener("click", clearBatch);
+  $("btn-clear-batch").addEventListener("click", () => {
+    clearBatch();
+    $("batch-controls").style.display = "none";
+  });
+
+  // Second image for transition effect
+  $("file-b-input").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    state.fileB = file;
+    state.fileBName = file.name;
+    $("file-b-name").textContent = file.name;
+    log(`Second image loaded: ${file.name}`);
+    e.target.value = "";
+  });
+
+  $("btn-process").addEventListener("click", processDepthMap);
+  $("btn-save").addEventListener("click", () => {
+    if (state._fileType === "video" && state.videoResultBlob) saveVideoResult();
+    else saveResult();
+  });
   $("btn-fx-preview").addEventListener("click", () => runEffect(true));
   $("btn-fx-apply").addEventListener("click", () => runEffect(false));
 
-  // Mode tabs
-  document.querySelectorAll(".mode-tab").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".mode-tab").forEach(b => b.classList.remove("active"));
-      document.querySelectorAll(".mode-pane").forEach(p => p.classList.remove("active"));
-      btn.classList.add("active");
-      $(`pane-${btn.dataset.mode}`).classList.add("active");
-    });
+  // FX toggle
+  state.fxEnabled = false;
+  $("fx-toggle").addEventListener("click", () => {
+    if (!state.sessionId) {
+      log("Process a depth map first", "warn");
+      return;
+    }
+    state.fxEnabled = !state.fxEnabled;
+    $("fx-toggle").classList.toggle("on", state.fxEnabled);
+    $("fx-controls").classList.toggle("fx-disabled", !state.fxEnabled);
+    if (state.fxEnabled) {
+      $("btn-fx-preview").disabled = false;
+      $("btn-fx-apply").disabled = false;
+      runEffect(true);
+    } else {
+      if (state.depthBlob) showImage(state.depthBlob, "Depth map");
+    }
   });
 
   // FX tabs
@@ -1259,9 +1794,35 @@ async function init() {
       document.querySelectorAll(".fx-tab").forEach(b => b.classList.remove("active"));
       document.querySelectorAll(".fx-pane").forEach(p => p.classList.remove("active"));
       btn.classList.add("active");
-      $(`fx-${btn.dataset.fx}`).classList.add("active");
+      const pane = $(`fx-${btn.dataset.fx}`);
+      if (pane) pane.classList.add("active");
+      // Show transition note if video is loaded
+      if (btn.dataset.fx === "transition" && state._fileType === "video") {
+        $("transition-note").style.display = "block";
+      } else {
+        $("transition-note").style.display = "none";
+      }
+      // Auto-preview on tab switch if enabled (skip transition — needs two images)
+      if (state.fxEnabled && btn.dataset.fx !== "transition") runEffect(true);
     });
   });
+
+  // Live preview on slider change (debounced)
+  let fxDebounce = null;
+  function onFxSliderChange() {
+    if (!state.fxEnabled) return;
+    // Skip auto-preview for transition (needs explicit preview click)
+    if (getActiveFx() === "transition") return;
+    clearTimeout(fxDebounce);
+    fxDebounce = setTimeout(() => runEffect(true), 300);
+  }
+  document.querySelectorAll("#effects-section input[type=range], #effects-section input[type=color], #effects-section select").forEach(el => {
+    el.addEventListener("input", onFxSliderChange);
+    el.addEventListener("change", onFxSliderChange);
+  });
+  // Posterize checkbox triggers live preview too
+  $("posterize-on").addEventListener("change", onFxSliderChange);
+  $("posterize-levels").addEventListener("input", onFxSliderChange);
 
   // Format toggle
   $("output-format").addEventListener("change", () => {
@@ -1271,6 +1832,7 @@ async function init() {
   setupDrop();
   setupViewportButtons();
   setupWipeDrag();
+  setupTimeline();
   state.viewMode = "depth";
 }
 

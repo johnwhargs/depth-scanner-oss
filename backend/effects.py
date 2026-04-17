@@ -221,6 +221,315 @@ def _box_blur(image: Image.Image, radius: float) -> np.ndarray:
     return np.array(img, dtype=np.float32)
 
 
+# ── Effect 4: Depth Fog ──────────────────────────────────────────────────────
+
+def depth_fog(
+    image: Image.Image,
+    depth: np.ndarray,
+    fog_color: str = "#c8c8d0",
+    density: float = 0.7,
+    near_start: float = 0.3,
+    far_end: float = 1.0,
+    noise_amount: float = 0.1,
+    noise_scale: float = 50.0,
+) -> Image.Image:
+    """
+    Add atmospheric fog/haze driven by depth.
+
+    fog_color    — hex colour of the fog
+    density      — maximum fog opacity (0–1)
+    near_start   — depth value where fog begins (0=near, 1=far)
+    far_end      — depth value where fog is fully opaque
+    noise_amount — adds fractal variation to fog edge (0–1)
+    noise_scale  — scale of noise pattern
+    """
+    depth = _ensure_same_size(image, depth)
+    src = np.array(image.convert("RGB"), dtype=np.float32) / 255.0
+    fog_rgb = np.array(_hex_to_rgb(fog_color), dtype=np.float32) / 255.0
+
+    # Build fog mask from depth
+    fog_mask = np.clip((depth - near_start) / (far_end - near_start + 1e-8), 0, 1)
+
+    # Optional noise for natural fog edge
+    if noise_amount > 0:
+        h, w = depth.shape
+        # Simple deterministic noise pattern
+        ys = np.arange(h).reshape(-1, 1) / max(noise_scale, 1)
+        xs = np.arange(w).reshape(1, -1) / max(noise_scale, 1)
+        noise = np.sin(ys * 12.9898 + xs * 78.233) * 43758.5453
+        noise = noise - np.floor(noise)  # fract
+        noise = (noise - 0.5) * 2 * noise_amount
+        fog_mask = np.clip(fog_mask + noise, 0, 1)
+
+    fog_mask = fog_mask * density
+    fog_mask = fog_mask[:, :, np.newaxis]
+
+    out = src * (1 - fog_mask) + fog_rgb * fog_mask
+    out = np.clip(out * 255, 0, 255).astype(np.uint8)
+    return Image.fromarray(out, "RGB")
+
+
+# ── Effect 5: Parallax / 2.5D ───────────────────────────────────────────────
+
+def depth_parallax(
+    image: Image.Image,
+    depth: np.ndarray,
+    shift_x: float = 20.0,
+    shift_y: float = 0.0,
+    zoom: float = 0.0,
+    blur_depth: float = 5.0,
+) -> Image.Image:
+    """
+    Displace pixels by depth to simulate camera movement (parallax).
+
+    shift_x      — horizontal displacement in pixels (+ = right)
+    shift_y      — vertical displacement in pixels (+ = down)
+    zoom         — depth-driven zoom amount (-50 to 50)
+    blur_depth   — blur the depth map before displacement to reduce artifacts
+    """
+    from PIL import ImageFilter
+    depth = _ensure_same_size(image, depth)
+
+    # Blur depth for smoother displacement
+    if blur_depth > 0:
+        depth_img = Image.fromarray((depth * 255).astype(np.uint8), mode="L")
+        depth_img = depth_img.filter(ImageFilter.GaussianBlur(radius=blur_depth))
+        depth = np.array(depth_img, dtype=np.float32) / 255.0
+
+    h, w = depth.shape
+    src = np.array(image.convert("RGB"), dtype=np.float32)
+
+    # Build displacement map: near objects move more, far objects move less
+    # Invert so near=1 (moves most), far=0 (moves least)
+    disp = 1.0 - depth
+
+    # Create coordinate grids
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+
+    # Apply displacement
+    dx = disp * shift_x
+    dy = disp * shift_y
+
+    # Optional zoom (radial displacement from center)
+    if abs(zoom) > 0.1:
+        cx, cy = w / 2, h / 2
+        rx = (xs - cx) / w
+        ry = (ys - cy) / h
+        dx += disp * rx * zoom
+        dy += disp * ry * zoom
+
+    map_x = np.clip(xs - dx, 0, w - 1).astype(np.float32)
+    map_y = np.clip(ys - dy, 0, h - 1).astype(np.float32)
+
+    # Remap using bilinear interpolation
+    import cv2
+    result = cv2.remap(
+        src, map_x, map_y,
+        interpolation=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_REFLECT,
+    )
+
+    return Image.fromarray(result.clip(0, 255).astype(np.uint8), "RGB")
+
+
+# ── Effect 6: Wigglegram ────────────────────────────────────────────────────
+
+def create_wigglegram(
+    image: Image.Image,
+    depth: np.ndarray,
+    num_views: int = 5,
+    separation: float = 15.0,
+    path: str = "linear",
+    blur_depth: float = 5.0,
+) -> list:
+    """
+    Generate N displaced views by shifting pixels using depth.
+    Near objects move more, far objects move less.
+
+    num_views   — number of views to generate (3–7)
+    separation  — max horizontal shift in pixels
+    path        — 'linear' (horizontal sweep) or 'arc' (slight vertical arc)
+    blur_depth  — blur depth map before displacement to reduce artifacts
+
+    Returns a list of PIL Images (the views).
+    """
+    import cv2
+    from PIL import ImageFilter
+
+    depth = _ensure_same_size(image, depth)
+
+    # Blur depth for smoother displacement
+    if blur_depth > 0:
+        depth_img = Image.fromarray((depth * 255).astype(np.uint8), mode="L")
+        depth_img = depth_img.filter(ImageFilter.GaussianBlur(radius=blur_depth))
+        depth = np.array(depth_img, dtype=np.float32) / 255.0
+
+    h, w = depth.shape
+    src = np.array(image.convert("RGB"), dtype=np.float32)
+    disp = 1.0 - depth  # near=1 (moves most), far=0
+
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+
+    views = []
+    for i in range(num_views):
+        t = (i / max(num_views - 1, 1)) * 2.0 - 1.0  # -1 to +1
+        shift_x = t * separation
+
+        if path == "arc":
+            shift_y = (1.0 - t * t) * separation * 0.3  # parabolic arc
+        else:
+            shift_y = 0.0
+
+        dx = disp * shift_x
+        dy = disp * shift_y
+
+        map_x = np.clip(xs - dx, 0, w - 1).astype(np.float32)
+        map_y = np.clip(ys - dy, 0, h - 1).astype(np.float32)
+
+        result = cv2.remap(
+            src, map_x, map_y,
+            interpolation=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_REFLECT,
+        )
+        views.append(Image.fromarray(result.clip(0, 255).astype(np.uint8), "RGB"))
+
+    return views
+
+
+# ── Effect 7: Spatial Photo (stereo pair) ───────────────────────────────────
+
+def create_spatial_pair(
+    image: Image.Image,
+    depth: np.ndarray,
+    eye_separation: float = 30.0,
+    convergence: float = 0.5,
+    blur_depth: float = 5.0,
+) -> tuple:
+    """
+    Generate left/right eye views for spatial/3D viewing.
+
+    eye_separation — horizontal offset in pixels between eyes
+    convergence    — 0–1, depth at which left/right overlap (screen plane)
+    blur_depth     — smooth depth before displacement
+
+    Returns (left_img, right_img) as PIL Images.
+    """
+    import cv2
+    from PIL import ImageFilter
+
+    depth = _ensure_same_size(image, depth)
+
+    if blur_depth > 0:
+        depth_img = Image.fromarray((depth * 255).astype(np.uint8), mode="L")
+        depth_img = depth_img.filter(ImageFilter.GaussianBlur(radius=blur_depth))
+        depth = np.array(depth_img, dtype=np.float32) / 255.0
+
+    h, w = depth.shape
+    src = np.array(image.convert("RGB"), dtype=np.float32)
+    disp = 1.0 - depth  # near=1, far=0
+
+    # Shift relative to convergence plane
+    disp_shifted = disp - (1.0 - convergence)
+
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    half_sep = eye_separation / 2.0
+
+    # Left eye: shift right
+    map_x_l = np.clip(xs - disp_shifted * half_sep, 0, w - 1).astype(np.float32)
+    map_y_l = ys.copy()
+    left = cv2.remap(src, map_x_l, map_y_l, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+
+    # Right eye: shift left
+    map_x_r = np.clip(xs + disp_shifted * half_sep, 0, w - 1).astype(np.float32)
+    map_y_r = ys.copy()
+    right = cv2.remap(src, map_x_r, map_y_r, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+
+    left_img = Image.fromarray(left.clip(0, 255).astype(np.uint8), "RGB")
+    right_img = Image.fromarray(right.clip(0, 255).astype(np.uint8), "RGB")
+
+    return left_img, right_img
+
+
+# ── Effect 8: Depth Transition ──────────────────────────────────────────────
+
+def depth_transition(
+    image_a: Image.Image,
+    image_b: Image.Image,
+    depth_a: np.ndarray,
+    transition: float = 0.5,
+    softness: float = 0.1,
+) -> Image.Image:
+    """
+    Depth-driven wipe: uses depth_a as gradient to blend between two images.
+
+    image_a     — first image (shown where depth < transition)
+    image_b     — second image (shown where depth > transition)
+    depth_a     — depth map of image_a used as wipe gradient
+    transition  — wipe position 0–1
+    softness    — feather width 0–0.5
+    """
+    depth_a = _ensure_same_size(image_a, depth_a)
+
+    # Resize image_b to match image_a
+    if image_b.size != image_a.size:
+        image_b = image_b.resize(image_a.size, Image.LANCZOS)
+
+    arr_a = np.array(image_a.convert("RGB"), dtype=np.float32) / 255.0
+    arr_b = np.array(image_b.convert("RGB"), dtype=np.float32) / 255.0
+
+    if softness > 0.001:
+        mask = np.clip((depth_a - transition + softness) / (2 * softness + 1e-8), 0, 1)
+    else:
+        mask = (depth_a >= transition).astype(np.float32)
+
+    mask = mask[:, :, np.newaxis]
+    out = arr_a * (1 - mask) + arr_b * mask
+    out = np.clip(out * 255, 0, 255).astype(np.uint8)
+    return Image.fromarray(out, "RGB")
+
+
+# ── Effect 9: Posterize Depth ───────────────────────────────────────────────
+
+def posterize_depth(
+    image: Image.Image,
+    depth: np.ndarray,
+    levels: int = 4,
+    colorize: bool = False,
+    colormap: str = "inferno",
+) -> Image.Image:
+    """
+    Quantize depth into N discrete bands.
+
+    levels    — number of depth bands (2–10)
+    colorize  — if True, apply colormap to posterized depth
+    colormap  — colormap name (only used if colorize=True)
+    """
+    from depth_engine import COLORMAPS
+
+    depth = _ensure_same_size(image, depth)
+    levels = max(2, min(10, levels))
+
+    # Quantize
+    posterized = np.floor(depth * levels) / levels
+    posterized = np.clip(posterized, 0, 1)
+
+    if colorize:
+        lut = COLORMAPS.get(colormap, COLORMAPS["inferno"])
+        idx = (np.clip(posterized, 0, 1) * 255).astype(np.uint8)
+        rgb = lut[idx]
+        return Image.fromarray(rgb, "RGB")
+    else:
+        gray = (posterized * 255).astype(np.uint8)
+        return Image.fromarray(gray, "L").convert("RGB")
+
+
+def posterize_depth_array(depth: np.ndarray, levels: int = 4) -> np.ndarray:
+    """Quantize depth array into discrete bands. Returns float32 [0,1]."""
+    levels = max(2, min(10, levels))
+    posterized = np.floor(depth * levels) / levels
+    return np.clip(posterized, 0, 1).astype(np.float32)
+
+
 # ── Convenience dispatcher ────────────────────────────────────────────────────
 
 def apply_effect(
@@ -239,5 +548,11 @@ def apply_effect(
         return depth_grade(image, depth, **params)
     elif effect == "dof":
         return depth_of_field(image, depth, **params)
+    elif effect == "fog":
+        return depth_fog(image, depth, **params)
+    elif effect == "parallax":
+        return depth_parallax(image, depth, **params)
+    elif effect == "posterize":
+        return posterize_depth(image, depth, **params)
     else:
-        raise ValueError(f"Unknown effect: {effect!r}. Choose: slice, grade, dof")
+        raise ValueError(f"Unknown effect: {effect!r}. Choose: slice, grade, dof, fog, parallax, posterize")
