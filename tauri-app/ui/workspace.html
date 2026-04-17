@@ -218,11 +218,32 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
             oninput="document.getElementById('wig-loops-v').textContent=this.value"/>
           <span class="range-val" id="wig-loops-v">3</span>
         </div>
-        <div class="field">
-          <label>Focal point</label>
-          <input type="range" id="wig-focal" min="0" max="1" step="0.01" value="0.5"
-            oninput="document.getElementById('wig-focal-v').textContent=parseFloat(this.value).toFixed(2)"/>
-          <span class="range-val" id="wig-focal-v">0.50</span>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)">
+          <input type="checkbox" id="wig-focal-on" style="accent-color:var(--accent);cursor:pointer"/>
+          <label for="wig-focal-on" style="font-size:10px;color:var(--muted);cursor:pointer;white-space:nowrap">Custom Focal Point</label>
+          <input type="checkbox" id="wig-focal-dot" style="accent-color:var(--err);cursor:pointer" title="Show red dot"/>
+          <label for="wig-focal-dot" style="font-size:9px;color:var(--err);cursor:pointer" title="Show focal indicator">dot</label>
+        </div>
+        <div id="focal-controls" style="display:none">
+          <div class="field">
+            <label>Depth</label>
+            <input type="range" id="wig-focal" min="0" max="1" step="0.01" value="0.5"
+              oninput="document.getElementById('wig-focal-v').textContent=parseFloat(this.value).toFixed(2)"/>
+            <span class="range-val" id="wig-focal-v">0.50</span>
+          </div>
+          <div class="field">
+            <label>Position X</label>
+            <input type="range" id="wig-focal-x" min="0" max="1" step="0.01" value="0.5"
+              oninput="document.getElementById('wig-focal-x-v').textContent=parseFloat(this.value).toFixed(2)"/>
+            <span class="range-val" id="wig-focal-x-v">0.50</span>
+          </div>
+          <div class="field">
+            <label>Position Y</label>
+            <input type="range" id="wig-focal-y" min="0" max="1" step="0.01" value="0.5"
+              oninput="document.getElementById('wig-focal-y-v').textContent=parseFloat(this.value).toFixed(2)"/>
+            <span class="range-val" id="wig-focal-y-v">0.50</span>
+          </div>
+          <div style="font-size:9px;color:var(--muted);margin-bottom:6px">Click on canvas to pick focal point from depth map</div>
         </div>
         <div class="field">
           <label>Motion blur</label>
@@ -1449,7 +1470,60 @@ function renderTerrain(gl, t) {
       state.needsRender = true;
     }
   }, {passive: false});
+
+  // Click to pick focal point (when wiggle + custom focal is on)
+  canvas.addEventListener("click", function(e) {
+    if (state.effect !== "wiggle") return;
+    if (!$("wig-focal-on") || !$("wig-focal-on").checked) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / rect.width;
+    const ny = (e.clientY - rect.top) / rect.height;
+
+    $("wig-focal-x").value = nx.toFixed(2);
+    $("wig-focal-x-v").textContent = nx.toFixed(2);
+    $("wig-focal-y").value = ny.toFixed(2);
+    $("wig-focal-y-v").textContent = ny.toFixed(2);
+
+    // Read depth at that position from the depth texture (approximate via canvas)
+    // For now, use a simple linear mapping
+    state.needsRender = true;
+  });
 })();
+
+// Focal point toggle + dot overlay
+if ($("wig-focal-on")) {
+  $("wig-focal-on").addEventListener("change", function() {
+    $("focal-controls").style.display = this.checked ? "block" : "none";
+    state.needsRender = true;
+  });
+}
+
+// Add dot overlay element
+(function() {
+  const dot = document.createElement("div");
+  dot.id = "focal-dot";
+  dot.style.cssText = "display:none;position:absolute;width:12px;height:12px;background:red;border:2px solid white;border-radius:50%;pointer-events:none;z-index:10;transform:translate(-50%,-50%)";
+  const canvasWrap = $("gl-canvas")?.parentElement;
+  if (canvasWrap) {
+    canvasWrap.style.position = "relative";
+    canvasWrap.appendChild(dot);
+  }
+})();
+
+function updateFocalDot() {
+  const dot = $("focal-dot");
+  if (!dot) return;
+  const showDot = $("wig-focal-dot")?.checked && $("wig-focal-on")?.checked && state.effect === "wiggle";
+  if (!showDot) { dot.style.display = "none"; return; }
+  const canvas = $("gl-canvas");
+  if (!canvas) return;
+  const fx = parseFloat($("wig-focal-x")?.value || "0.5");
+  const fy = parseFloat($("wig-focal-y")?.value || "0.5");
+  dot.style.display = "block";
+  dot.style.left = (fx * canvas.clientWidth) + "px";
+  dot.style.top = (fy * canvas.clientHeight) + "px";
+}
 
 function render() {
   const gl = state.gl;
@@ -1591,7 +1665,10 @@ function render() {
   gl.uniform1f(getUniformLoc(prog, "u_shiftY"), shiftY);
   gl.uniform1f(getUniformLoc(prog, "u_depthScale"), parseFloat($("par-scale").value));
   gl.uniform1f(getUniformLoc(prog, "u_motionBlur"), parseFloat($("wig-mblur")?.value || "0"));
-  gl.uniform1f(getUniformLoc(prog, "u_focalPoint"), parseFloat($("wig-focal")?.value || "0.5"));
+  // Focal point: use custom if enabled, otherwise default 0.5
+  const focalOn = $("wig-focal-on")?.checked;
+  gl.uniform1f(getUniformLoc(prog, "u_focalPoint"), focalOn ? parseFloat($("wig-focal")?.value || "0.5") : 0.5);
+  updateFocalDot();
   state._prevShiftX = shiftX;
 
   // spatial
