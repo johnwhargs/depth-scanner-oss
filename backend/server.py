@@ -148,35 +148,77 @@ async def process_batch(
 # ── Video session (frame-by-frame with live preview) ──────────────────────────
 
 class VideoSession:
-    """Holds extracted frames and temporal state for frame-by-frame processing."""
-    def __init__(self, frames, fps, width, height):
-        self.frames = frames
+    """Holds video reference and temporal state for frame-by-frame processing.
+    Frames loaded lazily from disk — doesn't hold all in RAM."""
+    def __init__(self, video_path, frame_indices, fps, width, height, tmp_file=None):
+        self.video_path = video_path
+        self.frame_indices = frame_indices  # list of original frame numbers to process
         self.fps = fps
         self.width = width
         self.height = height
         self.prev_depth = None
         self.processed = 0
-        self.cached_depths = []  # store depths from frame-by-frame pass
+        self.cached_depths = []
+        self._tmp_file = tmp_file  # temp file to clean up on session delete
+        self._frame_cache = {}  # small LRU for recently accessed frames
+
+    def get_frame(self, session_idx):
+        """Load a single frame from video by session index (lazy)."""
+        if session_idx in self._frame_cache:
+            return self._frame_cache[session_idx]
+        frame_num = self.frame_indices[session_idx]
+        cap = cv2.VideoCapture(self.video_path)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+        ret, bgr = cap.read()
+        cap.release()
+        if not ret:
+            return None
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(rgb)
+        # Keep small cache (last 3 frames)
+        self._frame_cache[session_idx] = img
+        if len(self._frame_cache) > 3:
+            oldest = min(self._frame_cache.keys())
+            del self._frame_cache[oldest]
+        return img
+
+    @property
+    def num_frames(self):
+        return len(self.frame_indices)
+
+    def cleanup(self):
+        if self._tmp_file and os.path.exists(self._tmp_file):
+            os.unlink(self._tmp_file)
 
 video_sessions = {}
 
 @app.post("/process/video/start")
 async def video_start(
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    file_path: Optional[str] = Form(None),
     model: str = Form("small"),
     every: int = Form(1),
     start_frame: int = Form(0),
     end_frame: int = Form(-1),
 ):
-    """Upload video, extract frames within trim range, return session_id + metadata."""
-    raw = await file.read()
-    suffix = os.path.splitext(file.filename or "video.mp4")[1] or ".mp4"
-    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-    tmp.write(raw)
-    tmp.close()
+    """Upload video or provide local path, extract frames within trim range."""
+    tmp_name = None
+    if file_path and os.path.exists(file_path):
+        # Direct disk read — no upload needed for large files
+        video_path = file_path
+    elif file:
+        raw = await file.read()
+        suffix = os.path.splitext(file.filename or "video.mp4")[1] or ".mp4"
+        tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+        tmp.write(raw)
+        tmp.close()
+        video_path = tmp.name
+        tmp_name = tmp.name
+    else:
+        raise HTTPException(400, "Provide file or file_path.")
 
     try:
-        cap = cv2.VideoCapture(tmp.name)
+        cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise HTTPException(400, "Could not open video.")
 
@@ -188,35 +230,37 @@ async def video_start(
         if end_frame < 0:
             end_frame = total_frames
 
-        frames = []
-        idx = 0
-        while True:
-            ret, bgr = cap.read()
-            if not ret:
-                break
-            if idx >= start_frame and idx < end_frame and (idx - start_frame) % every == 0:
-                rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-                frames.append(Image.fromarray(rgb))
-            idx += 1
+        # Build index list of frames to process (don't load into RAM)
+        frame_indices = []
+        for idx in range(start_frame, min(end_frame, total_frames)):
+            if (idx - start_frame) % every == 0:
+                frame_indices.append(idx)
         cap.release()
-    finally:
-        os.unlink(tmp.name)
+    except Exception as e:
+        if tmp_name:
+            os.unlink(tmp_name)
+        raise
 
-    if not frames:
-        raise HTTPException(400, "No frames extracted.")
+    if not frame_indices:
+        if tmp_name:
+            os.unlink(tmp_name)
+        raise HTTPException(400, "No frames in range.")
 
     engine.load_model(model)
     sid = str(uuid.uuid4())[:8]
-    video_sessions[sid] = VideoSession(frames, fps / every, w, h)
+    video_sessions[sid] = VideoSession(
+        video_path, frame_indices, fps / every, w, h, tmp_file=tmp_name
+    )
 
-    # Limit to 10 active sessions
-    while len(video_sessions) > 10:
+    # Limit to 5 active sessions (cleanup old ones)
+    while len(video_sessions) > 5:
         oldest = next(iter(video_sessions))
+        video_sessions[oldest].cleanup()
         del video_sessions[oldest]
 
     return {
         "session_id": sid,
-        "frames": len(frames),
+        "frames": len(frame_indices),
         "fps": fps / every,
         "width": w,
         "height": h,
@@ -229,10 +273,13 @@ def video_source_frame(session_id: str, frame_idx: int):
     sess = video_sessions.get(session_id)
     if not sess:
         raise HTTPException(404, "Session not found.")
-    if frame_idx < 0 or frame_idx >= len(sess.frames):
+    if frame_idx < 0 or frame_idx >= sess.num_frames:
         raise HTTPException(400, f"Frame {frame_idx} out of range.")
+    frame = sess.get_frame(frame_idx)
+    if frame is None:
+        raise HTTPException(500, f"Could not read frame {frame_idx}.")
     buf = io.BytesIO()
-    sess.frames[frame_idx].save(buf, format="PNG")
+    frame.save(buf, format="PNG")
     return Response(content=buf.getvalue(), media_type="image/png")
 
 
@@ -251,10 +298,13 @@ def video_frame(
     sess = video_sessions.get(session_id)
     if not sess:
         raise HTTPException(404, "Session not found.")
-    if frame_idx < 0 or frame_idx >= len(sess.frames):
-        raise HTTPException(400, f"Frame {frame_idx} out of range 0-{len(sess.frames)-1}")
+    if frame_idx < 0 or frame_idx >= sess.num_frames:
+        raise HTTPException(400, f"Frame {frame_idx} out of range 0-{sess.num_frames-1}")
 
-    raw = engine._infer(sess.frames[frame_idx])
+    frame = sess.get_frame(frame_idx)
+    if frame is None:
+        raise HTTPException(500, f"Could not read frame {frame_idx}.")
+    raw = engine._infer(frame)
 
     if sess.prev_depth is not None and smooth > 0:
         if align_scale:
@@ -278,7 +328,7 @@ def video_frame(
     return Response(
         content=out_bytes,
         media_type=ct,
-        headers={"X-Frame": str(frame_idx), "X-Total": str(len(sess.frames))},
+        headers={"X-Frame": str(frame_idx), "X-Total": str(sess.num_frames)},
     )
 
 
@@ -299,13 +349,16 @@ def video_render(
         raise HTTPException(404, "Session not found.")
 
     # Use cached depths from frame-by-frame pass if available
-    if len(sess.cached_depths) == len(sess.frames) and all(d is not None for d in sess.cached_depths):
+    if len(sess.cached_depths) == sess.num_frames and all(d is not None for d in sess.cached_depths):
         depths = sess.cached_depths
     else:
-        # Fallback: re-process
+        # Fallback: re-process frame by frame (lazy loaded)
         prev = None
         depths = []
-        for frame in sess.frames:
+        for i in range(sess.num_frames):
+            frame = sess.get_frame(i)
+            if frame is None:
+                continue
             raw = engine._infer(frame)
             if prev is not None and smooth > 0:
                 aligned = _align_depth(prev, raw) if align_scale else raw
@@ -342,6 +395,7 @@ def video_render(
             writer.write(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
         writer.release()
         # Clean up session
+        video_sessions[session_id].cleanup()
         del video_sessions[session_id]
         return FileResponse(tmp_out.name, media_type="video/mp4", filename="depth_video.mp4")
 
@@ -457,15 +511,26 @@ async def process_video(
 
 
 @app.post("/process/video/info")
-async def video_info(file: UploadFile = File(...)):
+async def video_info(
+    file: Optional[UploadFile] = File(None),
+    file_path: Optional[str] = Form(None),
+):
     """Get video metadata + first frame thumbnail."""
-    raw = await file.read()
-    suffix = os.path.splitext(file.filename or "video.mp4")[1] or ".mp4"
-    tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-    tmp.write(raw)
-    tmp.close()
+    tmp_name = None
+    if file_path and os.path.exists(file_path):
+        video_path = file_path
+    elif file:
+        raw = await file.read()
+        suffix = os.path.splitext(file.filename or "video.mp4")[1] or ".mp4"
+        tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+        tmp.write(raw)
+        tmp.close()
+        video_path = tmp.name
+        tmp_name = tmp.name
+    else:
+        raise HTTPException(400, "Provide file or file_path.")
     try:
-        cap = cv2.VideoCapture(tmp.name)
+        cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise HTTPException(400, "Could not open video.")
 
@@ -496,7 +561,8 @@ async def video_info(file: UploadFile = File(...)):
         cap.release()
         return info
     finally:
-        os.unlink(tmp.name)
+        if tmp_name:
+            os.unlink(tmp_name)
 
 
 @app.post("/save")

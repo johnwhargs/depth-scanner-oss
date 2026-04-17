@@ -29,7 +29,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 
 /* ── Layout ───────────────────────────────────────────── */
 .main{flex:1;display:flex;overflow:hidden}
-.sidebar{width:300px;min-width:280px;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+.sidebar{width:300px;min-width:280px;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
 .canvas{flex:1;display:flex;flex-direction:column;overflow:hidden}
 
 /* ── Sidebar sections ─────────────────────────────────── */
@@ -190,8 +190,8 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
           <option value="base">Base — balanced</option>
           <option value="large">Large — best quality</option>
         </select>
-        <span id="model-hint" style="display:none;font-size:9px;color:var(--ok);margin-top:-4px">recommended</span>
       </div>
+      <div id="model-hint" style="display:none;font-size:9px;color:var(--ok);padding-left:88px;margin-top:-4px;margin-bottom:8px"></div>
       <div class="field">
         <label>Format</label>
         <select id="output-format">
@@ -568,6 +568,28 @@ function log(msg, type = "info") {
   el.appendChild(line);
   el.scrollTop = el.scrollHeight;
   while (el.children.length > 100) el.removeChild(el.firstChild);
+}
+
+// Progress bar in log — terminal style
+let _logProgressEl = null;
+function logProgress(current, total, label) {
+  const pct = Math.round((current / total) * 100);
+  const barWidth = 20;
+  const filled = Math.round((current / total) * barWidth);
+  const empty = barWidth - filled;
+  const bar = "█".repeat(filled) + "░".repeat(empty);
+  const text = `${label || "Progress"}: ${pct}%|${bar}| ${current}/${total}`;
+
+  if (!_logProgressEl || !_logProgressEl.parentNode) {
+    _logProgressEl = document.createElement("div");
+    _logProgressEl.className = "log-line log-info";
+    _logProgressEl.style.fontFamily = "var(--mono)";
+    $("log").appendChild(_logProgressEl);
+  }
+  _logProgressEl.textContent = `› ${text}`;
+  $("log").scrollTop = $("log").scrollHeight;
+
+  if (current >= total) _logProgressEl = null; // next call creates new line
 }
 
 function setStatus(ok) {
@@ -1126,6 +1148,7 @@ async function processBatch() {
     f.status = "processing";
     renderBatchList();
     setProgress(Math.round((i / total) * 100));
+    logProgress(i + 1, total, "Batch");
     $("btn-process-batch").textContent = `Processing ${i + 1}/${total}`;
 
     try {
@@ -1254,8 +1277,16 @@ async function processVideo() {
   try {
     // Step 1: Upload video, extract frames, get session
     $("btn-process").textContent = "Uploading…";
-    log("Uploading video & extracting frames…");
+    setIndeterminate(true);
+    log("Uploading video & extracting frames (this may take a moment for large files)…");
     startStatusPoll();
+
+    // Elapsed time counter during upload
+    const uploadStart = Date.now();
+    const uploadTimer = setInterval(() => {
+      const elapsed = Math.round((Date.now() - uploadStart) / 1000);
+      $("btn-process").textContent = `Uploading… ${elapsed}s`;
+    }, 1000);
 
     // Calculate trim frame range
     const totalVideoFrames = state.videoInfo?.frames || 0;
@@ -1270,10 +1301,12 @@ async function processVideo() {
     fd.append("end_frame", trimEndFrame.toString());
 
     const startR = await fetch(`${SERVER}/process/video/start`, { method: "POST", body: fd });
+    clearInterval(uploadTimer);
     if (!startR.ok) throw new Error((await startR.json()).detail || "Upload failed");
 
     const session = await startR.json();
     const total = session.frames;
+    setIndeterminate(false);
     log(`Session started: ${total} frames to process`);
 
     // Step 2: Process frame by frame with live preview
@@ -1286,6 +1319,7 @@ async function processVideo() {
       const pct = Math.round(((i + 1) / total) * 100);
       setProgress(pct);
       $("btn-process").textContent = `Frame ${i + 1}/${total}`;
+      logProgress(i + 1, total, "Depth");
       state._lastFrameIdx = i;
 
       // Get source frame for compare views
