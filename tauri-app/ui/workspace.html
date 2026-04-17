@@ -1363,6 +1363,61 @@ function renderTerrain(gl, t) {
     gl.disable(gl.DEPTH_TEST);
 }
 
+// ── Canvas mouse drag for terrain orbit + parallax ──────────────
+(function() {
+  const canvas = $("gl-canvas");
+  if (!canvas) return;
+  let dragging = false, lastX = 0, lastY = 0;
+
+  canvas.addEventListener("mousedown", function(e) {
+    dragging = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    e.preventDefault();
+  });
+
+  window.addEventListener("mousemove", function(e) {
+    if (!dragging) return;
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+
+    if (state.effect === "terrain") {
+      // Orbit: drag X = rotate Y, drag Y = tilt X
+      const ry = parseFloat($("ter-ry").value) + dx * 0.5;
+      const rx = parseFloat($("ter-rx").value) + dy * 0.5;
+      $("ter-ry").value = Math.max(-180, Math.min(180, ry));
+      $("ter-rx").value = Math.max(-90, Math.min(90, rx));
+      $("ter-ry-v").textContent = Math.round(ry) + "°";
+      $("ter-rx-v").textContent = Math.round(rx) + "°";
+      state.needsRender = true;
+    } else if (state.effect === "parallax") {
+      // Parallax: drag moves shift
+      const sx = parseFloat($("par-x").value) + dx * 0.3;
+      const sy = parseFloat($("par-y").value) + dy * 0.3;
+      $("par-x").value = Math.max(-60, Math.min(60, sx));
+      $("par-y").value = Math.max(-60, Math.min(60, sy));
+      $("par-x-v").textContent = Math.round(sx) + "px";
+      $("par-y-v").textContent = Math.round(sy) + "px";
+      state.needsRender = true;
+    }
+  });
+
+  window.addEventListener("mouseup", function() { dragging = false; });
+
+  // Scroll to zoom for terrain
+  canvas.addEventListener("wheel", function(e) {
+    if (state.effect === "terrain") {
+      e.preventDefault();
+      const z = parseFloat($("ter-zoom").value) + (e.deltaY > 0 ? -0.1 : 0.1);
+      $("ter-zoom").value = Math.max(0.5, Math.min(3.0, z));
+      $("ter-zoom-v").textContent = z.toFixed(2);
+      state.needsRender = true;
+    }
+  }, {passive: false});
+})();
+
 function render() {
   const gl = state.gl;
   if (!gl) return;

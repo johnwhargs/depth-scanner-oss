@@ -1626,16 +1626,17 @@ async function runEffect(preview) {
       return;
     }
 
-    // Transition — uses its own endpoint, requires two images
+    // Transition — uses two images. If no second image loaded, use depth map result.
     if (fx === "transition") {
-      if (!state.currentBlob || !state.fileB) {
-        log("Load both images first (use 'Load Second Image').", "warn");
+      const imgB = state.fileB || state.depthBlob;
+      if (!state.currentBlob || !imgB) {
+        log("Process a depth map first, or load a second image.", "warn");
         setIndeterminate(false);
         return;
       }
       const fd = new FormData();
       fd.append("file_a", state.currentBlob, state.currentFile?.name || "image_a.png");
-      fd.append("file_b", state.fileB, state.fileBName || "image_b.png");
+      fd.append("file_b", imgB, state.fileBName || "depth.png");
       fd.append("model", $("model").value);
       fd.append("transition_val", params.transition_val.toString());
       fd.append("softness", params.softness.toString());
@@ -1987,8 +1988,8 @@ async function init() {
   state._trAnimId = null;
 
   $("btn-tr-loop").addEventListener("click", function() {
-    if (!state.sessionId || !state._fileBBlob) {
-      log("Load a second image first", "warn");
+    if (!state.sessionId) {
+      log("Process a depth map first", "warn");
       return;
     }
     state._trLooping = true;
