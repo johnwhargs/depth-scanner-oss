@@ -161,23 +161,48 @@ class VideoSession:
         self.cached_depths = []
         self._tmp_file = tmp_file  # temp file to clean up on session delete
         self._frame_cache = {}  # small LRU for recently accessed frames
+        self._cap = None  # persistent VideoCapture
+        self._cap_pos = -1  # last read frame number
+
+    def _ensure_cap(self):
+        """Keep a persistent VideoCapture open."""
+        if self._cap is None or not self._cap.isOpened():
+            self._cap = cv2.VideoCapture(self.video_path)
+            self._cap_pos = -1
 
     def get_frame(self, session_idx):
-        """Load a single frame from video by session index (lazy)."""
+        """Load a single frame from video by session index.
+        Sequential reads are reliable; random seek is not.
+        For sequential access (idx = prev+1), just read next.
+        For random access, seek to nearest keyframe then read forward."""
         if session_idx in self._frame_cache:
             return self._frame_cache[session_idx]
+
+        self._ensure_cap()
         frame_num = self.frame_indices[session_idx]
-        cap = cv2.VideoCapture(self.video_path)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
-        ret, bgr = cap.read()
-        cap.release()
+
+        # If we need to go backward or jump far, re-seek
+        if frame_num != self._cap_pos + 1:
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+
+        ret, bgr = self._cap.read()
         if not ret:
-            return None
+            # Retry: reopen and seek
+            self._cap.release()
+            self._cap = cv2.VideoCapture(self.video_path)
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            ret, bgr = self._cap.read()
+            if not ret:
+                return None
+
+        self._cap_pos = frame_num
+
         rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
         img = Image.fromarray(rgb)
-        # Keep small cache (last 3 frames)
+
+        # Cache last 5 frames
         self._frame_cache[session_idx] = img
-        if len(self._frame_cache) > 3:
+        if len(self._frame_cache) > 5:
             oldest = min(self._frame_cache.keys())
             del self._frame_cache[oldest]
         return img
@@ -187,6 +212,8 @@ class VideoSession:
         return len(self.frame_indices)
 
     def cleanup(self):
+        if self._cap and self._cap.isOpened():
+            self._cap.release()
         if self._tmp_file and os.path.exists(self._tmp_file):
             os.unlink(self._tmp_file)
 
