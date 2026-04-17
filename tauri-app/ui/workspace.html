@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Depth Scanner OSS — 3D Workspace</title>
+<title>Depth Scanner OSS — Effects Workspace</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -185,7 +185,14 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
             oninput="document.getElementById('par-scale-v').textContent=parseFloat(this.value).toFixed(1)+'x'"/>
           <span class="range-val" id="par-scale-v">1.0x</span>
         </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:4px">Move mouse over canvas to shift view interactively.</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)">
+          <input type="checkbox" id="par-3d" style="accent-color:var(--accent);cursor:pointer"/>
+          <label for="par-3d" style="font-size:10px;color:var(--muted);cursor:pointer">3D Elevation</label>
+          <input type="range" id="par-elev" min="0.05" max="0.8" step="0.01" value="0.2" style="flex:1"
+            oninput="document.getElementById('par-elev-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="par-elev-v" style="font-size:10px">0.20</span>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">Click + drag or move mouse to shift view.</div>
       </div>
 
       <!-- Wiggle -->
@@ -229,6 +236,13 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
           <input type="range" id="wig-comb" min="1" max="5" step="1" value="3"
             oninput="document.getElementById('wig-comb-v').textContent=this.value"/>
           <span class="range-val" id="wig-comb-v">3</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)">
+          <input type="checkbox" id="wig-3d" style="accent-color:var(--accent);cursor:pointer"/>
+          <label for="wig-3d" style="font-size:10px;color:var(--muted);cursor:pointer">3D Elevation</label>
+          <input type="range" id="wig-elev" min="0.05" max="0.8" step="0.01" value="0.2" style="flex:1"
+            oninput="document.getElementById('wig-elev-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="wig-elev-v" style="font-size:10px">0.20</span>
         </div>
         <div class="estimate-box" id="wig-estimate">Est. export: calculating...</div>
         <div class="btn-row">
@@ -454,7 +468,7 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
 
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
-   Depth Scanner OSS — 3D Workspace
+   Depth Scanner OSS — Effects Workspace
    Self-contained WebGL2 real-time depth effects renderer
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -1504,7 +1518,12 @@ function render() {
   state.needsRender = false;
 
   // ── Terrain rendering (separate pipeline) ──
-  if (state.effect === "terrain" && state.sourceTex && state.depthTex) {
+  // Use terrain renderer for terrain effect, or when 3D toggle is on for wiggle/parallax
+  const use3D = state.effect === "terrain"
+    || (state.effect === "wiggle" && $("wig-3d") && $("wig-3d").checked)
+    || (state.effect === "parallax" && $("par-3d") && $("par-3d").checked);
+
+  if (use3D && state.sourceTex && state.depthTex) {
     renderTerrain(gl, t);
     state.animId = requestAnimationFrame(render);
     return;
@@ -1900,6 +1919,13 @@ document.querySelectorAll(".fx-tab").forEach(tab => {
     tab.classList.add("active");
     const fx = tab.dataset.fx;
     $("fx-" + fx).classList.add("active");
+    // Clean up previous effect state
+    const gl = state.gl;
+    if (gl) {
+      gl.disable(gl.DEPTH_TEST);
+      if (state.vao) gl.bindVertexArray(state.vao);
+    }
+
     state.effect = fx;
     $("info-effect").textContent = fx.charAt(0).toUpperCase() + fx.slice(1);
     state.needsRender = true;
@@ -2115,7 +2141,7 @@ async function loadFromSession() {
   loadFromSession();
   state.lastFrame = performance.now() / 1000;
   state.animId = requestAnimationFrame(render);
-  log("3D Workspace ready", "info");
+  log("Effects Workspace ready", "info");
 })();
 </script>
 </body>
