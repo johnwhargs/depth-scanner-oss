@@ -169,6 +169,14 @@ Native C++ GPU plugin (Metal + OpenCL). 6 effects. Add depth map as optional lay
 - Replaces DA V2 AND enables proper wigglegram/spatial video
 - **Upgrade path:** Keep DA V2 as "fast" mode, add SHARP as "quality/3D" mode
 
+### Motion Blur Improvement (TODO)
+Current wigglegram motion blur samples discrete positions along the shift direction. Proper implementation:
+1. Render displacement at previous and current eye positions
+2. Per pixel, calculate movement vector between the two positions
+3. Stretch/smear pixels along that vector (directional blur)
+4. Blend with distance-weighted falloff
+5. Shader approach: render two displaced frames, compute per-pixel motion vectors, apply directional Gaussian along the vector
+
 ---
 
 ## 7. Bokeh Research — DoF Upgrade Path
