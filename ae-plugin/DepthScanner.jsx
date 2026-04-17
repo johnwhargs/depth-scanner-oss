@@ -568,6 +568,168 @@
         app.endUndoGroup();
     }
 
+    function buildWigglegram(comp, srcLayer, depthLayer) {
+        app.beginUndoGroup("Depth Scanner: Wigglegram");
+
+        // Create multiple views as displaced copies
+        var ctrl = comp.layers.addNull();
+        ctrl.name = "Wiggle Controller";
+        ctrl.guideLayer = true;
+
+        var sSep = ctrl.Effects.addProperty("ADBE Slider Control");
+        sSep.name = "Eye Separation";
+        sSep.property("ADBE Slider Control-0001").setValue(15);
+
+        var sComb = ctrl.Effects.addProperty("ADBE Slider Control");
+        sComb.name = "Comb Frames";
+        sComb.property("ADBE Slider Control-0001").setValue(3);
+
+        var sSpeed = ctrl.Effects.addProperty("ADBE Slider Control");
+        sSpeed.name = "Speed Multiplier";
+        sSpeed.property("ADBE Slider Control-0001").setValue(1);
+
+        var sBlur = ctrl.Effects.addProperty("ADBE Slider Control");
+        sBlur.name = "Depth Blur";
+        sBlur.property("ADBE Slider Control-0001").setValue(5);
+
+        // Add blur to depth
+        var dBlur = depthLayer.Effects.addProperty("ADBE Box Blur2");
+        dBlur.property("ADBE Box Blur2-0001").setValue(5);
+        dBlur.property("ADBE Box Blur2-0003").setValue(3);
+        depthLayer.effect("Box Blur")("Blur Radius").expression =
+            'thisComp.layer("Wiggle Controller").effect("Depth Blur")("Slider")';
+
+        // Apply Displacement Map to source
+        var disp = srcLayer.Effects.addProperty("ADBE Displacement Map");
+        disp.property("ADBE Displacement Map-0001").setValue(depthLayer.index);
+        disp.property("ADBE Displacement Map-0002").setValue(1); // Luminance
+        disp.property("ADBE Displacement Map-0003").setValue(0); // Start at 0
+        try { disp.property("ADBE Displacement Map-0006").setValue(2); } catch(e) {}
+
+        // Comb expression: alternate L/R every N frames
+        srcLayer.effect("Displacement Map")("Max Horizontal Displacement").expression = [
+            'var ctrl = thisComp.layer("Wiggle Controller");',
+            'var sep = ctrl.effect("Eye Separation")("Slider");',
+            'var combFrames = Math.max(1, Math.round(ctrl.effect("Comb Frames")("Slider")));',
+            'var speed = ctrl.effect("Speed Multiplier")("Slider");',
+            'var frame = Math.floor(timeToFrames(time) * speed);',
+            'var cycle = combFrames * 2;',
+            'var pos = frame % cycle;',
+            'var eye = (pos < combFrames) ? -1 : 1;',
+            'sep * eye;'
+        ].join('\n');
+
+        depthLayer.enabled = false;
+
+        app.endUndoGroup();
+    }
+
+    function build3DMesh(comp, srcLayer, depthLayer) {
+        app.beginUndoGroup("Depth Scanner: 3D Mesh");
+
+        // Create a 3D environment using AE's built-in 3D
+        // Strategy: Use CC Environment to map footage onto a sphere/plane,
+        // then use depth as displacement via CC Sphere or direct 3D layers
+
+        // Controller
+        var ctrl = comp.layers.addNull();
+        ctrl.name = "3D Mesh Controller";
+        ctrl.guideLayer = true;
+        ctrl.threeDLayer = true;
+
+        var sHeight = ctrl.Effects.addProperty("ADBE Slider Control");
+        sHeight.name = "Elevation";
+        sHeight.property("ADBE Slider Control-0001").setValue(50);
+
+        var sRotX = ctrl.Effects.addProperty("ADBE Slider Control");
+        sRotX.name = "Tilt X";
+        sRotX.property("ADBE Slider Control-0001").setValue(-25);
+
+        var sRotY = ctrl.Effects.addProperty("ADBE Slider Control");
+        sRotY.name = "Rotate Y";
+        sRotY.property("ADBE Slider Control-0001").setValue(0);
+
+        var sScale = ctrl.Effects.addProperty("ADBE Slider Control");
+        sScale.name = "Zoom";
+        sScale.property("ADBE Slider Control-0001").setValue(100);
+
+        // Make source 3D
+        srcLayer.threeDLayer = true;
+        depthLayer.threeDLayer = true;
+
+        // Apply CC Environment for 3D projection
+        try {
+            var env = srcLayer.Effects.addProperty("CC Environment");
+            env.property("CC Environment-0002").setValue(depthLayer.index); // Height Map
+            env.property("CC Environment-0001").setValue(50); // Height
+        } catch(e) {
+            // Fallback: use Displacement Map for pseudo-3D
+            var disp = srcLayer.Effects.addProperty("ADBE Displacement Map");
+            disp.property("ADBE Displacement Map-0001").setValue(depthLayer.index);
+            disp.property("ADBE Displacement Map-0002").setValue(1);
+            disp.property("ADBE Displacement Map-0003").setValue(50);
+            disp.property("ADBE Displacement Map-0004").setValue(1);
+            disp.property("ADBE Displacement Map-0005").setValue(50);
+            try { disp.property("ADBE Displacement Map-0006").setValue(2); } catch(e2) {}
+        }
+
+        // Add camera
+        var cam = comp.layers.addCamera("3D Camera", [comp.width/2, comp.height/2]);
+        cam.property("ADBE Camera Options Group").property("ADBE Camera Zoom").setValue(1200);
+
+        // Camera expressions linked to controller
+        cam.position.expression = [
+            'var ctrl = thisComp.layer("3D Mesh Controller");',
+            'var zoom = ctrl.effect("Zoom")("Slider") / 100;',
+            'var rx = ctrl.effect("Tilt X")("Slider") * Math.PI / 180;',
+            'var ry = ctrl.effect("Rotate Y")("Slider") * Math.PI / 180;',
+            'var dist = 1500 / zoom;',
+            'var x = thisComp.width/2 + Math.sin(ry) * dist;',
+            'var y = thisComp.height/2 + Math.sin(rx) * dist * 0.5;',
+            'var z = -dist * Math.cos(ry) * Math.cos(rx);',
+            '[x, y, z];'
+        ].join('\n');
+
+        cam.pointOfInterest.expression =
+            '[thisComp.width/2, thisComp.height/2, 0]';
+
+        // Source rotation linked to controller
+        srcLayer.orientation.expression = [
+            'var ctrl = thisComp.layer("3D Mesh Controller");',
+            'var rx = ctrl.effect("Tilt X")("Slider");',
+            'var ry = ctrl.effect("Rotate Y")("Slider");',
+            '[rx, ry, 0];'
+        ].join('\n');
+
+        // Elevation expression
+        try {
+            srcLayer.effect("CC Environment")("Height").expression =
+                'thisComp.layer("3D Mesh Controller").effect("Elevation")("Slider")';
+        } catch(e) {
+            try {
+                srcLayer.effect("Displacement Map")("Max Horizontal Displacement").expression =
+                    'thisComp.layer("3D Mesh Controller").effect("Elevation")("Slider")';
+                srcLayer.effect("Displacement Map")("Max Vertical Displacement").expression =
+                    'thisComp.layer("3D Mesh Controller").effect("Elevation")("Slider")';
+            } catch(e2) {}
+        }
+
+        // Add a light for depth
+        var light = comp.layers.addLight("Depth Light", [comp.width * 0.3, 0]);
+        light.property("ADBE Light Options Group").property("ADBE Light Intensity").setValue(80);
+        light.threeDLayer = true;
+        light.position.setValue([comp.width * 0.3, -200, -500]);
+
+        // Add ambient light
+        var ambient = comp.layers.addLight("Ambient", [comp.width/2, comp.height/2]);
+        ambient.property("ADBE Light Options Group").property("ADBE Light Type").setValue(4); // Ambient
+        ambient.property("ADBE Light Options Group").property("ADBE Light Intensity").setValue(60);
+
+        depthLayer.enabled = false;
+
+        app.endUndoGroup();
+    }
+
     // ── Effect map ──────────────────────────────────────────────
 
     var EFFECTS = {
@@ -575,7 +737,9 @@
         "Depth of Field": buildDoF,
         "Atmospheric Fog": buildFog,
         "Parallax / 2.5D": buildParallax,
+        "Wigglegram": buildWigglegram,
         "Stereo 3D": buildStereo,
+        "3D Mesh": build3DMesh,
         "Depth Transition": buildTransition,
         "Color Grade": buildColorGrade
     };
@@ -657,7 +821,9 @@
             "Depth of Field": "Camera Lens Blur with 9 bokeh\npresets. Iris shape, roundness,\nanamorphic stretch controls.",
             "Atmospheric Fog": "Fractal noise fog layered by\ndepth. Density + color controls.",
             "Parallax / 2.5D": "Displacement map parallax.\nKeyframe X/Y for camera moves.",
+            "Wigglegram": "Comb-style 3D wiggle effect.\nAlternates L/R eye every N frames.\nSeparation + comb + speed controls.",
             "Stereo 3D": "Left/right eye views for 3D.\nSBS viewer with separation control.",
+            "3D Mesh": "3D camera + lighting + depth\ndisplacement. Orbit, tilt, zoom.\nCC Environment or Displacement.",
             "Depth Transition": "Gradient wipe through Z-space.\nTransition + softness sliders.",
             "Color Grade": "Split FG/BG grade by depth.\nWarm foreground, cool background."
         };
