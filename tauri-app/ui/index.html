@@ -1472,6 +1472,28 @@ async function processVideo() {
       depthBlobs.push(blob);
       compare.depthFrames[i] = URL.createObjectURL(blob);
 
+      // Create effects session from first frame so toggle works during processing
+      if (i === 0 && !state.sessionId) {
+        try {
+          const srcR0 = await fetch(`${SERVER}/process/video/source/${session.session_id}/0`);
+          if (srcR0.ok) {
+            const srcB = await srcR0.blob();
+            const sf = new FormData();
+            sf.append("file", srcB, "frame.png");
+            sf.append("model", model);
+            sf.append("format", "png_gray");
+            const sr = await fetch(`${SERVER}/process/frame`, { method: "POST", body: sf });
+            if (sr.ok) {
+              state.sessionId = sr.headers.get("X-Session-Id");
+              state.depthBlob = blob;
+              state.currentBlob = srcB;
+              $("btn-3d").disabled = false;
+              log(`Effects ready (session ${state.sessionId})`, "info");
+            }
+          }
+        } catch(e) {}
+      }
+
       // Live preview — show every frame
       showDepthFrame(blob, i, total);
 
@@ -1515,24 +1537,11 @@ async function processVideo() {
       showImage(depthBlobs[depthBlobs.length - 1], `${state.videoResultName} — ${total} frames`);
     }
 
-    // Create a session from the last source frame so effects work
-    try {
-      const lastSrcR = await fetch(`${SERVER}/process/video/source/${session.session_id}/${total - 1}`);
-      if (lastSrcR.ok) {
-        const srcBlob = await lastSrcR.blob();
-        const sessFd = new FormData();
-        sessFd.append("file", srcBlob, "frame.png");
-        sessFd.append("model", model);
-        sessFd.append("format", "png_gray");
-        const sessR = await fetch(`${SERVER}/process/frame`, { method: "POST", body: sessFd });
-        if (sessR.ok) {
-          state.sessionId = sessR.headers.get("X-Session-Id");
-          state.depthBlob = await sessR.blob();
-          $("btn-3d").disabled = false;
-          log(`Effects session ready (${state.sessionId})`, "info");
-        }
-      }
-    } catch(e) {}
+    // Update session with last frame for effects
+    if (depthBlobs.length > 0) {
+      state.depthBlob = depthBlobs[depthBlobs.length - 1];
+    }
+    $("btn-3d").disabled = false;
 
     log(`Processing complete — click Save Result to export`, "success");
 
