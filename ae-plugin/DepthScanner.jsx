@@ -732,6 +732,195 @@
 
     // ── Effect map ──────────────────────────────────────────────
 
+    function buildLightWrap(comp, srcLayer, depthLayer) {
+        app.beginUndoGroup("Depth Scanner: Light Wrap");
+
+        // Light wrap = edge glow at depth boundaries
+        // Strategy: Find edges in depth map, apply glow, composite over source
+
+        var ctrl = comp.layers.addNull();
+        ctrl.name = "Light Wrap Controller";
+        ctrl.guideLayer = true;
+
+        var sIntensity = ctrl.Effects.addProperty("ADBE Slider Control");
+        sIntensity.name = "Wrap Intensity";
+        sIntensity.property("ADBE Slider Control-0001").setValue(50);
+
+        var sWidth = ctrl.Effects.addProperty("ADBE Slider Control");
+        sWidth.name = "Wrap Width";
+        sWidth.property("ADBE Slider Control-0001").setValue(10);
+
+        var sColor = ctrl.Effects.addProperty("ADBE Color Control");
+        sColor.name = "Wrap Color";
+
+        // Duplicate depth for edge detection
+        var edgeLayer = comp.layers.add(depthLayer.source);
+        edgeLayer.name = "Depth Edges";
+
+        // Find Edges on depth map
+        var edges = edgeLayer.Effects.addProperty("ADBE Find Edges");
+
+        // Glow on edges
+        var glow = edgeLayer.Effects.addProperty("ADBE Glo2");
+        try {
+            glow.property("ADBE Glo2-0001").setValue(50); // Glow Threshold
+            glow.property("ADBE Glo2-0002").setValue(10); // Glow Radius
+            glow.property("ADBE Glo2-0003").setValue(50); // Glow Intensity
+        } catch(e) {}
+
+        // Set as screen blend over source
+        edgeLayer.blendingMode = BlendingMode.SCREEN;
+        edgeLayer.opacity.setValue(50);
+
+        // Link to controller
+        edgeLayer.opacity.expression =
+            'thisComp.layer("Light Wrap Controller").effect("Wrap Intensity")("Slider")';
+        try {
+            edgeLayer.effect("Glow")("Glow Radius").expression =
+                'thisComp.layer("Light Wrap Controller").effect("Wrap Width")("Slider")';
+        } catch(e) {}
+
+        depthLayer.enabled = false;
+        app.endUndoGroup();
+    }
+
+    function buildBlackout(comp, srcLayer, depthLayer) {
+        app.beginUndoGroup("Depth Scanner: Blackout");
+
+        // Rolling blackout: darken areas progressively using depth-driven gradient wipe
+        // Create dark version of footage
+        var darkLayer = srcLayer.duplicate();
+        darkLayer.name = srcLayer.name + " (Dark)";
+        srcLayer.name = srcLayer.name + " (Light)";
+
+        // Darken the duplicate
+        var toner = darkLayer.Effects.addProperty("ADBE Tint");
+        toner.property("ADBE Tint-0001").setValue([0.0, 0.0, 0.05]); // Map Black To
+        toner.property("ADBE Tint-0002").setValue([0.1, 0.08, 0.15]); // Map White To
+        toner.property("ADBE Tint-0003").setValue(80); // Amount
+
+        // Put light version on top
+        srcLayer.moveBefore(darkLayer);
+
+        // Apply Gradient Wipe to light version (reveals dark underneath)
+        var gw = srcLayer.Effects.addProperty("ADBE Gradient Wipe");
+        gw.property("ADBE Gradient Wipe-0005").setValue(depthLayer.index); // Gradient Layer
+        gw.property("ADBE Gradient Wipe-0001").setValue(0); // Transition start
+        gw.property("ADBE Gradient Wipe-0002").setValue(30); // Softness
+
+        // Controller
+        var ctrl = comp.layers.addNull();
+        ctrl.name = "Blackout Controller";
+        ctrl.guideLayer = true;
+
+        var sTrans = ctrl.Effects.addProperty("ADBE Slider Control");
+        sTrans.name = "Blackout Amount";
+        sTrans.property("ADBE Slider Control-0001").setValue(0);
+
+        var sSoft = ctrl.Effects.addProperty("ADBE Slider Control");
+        sSoft.name = "Softness";
+        sSoft.property("ADBE Slider Control-0001").setValue(30);
+
+        var sStepped = ctrl.Effects.addProperty("ADBE Checkbox Control");
+        sStepped.name = "Stepped (Posterize)";
+
+        var sStepFPS = ctrl.Effects.addProperty("ADBE Slider Control");
+        sStepFPS.name = "Step FPS (if stepped)";
+        sStepFPS.property("ADBE Slider Control-0001").setValue(6);
+
+        // Link gradient wipe to controller
+        // With optional posterizeTime for stepped grid blackout
+        srcLayer.effect("Gradient Wipe")("Transition Completion").expression = [
+            'var ctrl = thisComp.layer("Blackout Controller");',
+            'var val = ctrl.effect("Blackout Amount")("Slider");',
+            'var stepped = ctrl.effect("Stepped (Posterize)")("Checkbox");',
+            'if (stepped) {',
+            '  var fps = ctrl.effect("Step FPS (if stepped)")("Slider");',
+            '  posterizeTime(fps);',
+            '}',
+            'val;'
+        ].join('\n');
+
+        srcLayer.effect("Gradient Wipe")("Transition Softness").expression =
+            'thisComp.layer("Blackout Controller").effect("Softness")("Slider")';
+
+        depthLayer.enabled = false;
+        app.endUndoGroup();
+    }
+
+    function buildDepthGlow(comp, srcLayer, depthLayer) {
+        app.beginUndoGroup("Depth Scanner: Depth Glow");
+
+        // Depth-driven glow: brighter areas in the depth map glow
+        // Great for lightning effects, volumetric light, sci-fi
+
+        // Duplicate source
+        var glowLayer = srcLayer.duplicate();
+        glowLayer.name = "Depth Glow Layer";
+
+        // Set depth as luma matte
+        var depthCopy = comp.layers.add(depthLayer.source);
+        depthCopy.name = "Glow Depth Matte";
+        depthCopy.enabled = false;
+        depthCopy.moveAfter(glowLayer);
+        glowLayer.trackMatteType = TrackMatteType.LUMA;
+
+        // Add levels to depth matte for control
+        var lvl = depthCopy.Effects.addProperty("ADBE Levels2");
+        try {
+            lvl.property("ADBE Levels2-0003").setValue(200); // Input White
+        } catch(e) {}
+
+        // Add tint for color
+        var tint = glowLayer.Effects.addProperty("ADBE Tint");
+        tint.property("ADBE Tint-0001").setValue([0.0, 0.0, 0.5]); // Blue
+        tint.property("ADBE Tint-0002").setValue([0.5, 0.8, 1.0]); // Light blue
+        tint.property("ADBE Tint-0003").setValue(80);
+
+        // Add glow
+        var glow = glowLayer.Effects.addProperty("ADBE Glo2");
+        try {
+            glow.property("ADBE Glo2-0001").setValue(30); // Threshold
+            glow.property("ADBE Glo2-0002").setValue(20); // Radius
+            glow.property("ADBE Glo2-0003").setValue(100); // Intensity
+        } catch(e) {}
+
+        // Blend as Add
+        glowLayer.blendingMode = BlendingMode.ADD;
+        glowLayer.opacity.setValue(70);
+
+        // Controller
+        var ctrl = comp.layers.addNull();
+        ctrl.name = "Glow Controller";
+        ctrl.guideLayer = true;
+
+        var sIntensity = ctrl.Effects.addProperty("ADBE Slider Control");
+        sIntensity.name = "Glow Intensity";
+        sIntensity.property("ADBE Slider Control-0001").setValue(70);
+
+        var sRadius = ctrl.Effects.addProperty("ADBE Slider Control");
+        sRadius.name = "Glow Radius";
+        sRadius.property("ADBE Slider Control-0001").setValue(20);
+
+        var sThreshold = ctrl.Effects.addProperty("ADBE Slider Control");
+        sThreshold.name = "Depth Threshold";
+        sThreshold.property("ADBE Slider Control-0001").setValue(128);
+
+        var sInvert = ctrl.Effects.addProperty("ADBE Checkbox Control");
+        sInvert.name = "Invert (glow near instead of far)";
+
+        // Link
+        glowLayer.opacity.expression =
+            'thisComp.layer("Glow Controller").effect("Glow Intensity")("Slider")';
+        try {
+            glowLayer.effect("Glow")("Glow Radius").expression =
+                'thisComp.layer("Glow Controller").effect("Glow Radius")("Slider")';
+        } catch(e) {}
+
+        depthLayer.enabled = false;
+        app.endUndoGroup();
+    }
+
     var EFFECTS = {
         "EZ Matte": buildEZMatte,
         "Depth of Field": buildDoF,
@@ -741,6 +930,9 @@
         "Stereo 3D": buildStereo,
         "3D Mesh": build3DMesh,
         "Depth Transition": buildTransition,
+        "Blackout": buildBlackout,
+        "Light Wrap": buildLightWrap,
+        "Depth Glow": buildDepthGlow,
         "Color Grade": buildColorGrade
     };
 
@@ -825,6 +1017,9 @@
             "Stereo 3D": "Left/right eye views for 3D.\nSBS viewer with separation control.",
             "3D Mesh": "3D camera + lighting + depth\ndisplacement. Orbit, tilt, zoom.\nCC Environment or Displacement.",
             "Depth Transition": "Gradient wipe through Z-space.\nTransition + softness sliders.",
+            "Blackout": "Rolling blackout from far to near.\nStepped posterize option for\ngrid-by-grid power cut effect.",
+            "Light Wrap": "Edge glow at depth boundaries.\nFind Edges + Glow on depth map.\nWrap intensity + width controls.",
+            "Depth Glow": "Depth-driven glow effect.\nGlow by distance — sci-fi, lightning,\nvolumetric light. Color + threshold.",
             "Color Grade": "Split FG/BG grade by depth.\nWarm foreground, cool background."
         };
 
