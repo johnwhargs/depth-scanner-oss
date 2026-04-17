@@ -490,6 +490,17 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
             oninput="document.getElementById('tr-soft-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="tr-soft-v">0.10</span>
         </div>
+        <div class="field">
+          <label>Speed</label>
+          <input type="range" id="tr-speed" min="0.2" max="3.0" step="0.1" value="1.0"
+            oninput="document.getElementById('tr-speed-v').textContent=parseFloat(this.value).toFixed(1)+'x'"/>
+          <span class="range-val" id="tr-speed-v">1.0x</span>
+        </div>
+        <div class="field">
+          <label>Animate</label>
+          <button class="btn btn-sm" id="btn-tr-loop" style="width:auto;padding:4px 12px;margin:0">▶ Loop</button>
+          <button class="btn btn-sm" id="btn-tr-stop" style="width:auto;padding:4px 12px;margin:0;display:none">■ Stop</button>
+        </div>
       </div>
 
       <div style="margin-top:10px">
@@ -1942,6 +1953,13 @@ async function init() {
       } else {
         $("transition-note").style.display = "none";
       }
+      // Stop transition loop when switching tabs
+      if (state._trLooping) {
+        state._trLooping = false;
+        $("btn-tr-loop").style.display = "inline-block";
+        $("btn-tr-stop").style.display = "none";
+        if (state._trAnimId) cancelAnimationFrame(state._trAnimId);
+      }
       // Auto-preview on tab switch if enabled (skip transition — needs two images)
       if (state.fxEnabled && btn.dataset.fx !== "transition") runEffect(true);
     });
@@ -1963,6 +1981,52 @@ async function init() {
   // Posterize checkbox triggers live preview too
   $("posterize-on").addEventListener("change", onFxSliderChange);
   $("posterize-levels").addEventListener("input", onFxSliderChange);
+
+  // Transition ping-pong loop
+  state._trLooping = false;
+  state._trAnimId = null;
+
+  $("btn-tr-loop").addEventListener("click", function() {
+    if (!state.sessionId || !state._fileBBlob) {
+      log("Load a second image first", "warn");
+      return;
+    }
+    state._trLooping = true;
+    $("btn-tr-loop").style.display = "none";
+    $("btn-tr-stop").style.display = "inline-block";
+    state._trStartTime = performance.now();
+    animateTransition();
+  });
+
+  $("btn-tr-stop").addEventListener("click", function() {
+    state._trLooping = false;
+    $("btn-tr-loop").style.display = "inline-block";
+    $("btn-tr-stop").style.display = "none";
+    if (state._trAnimId) cancelAnimationFrame(state._trAnimId);
+  });
+
+  function animateTransition() {
+    if (!state._trLooping) return;
+    var elapsed = (performance.now() - state._trStartTime) / 1000;
+    var speed = parseFloat($("tr-speed").value) || 1.0;
+    var phase = (elapsed * speed) % 2.0; // 0→1→2 = one full ping-pong
+    var val = phase <= 1.0 ? phase : 2.0 - phase; // ping-pong 0→1→0
+
+    $("tr-val").value = val;
+    $("tr-val-v").textContent = val.toFixed(2);
+
+    // Trigger effect preview with debounce
+    if (!state._trFetching) {
+      state._trFetching = true;
+      runEffect(true).then(function() {
+        state._trFetching = false;
+      }).catch(function() {
+        state._trFetching = false;
+      });
+    }
+
+    state._trAnimId = requestAnimationFrame(animateTransition);
+  }
 
   // Format toggle
   $("output-format").addEventListener("change", () => {
