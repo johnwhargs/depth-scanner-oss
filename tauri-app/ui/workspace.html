@@ -331,7 +331,7 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
       <div class="fx-pane" id="fx-terrain">
         <div class="field">
           <label>Elevation</label>
-          <input type="range" id="ter-height" min="0.05" max="1.0" step="0.01" value="0.3"
+          <input type="range" id="ter-height" min="-1.0" max="1.0" step="0.01" value="0.3"
             oninput="document.getElementById('ter-height-v').textContent=parseFloat(this.value).toFixed(2)"/>
           <span class="range-val" id="ter-height-v">0.30</span>
         </div>
@@ -373,7 +373,16 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
           <label>Wireframe</label>
           <select id="ter-wire"><option value="0">Off</option><option value="1">On</option></select>
         </div>
-        <div style="font-size:9px;color:var(--muted);margin-top:4px">Click + drag on canvas to orbit</div>
+        <div class="field">
+          <label>Auto orbit</label>
+          <select id="ter-orbit">
+            <option value="none">None</option>
+            <option value="slow" selected>Slow</option>
+            <option value="medium">Medium</option>
+            <option value="fast">Fast</option>
+          </select>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">Click + drag to orbit · Scroll to zoom</div>
       </div>
     </div>
 
@@ -1338,7 +1347,9 @@ function renderTerrain(gl, t) {
     // Uniforms
     const height = parseFloat($("ter-height").value);
     const rx = parseFloat($("ter-rx").value) * Math.PI / 180;
-    const ry = parseFloat($("ter-ry").value) * Math.PI / 180 + t * 0.1; // slow auto-rotate
+    const orbitMode = $("ter-orbit").value;
+    const orbitSpeed = orbitMode === "fast" ? 0.5 : orbitMode === "medium" ? 0.25 : orbitMode === "slow" ? 0.1 : 0;
+    const ry = parseFloat($("ter-ry").value) * Math.PI / 180 + t * orbitSpeed;
     const zoom = parseFloat($("ter-zoom").value);
     const lightAngle = parseFloat($("ter-light").value);
     const colormapIdx = $("ter-colormap").selectedIndex;
@@ -1361,6 +1372,10 @@ function renderTerrain(gl, t) {
     gl.drawElements(gl.TRIANGLES, terrainIndexCount, gl.UNSIGNED_INT, 0);
 
     gl.disable(gl.DEPTH_TEST);
+    gl.disableVertexAttribArray(0);
+
+    // Restore fullscreen quad VAO for other effects
+    if (state.vao) gl.bindVertexArray(state.vao);
 }
 
 // ── Canvas mouse drag for terrain orbit + parallax ──────────────
