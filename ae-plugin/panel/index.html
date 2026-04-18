@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Depth Scanner</title>
+    <style>
+        :root {
+            --bg-primary: #1a1a1c;
+            --bg-secondary: #242426;
+            --bg-tertiary: #2e2e30;
+            --border: #3a3a3c;
+            --text-primary: #e5e5e7;
+            --text-secondary: #98989d;
+            --accent: #5a9ef0;
+            --accent-hover: #4a8ee0;
+            --accent-active: #3a7ed0;
+            --danger: #ff453a;
+            --success: #30d158;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "SF Mono", "Monaco", "Menlo", "Consolas", monospace;
+            font-size: 11px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .panel-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 12px;
+            gap: 10px;
+        }
+
+        /* ── Header ────────────────────────────── */
+
+        .header {
+            text-align: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header h1 {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            color: var(--text-primary);
+        }
+
+        .header .subtitle {
+            font-size: 9px;
+            color: var(--text-secondary);
+            letter-spacing: 1px;
+            margin-top: 2px;
+        }
+
+        /* ── Form sections ─────────────────────── */
+
+        .section {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .section-label {
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+
+        .row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .row label {
+            flex: 0 0 85px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-align: right;
+        }
+
+        /* ── Dropdowns ─────────────────────────── */
+
+        select {
+            flex: 1;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 6px 8px;
+            font-family: inherit;
+            font-size: 11px;
+            outline: none;
+            cursor: pointer;
+            -webkit-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2398989d'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            padding-right: 24px;
+        }
+
+        select:hover {
+            border-color: var(--accent);
+        }
+
+        select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 1px var(--accent);
+        }
+
+        /* ── Buttons ───────────────────────────── */
+
+        button {
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 600;
+            border: none;
+            border-radius: 4px;
+            padding: 7px 14px;
+            cursor: pointer;
+            outline: none;
+            transition: background 0.15s;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+            width: 100%;
+            padding: 10px 14px;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-primary:active {
+            background: var(--accent-active);
+        }
+
+        .btn-primary:disabled {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+            color: var(--text-primary);
+        }
+
+        /* ── Description ───────────────────────── */
+
+        .desc-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 8px 10px;
+            min-height: 48px;
+            font-size: 10px;
+            line-height: 1.5;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+        }
+
+        /* ── Divider ───────────────────────────── */
+
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 2px 0;
+        }
+
+        /* ── Status log ────────────────────────── */
+
+        .status-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-height: 0;
+        }
+
+        .status-log {
+            flex: 1;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 8px 10px;
+            font-size: 9px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            min-height: 60px;
+        }
+
+        /* ── Scrollbar ─────────────────────────── */
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="panel-container">
+
+        <!-- Header -->
+        <div class="header">
+            <h1>DEPTH SCANNER</h1>
+            <div class="subtitle">EFFECT BUILDER</div>
+        </div>
+
+        <!-- Layer Selection -->
+        <div class="section">
+            <div class="section-label">Layers</div>
+
+            <div class="row">
+                <label>Source Layer</label>
+                <select id="dd-source">
+                    <option value="0">(no comp open)</option>
+                </select>
+            </div>
+
+            <div class="row">
+                <label>Depth Map</label>
+                <select id="dd-depth">
+                    <option value="0">(no comp open)</option>
+                </select>
+            </div>
+
+            <div style="text-align: right; margin-top: 2px;">
+                <button class="btn-secondary" id="btn-refresh">Refresh</button>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Effect Selection -->
+        <div class="section">
+            <div class="section-label">Effect</div>
+
+            <div class="row">
+                <label>Effect</label>
+                <select id="dd-effect">
+                    <option value="EZ Matte">EZ Matte</option>
+                    <option value="Depth of Field">Depth of Field</option>
+                    <option value="Atmospheric Fog">Atmospheric Fog</option>
+                    <option value="Parallax / 2.5D">Parallax / 2.5D</option>
+                    <option value="Wigglegram">Wigglegram</option>
+                    <option value="Stereo 3D">Stereo 3D</option>
+                    <option value="3D Mesh">3D Mesh</option>
+                    <option value="Depth Transition">Depth Transition</option>
+                    <option value="Blackout">Blackout</option>
+                    <option value="Light Wrap">Light Wrap</option>
+                    <option value="Depth Glow">Depth Glow</option>
+                    <option value="Color Grade">Color Grade</option>
+                </select>
+            </div>
+
+            <div class="desc-box" id="effect-desc">Depth-driven alpha matte with cutoff and feather controls.</div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Apply Button -->
+        <button class="btn-primary" id="btn-apply">Apply Effect</button>
+
+        <!-- Status Log -->
+        <div class="status-container">
+            <div class="section-label">Log</div>
+            <div class="status-log" id="status-log"></div>
+        </div>
+
+    </div>
+
+    <script src="CSInterface.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
