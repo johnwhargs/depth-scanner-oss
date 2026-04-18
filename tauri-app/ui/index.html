@@ -143,9 +143,30 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
 .tl-thumbs{position:absolute;top:0;left:0;right:0;height:100%;display:flex;overflow:hidden;border-radius:3px;pointer-events:none}
 .tl-thumbs img{height:100%;flex-shrink:0;object-fit:cover;opacity:.6}
 .tl-ruler{display:flex;justify-content:space-between;font-family:var(--mono);font-size:8px;color:var(--border);padding:0 2px}
+
+/* ── Confirm modal ───────────────────────────────────── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;max-width:360px;width:90%;text-align:center}
+.modal-title{font-family:var(--mono);font-size:12px;color:var(--text);margin-bottom:8px;font-weight:600}
+.modal-msg{font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.6}
+.modal-btns{display:flex;gap:8px;justify-content:center}
+.modal-btns .btn{width:auto;padding:7px 20px;margin:0}
 </style>
 </head>
 <body>
+
+<!-- ═══ CONFIRM MODAL ══════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title" id="modal-title">Unsaved Render</div>
+    <div class="modal-msg" id="modal-msg">You have an unsaved depth map. Opening a new file will discard it.</div>
+    <div class="modal-btns">
+      <button class="btn btn-accent2" id="modal-ok">Discard</button>
+      <button class="btn" id="modal-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <!-- ═══ HEADER ══════════════════════════════════════════════════════ -->
 <div class="header">
@@ -315,6 +336,57 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
             <option value="anamorphic">Anamorphic</option>
             <option value="petzval">Petzval Swirl</option>
           </select>
+        </div>
+        <!-- Per-shape style sliders -->
+        <div id="bokeh-style-params">
+          <div class="field bokeh-param" data-shapes="hexagon">
+            <label title="Number of aperture blades (3-8)">Blades</label>
+            <input type="range" id="dof-blades" min="3" max="8" step="1" value="6" title="Aperture blade count"
+              oninput="document.getElementById('dof-blades-v').textContent=this.value"/>
+            <span class="range-val" id="dof-blades-v">6</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="hexagon,disc,gaussian">
+            <label title="How round the aperture shape is (0=sharp polygon, 100=circle)">Roundness</label>
+            <input type="range" id="dof-roundness" min="0" max="100" step="5" value="0" title="Iris roundness"
+              oninput="document.getElementById('dof-roundness-v').textContent=this.value+'%'"/>
+            <span class="range-val" id="dof-roundness-v">0%</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="hexagon,disc,ring,donut">
+            <label title="Rotation angle of the aperture shape">Rotation</label>
+            <input type="range" id="dof-rotation" min="0" max="360" step="5" value="0" title="Iris rotation in degrees"
+              oninput="document.getElementById('dof-rotation-v').textContent=this.value+'°'"/>
+            <span class="range-val" id="dof-rotation-v">0°</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="ring,donut,onion_ring">
+            <label title="Width of the bright ring relative to the disc">Ring width</label>
+            <input type="range" id="dof-ring" min="10" max="90" step="5" value="30" title="Ring thickness"
+              oninput="document.getElementById('dof-ring-v').textContent=this.value+'%'"/>
+            <span class="range-val" id="dof-ring-v">30%</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="anamorphic">
+            <label title="Horizontal squeeze ratio (lower = more oval)">Squeeze</label>
+            <input type="range" id="dof-squeeze" min="20" max="100" step="5" value="50" title="Anamorphic squeeze"
+              oninput="document.getElementById('dof-squeeze-v').textContent=this.value+'%'"/>
+            <span class="range-val" id="dof-squeeze-v">50%</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="petzval">
+            <label title="Intensity of the swirl vortex effect">Swirl</label>
+            <input type="range" id="dof-swirl" min="0" max="100" step="5" value="60" title="Swirl intensity"
+              oninput="document.getElementById('dof-swirl-v').textContent=this.value+'%'"/>
+            <span class="range-val" id="dof-swirl-v">60%</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="cat_eye">
+            <label title="How strong the cat-eye vignetting is at frame edges">Vignette</label>
+            <input type="range" id="dof-vignette" min="0" max="100" step="5" value="60" title="Cat-eye vignette strength"
+              oninput="document.getElementById('dof-vignette-v').textContent=this.value+'%'"/>
+            <span class="range-val" id="dof-vignette-v">60%</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="all">
+            <label title="Brightness boost for specular highlights in bokeh">Highlights</label>
+            <input type="range" id="dof-highlights" min="0" max="300" step="10" value="100" title="Highlight brightness boost"
+              oninput="document.getElementById('dof-highlights-v').textContent=this.value+'%'"/>
+            <span class="range-val" id="dof-highlights-v">100%</span>
+          </div>
         </div>
       </div>
 
@@ -982,6 +1054,7 @@ async function loadFile(file) {
   state.currentFile = file;
   state.currentBlob = file;
   state.depthBlob = null;
+  state._saved = false;
   state.sessionId = null;
   state.videoBlob = null;
   state.videoResultBlob = null;
@@ -1069,9 +1142,13 @@ function _updateEstimateInner() {
     const trimFrames = Math.round((state.trimOut - state.trimIn) * vi.frames);
     const processFrames = Math.ceil(trimFrames / every);
 
-    // Rough estimates: small~0.3s/frame, base~0.8s/frame, large~2s/frame on MPS
+    // Resolution-aware estimate: scale by megapixels relative to 1080p baseline
     const model = $("model").value;
-    const secPerFrame = model === "large" ? 2.0 : model === "base" ? 0.8 : 0.3;
+    const baseSec = model === "large" ? 1.5 : model === "base" ? 0.6 : 0.2;
+    const megapix = (vi.width * vi.height) / 1000000;
+    const resFactor = Math.max(0.5, megapix / 2.07); // 2.07MP = 1920x1080
+    // Use measured rate if available from previous run
+    const secPerFrame = state._measuredSecPerFrame || (baseSec * resFactor);
     const estSec = Math.round(processFrames * secPerFrame);
     const estMin = Math.floor(estSec / 60);
     const estRemSec = estSec % 60;
@@ -1101,6 +1178,22 @@ function _updateEstimateInner() {
 } // end _updateEstimateInner
 
 // Re-estimate listeners are added in init()
+
+// ── Confirm modal ────────────────────────────────────────────────
+function showConfirm(title, msg, okLabel) {
+  return new Promise(function(resolve) {
+    $("modal-title").textContent = title;
+    $("modal-msg").textContent = msg;
+    $("modal-ok").textContent = okLabel || "Discard";
+    $("modal-overlay").classList.add("show");
+    $("modal-ok").onclick = function() { $("modal-overlay").classList.remove("show"); resolve(true); };
+    $("modal-cancel").onclick = function() { $("modal-overlay").classList.remove("show"); resolve(false); };
+  });
+}
+
+function hasUnsavedRender() {
+  return state.depthBlob && !state._saved;
+}
 
 function formatSize(bytes) {
   if (bytes < 1024) return bytes + " B";
@@ -1237,6 +1330,7 @@ async function saveResult() {
   const blob = (format === "exr" && state._exrBlob) ? state._exrBlob : state.depthBlob;
   const defaultName = (state.currentFile?.name || "image").replace(/\.[^.]+$/, "") + `_depth.${ext}`;
   await saveBlob(blob, defaultName);
+  state._saved = true;
 }
 
 // ── Save video result ────────────────────────────────────────────
@@ -1396,6 +1490,7 @@ async function processVideo() {
     // Step 1: Upload video, extract frames, get session
     const fileSize = formatSize(state.videoBlob.size);
     $("btn-process").textContent = "Uploading…";
+    $("estimate-box").style.display = "none"; // live ETA takes over
     setIndeterminate(true);
     log(`Uploading video (${fileSize})…`, "info");
     log("This may take a moment for large files. The app is working — please wait.", "info");
@@ -1454,13 +1549,18 @@ async function processVideo() {
       logProgress(i + 1, total, "Depth");
       state._lastFrameIdx = i;
 
-      // Get source frame for compare views
-      const srcR = await fetch(`${SERVER}/process/video/source/${session.session_id}/${i}`);
-      if (srcR.ok) {
-        const srcBlob = await srcR.blob();
-        const srcUrl = URL.createObjectURL(srcBlob);
-        compare.sourceFrames[i] = srcUrl;
-        compare.sourceImg.src = srcUrl;
+      // Get source frame only if compare view is active (skip = 2x faster)
+      const needSource = state.viewMode && state.viewMode !== "depth";
+      if (needSource) {
+        const srcR = await fetch(`${SERVER}/process/video/source/${session.session_id}/${i}`);
+        if (srcR.ok) {
+          const srcBlob = await srcR.blob();
+          // Revoke previous to prevent memory leak
+          if (compare.sourceFrames[i]) URL.revokeObjectURL(compare.sourceFrames[i]);
+          const srcUrl = URL.createObjectURL(srcBlob);
+          compare.sourceFrames[i] = srcUrl;
+          compare.sourceImg.src = srcUrl;
+        }
       }
 
       // Get depth frame
@@ -1470,6 +1570,7 @@ async function processVideo() {
 
       const blob = await r.blob();
       depthBlobs.push(blob);
+      if (compare.depthFrames[i]) URL.revokeObjectURL(compare.depthFrames[i]);
       compare.depthFrames[i] = URL.createObjectURL(blob);
 
       // Create effects session from first frame so toggle works during processing
@@ -1504,6 +1605,7 @@ async function processVideo() {
 
     const totalInferTime = Math.round((Date.now() - inferStart) / 1000);
     const avgPerFrame = (totalInferTime / total).toFixed(1);
+    state._measuredSecPerFrame = totalInferTime / total; // cache for next estimate
     log(`All ${total} frames processed in ${totalInferTime}s (${avgPerFrame}s/frame)`, "success");
 
     // Step 3: Render final output (video or sequence)
@@ -1951,6 +2053,18 @@ async function init() {
   $("file-input").addEventListener("change", async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    // Warn if unsaved render exists
+    if (hasUnsavedRender()) {
+      const ok = await showConfirm("Unsaved Render", "You have an unsaved depth map. Opening a new file will discard it.", "Discard");
+      if (!ok) { e.target.value = ""; return; }
+    }
+    // Warn if mid-render
+    if (state.processing) {
+      const ok = await showConfirm("Processing", "Depth map is still rendering. Opening a new file will cancel it.", "Cancel Render");
+      if (!ok) { e.target.value = ""; return; }
+      state.processing = false;
+    }
     if (files.length > 1) {
       // Batch mode: multiple images
       state.batchFiles = [];
@@ -1998,7 +2112,14 @@ async function init() {
   $("btn-3d").addEventListener("click", goTo3D);
   $("nav-3d").addEventListener("click", goTo3D);
 
-  function goTo3D() {
+  async function goTo3D() {
+    if (state.processing) {
+      var ok = await showConfirm("Processing", "Depth map is still rendering. Switching will cancel it.", "Switch Anyway");
+      if (!ok) return;
+    } else if (hasUnsavedRender()) {
+      var ok = await showConfirm("Unsaved Render", "You have an unsaved depth map. It will be available in Effects Workspace via session.", "Continue");
+      if (!ok) return;
+    }
     var url = `workspace.html?server=${encodeURIComponent(SERVER)}`;
     if (state.sessionId) url += `&session=${state.sessionId}`;
     window.location.href = url;
@@ -2113,6 +2234,17 @@ async function init() {
   }
 
   // Format toggle
+  // Show/hide bokeh style sliders based on selected shape
+  function updateBokehParams() {
+    const shape = $("dof-bokeh").value;
+    document.querySelectorAll(".bokeh-param").forEach(function(el) {
+      const shapes = el.dataset.shapes;
+      el.style.display = (shapes === "all" || shapes.split(",").indexOf(shape) >= 0) ? "flex" : "none";
+    });
+  }
+  $("dof-bokeh").addEventListener("change", updateBokehParams);
+  updateBokehParams();
+
   $("output-format").addEventListener("change", () => {
     const fmt = $("output-format").value;
     const showCmap = fmt === "png_color";
