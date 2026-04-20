@@ -955,6 +955,9 @@ input[type="file"]{display:none}
         <div class="drop-sub">PNG · JPG · TIFF · BMP · WebP · MP4 · MOV · AVI</div>
       </div>
       <img id="preview-img" style="display:none" alt="Preview"/>
+      <div id="pivot-dot" style="display:none;position:absolute;width:20px;height:20px;border-radius:50%;border:2px solid #fff;background:rgba(255,50,50,.8);box-shadow:0 0 8px rgba(255,0,0,.6),0 0 2px #000;pointer-events:none;transform:translate(-50%,-50%);z-index:5"></div>
+      <div id="pivot-crosshair-h" style="display:none;position:absolute;height:1px;left:0;right:0;background:rgba(255,255,255,.3);pointer-events:none;z-index:4"></div>
+      <div id="pivot-crosshair-v" style="display:none;position:absolute;width:1px;top:0;bottom:0;background:rgba(255,255,255,.3);pointer-events:none;z-index:4"></div>
       <canvas id="elev-canvas" style="display:none;max-width:100%;max-height:100%;object-fit:contain;cursor:grab"></canvas>
       <canvas id="compare-canvas" width="1920" height="1080" style="display:none;max-width:100%;max-height:100%;object-fit:contain;cursor:col-resize"></canvas>
       <div id="frame-counter" style="display:none;position:absolute;top:10px;right:10px;background:rgba(0,0,0,.7);color:var(--ok);font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:4px"></div>
@@ -3106,7 +3109,47 @@ async function init() {
   // Wiggle pivot reset
   if ($("wig-pivot-reset")) $("wig-pivot-reset").addEventListener("click", () => {
     ["wig-pivot-x","wig-pivot-y"].forEach(id => { const e=$(id); if(e){e.value=0.5;e.dispatchEvent(new Event("input"));} });
+    updatePivotDot();
   });
+
+  // Pivot dot overlay
+  function updatePivotDot() {
+    const show = $("wig-pivot-dot")?.checked && getActiveFx() === "wiggle";
+    $("pivot-dot").style.display = show ? "" : "none";
+    $("pivot-crosshair-h").style.display = show ? "" : "none";
+    $("pivot-crosshair-v").style.display = show ? "" : "none";
+    if (!show) return;
+    const img = $("preview-img");
+    if (!img || img.style.display === "none") return;
+    const area = $("preview-area");
+    const areaRect = area.getBoundingClientRect();
+    const imgRect = img.getBoundingClientRect();
+    const px = parseFloat($("wig-pivot-x")?.value || 0.5);
+    const py = parseFloat($("wig-pivot-y")?.value || 0.5);
+    const dotX = (imgRect.left - areaRect.left) + imgRect.width * px;
+    const dotY = (imgRect.top - areaRect.top) + imgRect.height * py;
+    $("pivot-dot").style.left = dotX + "px";
+    $("pivot-dot").style.top = dotY + "px";
+    $("pivot-crosshair-h").style.top = dotY + "px";
+    $("pivot-crosshair-v").style.left = dotX + "px";
+  }
+  if ($("wig-pivot-dot")) $("wig-pivot-dot").addEventListener("change", updatePivotDot);
+  if ($("wig-pivot-x")) $("wig-pivot-x").addEventListener("input", updatePivotDot);
+  if ($("wig-pivot-y")) $("wig-pivot-y").addEventListener("input", updatePivotDot);
+  // Click preview to set pivot
+  $("preview-area").addEventListener("click", (e) => {
+    if (getActiveFx() !== "wiggle" || !$("wig-pivot-dot")?.checked) return;
+    const img = $("preview-img");
+    if (!img || img.style.display === "none") return;
+    const imgRect = img.getBoundingClientRect();
+    const px = Math.max(0, Math.min(1, (e.clientX - imgRect.left) / imgRect.width));
+    const py = Math.max(0, Math.min(1, (e.clientY - imgRect.top) / imgRect.height));
+    $("wig-pivot-x").value = px.toFixed(2); $("wig-pivot-x").dispatchEvent(new Event("input"));
+    $("wig-pivot-y").value = py.toFixed(2); $("wig-pivot-y").dispatchEvent(new Event("input"));
+    updatePivotDot();
+  });
+  // Update on resize
+  window.addEventListener("resize", updatePivotDot);
 
   // Save location picker — uses Tauri dialog.open() for folder selection
   if ($("btn-save-location")) {
