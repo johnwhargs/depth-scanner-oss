@@ -251,10 +251,10 @@ input[type="file"]{display:none}
 
     <!-- ── Batch drop zone ──── -->
     <div class="sb-section" id="batch-drop-section" style="padding:8px 16px">
-      <div id="batch-drop-zone" style="border:2px dashed var(--border);border-radius:var(--radius);padding:12px;text-align:center;cursor:pointer;font-size:10px;color:var(--muted);transition:all .15s" title="Drop multiple images for batch processing">
-        Drop images here for batch
+      <div id="batch-drop-zone" style="border:2px dashed var(--border);border-radius:var(--radius);padding:12px;text-align:center;cursor:pointer;font-size:10px;color:var(--muted);transition:all .15s" title="Drop multiple images or videos for batch processing">
+        Drop images or videos here for batch
       </div>
-      <input type="file" id="batch-file-input" accept="image/*" multiple style="display:none"/>
+      <input type="file" id="batch-file-input" accept="image/*,video/*,.mp4,.mov,.avi,.mkv,.webm" multiple style="display:none"/>
     </div>
 
     <!-- ── Open / File info ──── -->
@@ -1752,7 +1752,9 @@ function renderBatchList() {
   el.innerHTML = state.batchFiles.map((f, i) => {
     const icon = f.status === "done" ? "✓" : f.status === "processing" ? "⟳" : f.status === "error" ? "✗" : "·";
     const cls = f.status === "done" ? "file-done" : f.status === "processing" ? "file-processing" : "";
-    return `<div class="file-item"><span>${f.name}</span><span class="status-icon ${cls}">${icon}</span></div>`;
+    const isVid = isVideoFile(f.name) || f.blob?.type?.startsWith("video/");
+    const badge = isVid ? '<span style="font-size:8px;background:var(--accent2);color:#fff;padding:1px 4px;border-radius:3px;margin-left:4px">VID</span>' : '';
+    return `<div class="file-item"><span>${f.name}${badge}</span><span class="status-icon ${cls}">${icon}</span></div>`;
   }).join("");
   $("btn-process-batch").disabled = state.batchFiles.length === 0;
   $("btn-clear-batch").disabled = state.batchFiles.length === 0;
@@ -1870,16 +1872,20 @@ async function switchToBatchFile(idx) {
   // Load this file
   await loadFile(f.blob);
 
-  // Process depth if not done
-  if (!f.depthBlob && !f.sessionId) {
-    await processImage();
-    f.sessionId = state.sessionId;
-    f.depthBlob = state.depthBlob;
-  } else if (f.sessionId) {
-    state.sessionId = f.sessionId;
-    if (f.depthBlob) {
-      state.depthBlob = f.depthBlob;
-      showImage(f.depthBlob, "Depth map");
+  const isVid = isVideoFile(f.name) || f.blob.type.startsWith("video/");
+
+  // Process depth if not done (images only — videos process on export)
+  if (!isVid) {
+    if (!f.depthBlob && !f.sessionId) {
+      await processImage();
+      f.sessionId = state.sessionId;
+      f.depthBlob = state.depthBlob;
+    } else if (f.sessionId) {
+      state.sessionId = f.sessionId;
+      if (f.depthBlob) {
+        state.depthBlob = f.depthBlob;
+        showImage(f.depthBlob, "Depth map");
+      }
     }
   }
 
@@ -1917,13 +1923,20 @@ async function showBatchFxDialog() {
 
   const fx = getActiveFx();
   const count = state.batchFiles.length;
+  const vidCount = state.batchFiles.filter(f => isVideoFile(f.name) || f.blob?.type?.startsWith("video/")).length;
+  const imgCount = count - vidCount;
   const needsCanvas = ["elevation", "hologram"].includes(fx);
 
-  let warning = `${count} files · Effect: ${fx}\n`;
-  if (needsCanvas) {
-    warning += "⚠ 3D effects (elevation/hologram) require individual canvas recording. This will take longer and the app will be unresponsive during each render.\n";
+  let warning = `${count} files (${imgCount} images, ${vidCount} videos) · Effect: ${fx}\n`;
+  if (vidCount > 0 && fx === "wiggle") {
+    warning += "Videos will use the comb method (L-R-L-R frame interleaving) for 3D output.\n";
+  } else if (vidCount > 0) {
+    warning += `⚠ Videos only support wiggle (comb) effect — ${vidCount} video(s) will be skipped for ${fx}.\n`;
   }
-  warning += `Files without custom settings will use current slider values.\nEach file needs a depth session — unprocessed files will be auto-processed.`;
+  if (needsCanvas) {
+    warning += "⚠ 3D effects require individual canvas recording. App will be unresponsive during each render.\n";
+  }
+  warning += `Files without custom settings will use current slider values.\nUnprocessed images will be auto-depth-processed.`;
 
   $("batch-fx-modal-title").textContent = "Batch Effect Export";
   $("batch-fx-modal-msg").textContent = warning;
@@ -1998,8 +2011,32 @@ async function batchEffectExport() {
       const saved = state._batchFxSettings[f.name];
       const fx = saved ? saved.fx : defaultFx;
       const params = saved ? saved.params : defaultParams;
+      const isVid = isVideoFile(f.name) || f.blob.type.startsWith("video/");
 
-      // Ensure session exists
+      // Videos: use comb method for wiggle, skip unsupported effects
+      if (isVid) {
+        if (fx === "wiggle") {
+          // Video comb method
+          const fd = new FormData();
+          fd.append("file", f.blob, f.name);
+          fd.append("separation", (params.separation || 15).toString());
+          fd.append("interval", "3");
+          fd.append("blur_depth", "5");
+          fd.append("pivot_x", (params.pivot_x || 0.5).toString());
+          fd.append("pivot_y", (params.pivot_y || 0.5).toString());
+          const r = await fetch(`${SERVER}/wigglegram/comb`, { method: "POST", body: fd });
+          if (!r.ok) throw new Error("Video comb failed");
+          const result = await r.blob();
+          await saveBlobDirect(result, f.name.replace(/\.[^.]+$/, "") + `_comb3d.mp4`);
+        } else {
+          log(`[${i + 1}/${total}] ${f.name} — video skipped for ${fx} (images only)`, "warn");
+        }
+        log(`[${i + 1}/${total}] ${f.name} — done`, "success");
+        completed++;
+        continue;
+      }
+
+      // Ensure session exists (images only)
       if (!f.sessionId) {
         const fd = new FormData();
         fd.append("file", f.blob, f.name);
@@ -2955,7 +2992,7 @@ async function init() {
     if (!files || files.length < 2) { log("Drop 2+ images for batch", "warn"); return; }
     state.batchFiles = [];
     for (let i = 0; i < files.length; i++) {
-      if (files[i].type.startsWith("image/")) {
+      if (files[i].type.startsWith("image/") || files[i].type.startsWith("video/") || isVideoFile(files[i].name)) {
         state.batchFiles.push({ name: files[i].name, blob: files[i], status: "pending" });
       }
     }
