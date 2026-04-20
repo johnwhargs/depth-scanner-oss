@@ -1639,6 +1639,7 @@ async function processImage() {
     $("btn-fx-preview").disabled = false;
     $("btn-fx-apply").disabled = false;
     $("btn-3d").disabled = false;
+    updateBatchFxBar();
     // effects section always visible;
     const imgTime = ((Date.now() - imgStart) / 1000).toFixed(1);
     log(`Depth map ready (${imgTime}s)`, "success");
@@ -1848,9 +1849,11 @@ function loadBatchFxSettings(name) {
 }
 
 function updateBatchFxBar() {
-  const show = state.batchFiles.length > 1;
-  $("batch-fx-bar").style.display = show ? "" : "none";
-  if (!show) return;
+  const hasBatch = state.batchFiles.length > 1;
+  const fxOn = state.fxEnabled;
+  const hasSession = !!state.sessionId;
+  $("batch-fx-bar").style.display = (hasBatch && fxOn) ? "" : "none";
+  if (!hasBatch) return;
   const sel = $("batch-fx-select");
   const curVal = sel.value;
   sel.innerHTML = state.batchFiles.map((f, i) => {
@@ -1858,6 +1861,9 @@ function updateBatchFxBar() {
     return `<option value="${i}">${f.name}${hasSettings}</option>`;
   }).join("");
   if (curVal && curVal < state.batchFiles.length) sel.value = curVal;
+  // Disable export until at least one depth map exists
+  $("btn-batch-fx-export").disabled = !hasSession;
+  $("btn-batch-fx-save").disabled = !hasSession;
 }
 
 async function switchToBatchFile(idx) {
@@ -3077,6 +3083,7 @@ async function init() {
     state.fxEnabled = !state.fxEnabled;
     $("fx-toggle").classList.toggle("on", state.fxEnabled);
     $("fx-controls").classList.toggle("fx-disabled", !state.fxEnabled);
+    updateBatchFxBar();
     if (state.fxEnabled) {
       $("btn-fx-preview").disabled = false;
       $("btn-fx-apply").disabled = false;
