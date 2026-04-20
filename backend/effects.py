@@ -445,6 +445,7 @@ def apply_film_filter(
     depth: np.ndarray,
     blur_strength: float = 0,
     flash_intensity: float = 0,
+    flash_elevation: float = 0,
     vignette_strength: float = 0,
     light_leak_opacity: float = 0,
     light_leak_style: str = "amber-corner",
@@ -471,14 +472,17 @@ def apply_film_filter(
     if blur_strength > 0:
         ksize = int(blur_strength * 2) | 1  # odd kernel
         blurred = cv2.GaussianBlur(img, (ksize, ksize), 0)
-        # Blend: near=sharp, far=blurred
-        mask = d[:, :, np.newaxis]  # 0=near(sharp), 1=far(blurred)
+        # Blend: near(d=1)=sharp, far(d=0)=blurred
+        mask = (1.0 - d)[:, :, np.newaxis]  # invert: far→1(blurred), near→0(sharp)
         img = img * (1 - mask) + blurred * mask
 
     # 2. Flash simulation — additive light, steep depth falloff
     #    Real flash adds light (washes out near objects), doesn't just multiply
     if flash_intensity > 0:
-        falloff = np.power(1.0 - d, 3.0)  # cubic: near=1.0, mid≈0.12, far=0
+        # Depth Anything: near=1, far=0 — use d directly for near-biased flash
+        # Elevation shifts the depth cutoff: +0.5 = only very near, -0.5 = reaches further
+        d_shifted = np.clip(d + flash_elevation, 0, 1)
+        falloff = np.power(d_shifted, 3.0)  # cubic: near(d=1)=1.0, far(d=0)=0
         flash_light = flash_intensity * falloff
         # Radial hotspot (on-camera flash center bias)
         cy, cx = h / 2, w / 2

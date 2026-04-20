@@ -141,7 +141,7 @@ class DepthEngine:
 
     # ------------------------------------------------------------------
     def _infer(self, image: Image.Image) -> np.ndarray:
-        """Run inference; return float32 array normalised 0→1 (near=0, far=1)."""
+        """Run inference; return float32 array normalised 0→1 (near=1, far=0)."""
         result = self._pipe(image)
         raw = np.array(result["depth"], dtype=np.float32)
         lo, hi = raw.min(), raw.max()

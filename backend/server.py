@@ -872,7 +872,7 @@ async def wigglegram(
     film_filter = None
     try:
         ff = json.loads(film_filter_json)
-        valid_keys = {"blur_strength", "flash_intensity", "vignette_strength", "light_leak_opacity",
+        valid_keys = {"blur_strength", "flash_intensity", "flash_elevation", "vignette_strength", "light_leak_opacity",
                       "light_leak_style", "grain_amount", "grain_opacity", "halation_radius",
                       "contrast", "saturation", "fade", "tint_color", "tint_strength", "gradient_map"}
         string_keys = {"tint_color", "gradient_map", "light_leak_style"}

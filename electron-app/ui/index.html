@@ -613,6 +613,7 @@ input[type="file"]{display:none}
             <div class="field"><label>Grain opacity</label><input type="range" id="wig-grain-opacity" min="0" max="1" step="0.05" value="1" oninput="$('wig-grain-opacity-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-grain-opacity-v">1.00</span></div>
             <div class="field"><label>BG blur</label><input type="range" id="wig-bgblur" min="0" max="20" step="1" value="0" oninput="$('wig-bgblur-v').textContent=this.value+'px'"/><span class="range-val" id="wig-bgblur-v">0px</span></div>
             <div class="field"><label>Flash</label><input type="range" id="wig-flash" min="0" max="2" step="0.05" value="0" oninput="$('wig-flash-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-flash-v">0.00</span></div>
+            <div class="field"><label>Flash elev.</label><input type="range" id="wig-flash-elev" min="-0.5" max="0.5" step="0.05" value="0" oninput="$('wig-flash-elev-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-flash-elev-v">0.00</span></div>
             <div class="field"><label>Vignette</label><input type="range" id="wig-vignette" min="0" max="1" step="0.05" value="0" oninput="$('wig-vignette-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-vignette-v">0.00</span></div>
             <div class="field"><label>Light leak</label><input type="range" id="wig-leak" min="0" max="1" step="0.05" value="0" oninput="$('wig-leak-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-leak-v">0.00</span></div>
             <div class="field"><label>Leak style</label>
@@ -2138,6 +2139,7 @@ function getEffectParams(fx) {
       grain_opacity: parseFloat($("wig-grain-opacity")?.value || "1"),
       blur_strength: parseFloat($("wig-bgblur")?.value || "0"),
       flash_intensity: parseFloat($("wig-flash")?.value || "0"),
+      flash_elevation: parseFloat($("wig-flash-elev")?.value || "0"),
       vignette_strength: parseFloat($("wig-vignette")?.value || "0"),
       light_leak_opacity: parseFloat($("wig-leak")?.value || "0"),
       light_leak_style: $("wig-leak-style")?.value || "amber-corner",
