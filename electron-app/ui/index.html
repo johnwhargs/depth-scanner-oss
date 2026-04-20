@@ -837,6 +837,16 @@ input[type="file"]{display:none}
           <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="elev-scanlines"/> Scan lines</label>
         </div>
         <div class="field"><label>Scan opacity</label><input type="range" id="elev-scan-opacity" min="0" max="1" step="0.05" value="0.3" oninput="$('elev-scan-opacity-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="elev-scan-opacity-v">0.30</span></div>
+        <div class="field"><label>Scan speed</label><input type="range" id="elev-scan-speed" min="0" max="3" step="0.1" value="0.5" oninput="$('elev-scan-speed-v').textContent=parseFloat(this.value).toFixed(1)"/><span class="range-val" id="elev-scan-speed-v">0.5</span></div>
+        <div class="field"><label>Gap</label><input type="range" id="elev-gap" min="-100" max="100" step="1" value="0" oninput="$('elev-gap-v').textContent=this.value"/><span class="range-val" id="elev-gap-v">0</span></div>
+        <div class="field"><label>Grid type</label><select id="elev-grid-type" class="fx-select">
+          <option value="square">Square</option>
+          <option value="polygon">Polygon</option>
+          <option value="dot">Dot</option>
+          <option value="dotmatrix">Dot Matrix</option>
+          <option value="hex">Hexagon</option>
+          <option value="cross">Cross</option>
+        </select></div>
         <div style="display:flex;gap:6px;margin-top:6px">
           <button class="btn" id="elev-export-gif" style="font-size:10px;padding:3px 8px;flex:1">Export GIF</button>
           <button class="btn" id="elev-export-mp4" style="font-size:10px;padding:3px 8px;flex:1">Export MP4</button>
@@ -895,6 +905,16 @@ input[type="file"]{display:none}
           <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="holo-grid" checked/> Grid</label>
         </div>
         <div class="field"><label>Scan density</label><input type="range" id="holo-scan-density" min="2" max="8" step="1" value="3" oninput="$('holo-scan-density-v').textContent=this.value+'px'"/><span class="range-val" id="holo-scan-density-v">3px</span></div>
+        <div class="field"><label>Scan speed</label><input type="range" id="holo-scan-speed" min="0" max="3" step="0.1" value="0.5" oninput="$('holo-scan-speed-v').textContent=parseFloat(this.value).toFixed(1)"/><span class="range-val" id="holo-scan-speed-v">0.5</span></div>
+        <div class="field"><label>Gap</label><input type="range" id="holo-gap" min="-100" max="100" step="1" value="0" oninput="$('holo-gap-v').textContent=this.value"/><span class="range-val" id="holo-gap-v">0</span></div>
+        <div class="field"><label>Grid type</label><select id="holo-grid-type" class="fx-select">
+          <option value="square">Square</option>
+          <option value="polygon">Polygon</option>
+          <option value="dot">Dot</option>
+          <option value="dotmatrix">Dot Matrix</option>
+          <option value="hex">Hexagon</option>
+          <option value="cross">Cross</option>
+        </select></div>
         <div style="font-size:10px;color:var(--muted);margin:8px 0 3px">Animation</div>
         <div class="field"><label>Type</label><select id="holo-anim-select" class="fx-select">
           <option value="">Off</option>
@@ -3263,20 +3283,39 @@ async function init() {
       "uniform float uScanLines;",
       "uniform float uScanDensity;",
       "uniform float uScanOpacity;",
+      "uniform float uScanSpeed;",
+      "uniform float uGap;",
+      "uniform float uGridType;",
       "uniform float uResY;",
       "uniform float uTime;",
-      // Pseudo-random
       "float hash(float n) { return fract(sin(n) * 43758.5453); }",
       "float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }",
+      "",
+      // Animated scan line: pulse that sweeps along depth contours
+      // Fast at high elevation (near), decelerates toward back (far)
+      "float animScanLine(float depth, float density, float speed, float time) {",
+      "  float pulse = mod(time * speed, 1.0);",
+      "  float depthPhase = depth * 40.0 / density;",
+      "  float contour = mod(depthPhase - pulse * 40.0 / density, 1.0);",
+      "  float line = smoothstep(0.4, 0.5, contour) * (1.0 - smoothstep(0.5, 0.6, contour));",
+      // Acceleration: front (high depth) moves fast, back (low depth) slows
+      "  float accel = 0.5 + 0.5 * depth;",
+      "  return line * accel;",
+      "}",
+      "",
+      // Gap-adjusted dither: shift pattern based on uGap
+      "float gapScale(float coord, float gap) {",
+      "  float scale = 1.0 + gap * 0.02;",
+      "  return coord * scale;",
+      "}",
       "",
       "void main() {",
       // Mode 1: plain image texture
       "  if (uRenderMode > 0.5 && uRenderMode < 1.5) {",
       "    vec3 c = texture2D(uSrcTex, vUV).rgb;",
       "    if (uScanLines > 0.5) {",
-      "      float contour = mod(vDepth * 40.0 / uScanDensity, 1.0);",
-      "      float scanLine = smoothstep(0.4, 0.5, contour) * (1.0 - smoothstep(0.5, 0.6, contour));",
-      "      c *= 1.0 - scanLine * uScanOpacity;",
+      "      float sl = animScanLine(vDepth, uScanDensity, uScanSpeed, uTime);",
+      "      c *= 1.0 - sl * uScanOpacity;",
       "    }",
       "    gl_FragColor = vec4(c, 1.0);",
       "    return;",
@@ -3284,26 +3323,28 @@ async function init() {
       // Mode 2: hologram body
       "  if (uRenderMode > 1.5) {",
       "    vec2 uv = vUV;",
-      // Glitch: random horizontal offset on some lines
-      "    float glitchLine = floor(gl_FragCoord.y / 3.0);",
+      // Glitch: use depth-based lines instead of screen-space
+      "    float glitchLine = floor(vDepth * 200.0 + gl_FragCoord.x * 0.1);",
       "    float glitchRand = hash(glitchLine + floor(uTime * 8.0));",
       "    if (glitchRand > 0.97) {",
-      "      uv.x += (hash(glitchLine * 7.0 + uTime) - 0.5) * 0.08;",
+      "      uv.x += (hash(glitchLine * 7.0 + uTime) - 0.5) * 0.08 * vDepth;",
       "    }",
       "    vec3 img = texture2D(uSrcTex, uv).rgb;",
       "    float luma = dot(img, vec3(0.299, 0.587, 0.114));",
       "    vec3 tinted = uHoloColor * (0.2 + 0.8 * luma) * (0.4 + 0.6 * vDepth);",
-      // Chromatic aberration on glitch
+      // Chromatic aberration follows depth
       "    if (glitchRand > 0.97) {",
-      "      float rShift = texture2D(uSrcTex, uv + vec2(0.01, 0.0)).r;",
-      "      float bShift = texture2D(uSrcTex, uv - vec2(0.01, 0.0)).b;",
+      "      float rShift = texture2D(uSrcTex, uv + vec2(0.01 * vDepth, 0.0)).r;",
+      "      float bShift = texture2D(uSrcTex, uv - vec2(0.01 * vDepth, 0.0)).b;",
       "      tinted.r = uHoloColor.r * (0.2 + 0.8 * rShift) * (0.4 + 0.6 * vDepth);",
       "      tinted.b = uHoloColor.b * (0.2 + 0.8 * bShift) * (0.4 + 0.6 * vDepth);",
       "    }",
-      // Bayer 4x4 dither
+      // Dither with gap adjustment
       "    if (uDither > 0.5) {",
-      "      float px = floor(mod(gl_FragCoord.x / 2.0, 4.0));",
-      "      float py = floor(mod(gl_FragCoord.y / 2.0, 4.0));",
+      "      float gx = gapScale(gl_FragCoord.x, uGap);",
+      "      float gy = gapScale(gl_FragCoord.y, uGap);",
+      "      float px = floor(mod(gx / 2.0, 4.0));",
+      "      float py = floor(mod(gy / 2.0, 4.0));",
       "      float idx = py * 4.0 + px;",
       "      float threshold = 0.0;",
       "      if (idx < 0.5) threshold = 0.0/16.0;",
@@ -3325,15 +3366,14 @@ async function init() {
       "      float ditherMask = step(threshold, luma * 0.8 + 0.1);",
       "      tinted *= 0.3 + 0.7 * ditherMask;",
       "    }",
-      // Scan lines — contour-following (based on depth) with screen-space fallback
+      // Animated scan lines following depth contours
       "    if (uScanLines > 0.5) {",
-      "      float contour = mod(vDepth * 40.0 / uScanDensity, 1.0);",
-      "      float scanLine = smoothstep(0.4, 0.5, contour) * (1.0 - smoothstep(0.5, 0.6, contour));",
-      "      tinted *= 1.0 - scanLine * uScanOpacity;",
+      "      float sl = animScanLine(vDepth, uScanDensity, uScanSpeed, uTime);",
+      "      tinted *= 1.0 - sl * uScanOpacity;",
       "    }",
-      // CRT light sweep (bright band moving down)
-      "    float sweepPos = mod(uTime * 0.3, 1.4) - 0.2;",
-      "    float sweepDist = abs(gl_FragCoord.y / uResY - sweepPos);",
+      // CRT sweep follows depth elevation
+      "    float sweepPhase = mod(uTime * 0.3, 1.4) - 0.2;",
+      "    float sweepDist = abs(vDepth - sweepPhase);",
       "    float sweep = smoothstep(0.15, 0.0, sweepDist) * 0.35;",
       "    tinted += uHoloColor * sweep;",
       // Noise grain
@@ -3342,13 +3382,54 @@ async function init() {
       "    gl_FragColor = vec4(tinted, 1.0);",
       "    return;",
       "  }",
-      // Mode 0: grid wireframe
+      // Mode 0: grid wireframe — grid type patterns
       "  vec3 gradColor = mix(uGridColor2, uGridColor, vDepth);",
       "  float bright = 0.3 + 0.7 * vDepth;",
+      // Grid type masking (applied via gap-adjusted coords)
+      "  float gx = gapScale(gl_FragCoord.x, uGap);",
+      "  float gy = gapScale(gl_FragCoord.y, uGap);",
+      "  if (uGridType > 0.5) {",
+      // 1=polygon: triangle pattern
+      "    if (uGridType < 1.5) {",
+      "      float tri = abs(mod(gx * 0.15, 2.0) - 1.0) + abs(mod(gy * 0.15, 2.0) - 1.0);",
+      "      bright *= 0.4 + 0.6 * step(0.8, tri);",
+      "    }",
+      // 2=dot: circular dots
+      "    else if (uGridType < 2.5) {",
+      "      float dotSize = 3.0 + uGap * 0.05;",
+      "      vec2 cell = mod(vec2(gx, gy), dotSize * 2.0) - dotSize;",
+      "      float d = length(cell);",
+      "      bright *= smoothstep(dotSize * 0.4, dotSize * 0.5, d);",
+      "    }",
+      // 3=dot matrix: rectangular grid of bright dots
+      "    else if (uGridType < 3.5) {",
+      "      float sz = 4.0 + uGap * 0.04;",
+      "      vec2 cell = mod(vec2(gx, gy), sz) - sz * 0.5;",
+      "      float d = max(abs(cell.x), abs(cell.y));",
+      "      bright *= 1.0 - smoothstep(sz * 0.2, sz * 0.3, d) * 0.6;",
+      "    }",
+      // 4=hex: hexagonal grid
+      "    else if (uGridType < 4.5) {",
+      "      float sz = 6.0 + uGap * 0.06;",
+      "      vec2 p = vec2(gx, gy);",
+      "      p.x += mod(floor(p.y / sz), 2.0) * sz * 0.5;",
+      "      vec2 cell = mod(p, sz) - sz * 0.5;",
+      "      float d = length(cell);",
+      "      bright *= 0.3 + 0.7 * smoothstep(sz * 0.3, sz * 0.4, d);",
+      "    }",
+      // 5=cross: cross-hatch pattern
+      "    else {",
+      "      float cSize = 5.0 + uGap * 0.05;",
+      "      float cx = abs(mod(gx, cSize) - cSize * 0.5);",
+      "      float cy = abs(mod(gy, cSize) - cSize * 0.5);",
+      "      float cross = min(cx, cy);",
+      "      bright *= 0.3 + 0.7 * step(0.8, cross);",
+      "    }",
+      "  }",
+      // Animated scan lines
       "  if (uScanLines > 0.5) {",
-      "    float contour = mod(vDepth * 40.0 / uScanDensity, 1.0);",
-      "    float scanLine = smoothstep(0.4, 0.5, contour) * (1.0 - smoothstep(0.5, 0.6, contour));",
-      "    bright *= 1.0 - scanLine * uScanOpacity;",
+      "    float sl = animScanLine(vDepth, uScanDensity, uScanSpeed, uTime);",
+      "    bright *= 1.0 - sl * uScanOpacity;",
       "  }",
       "  if (uGlowPass > 0.5) {",
       "    gl_FragColor = vec4(gradColor * uGlow * 0.3, 1.0);",
@@ -3635,6 +3716,19 @@ async function init() {
       gl.uniform1f(gl.getUniformLocation(program, "uScanLines"), holoScan ? 1.0 : 0.0);
       gl.uniform1f(gl.getUniformLocation(program, "uScanDensity"), holoScanDensity);
       gl.uniform1f(gl.getUniformLocation(program, "uScanOpacity"), scanOpacity);
+      var scanSpeed = holoMode
+        ? parseFloat($("holo-scan-speed")?.value || "0.5")
+        : parseFloat($("elev-scan-speed")?.value || "0.5");
+      gl.uniform1f(gl.getUniformLocation(program, "uScanSpeed"), scanSpeed);
+      var gap = holoMode
+        ? parseFloat($("holo-gap")?.value || "0")
+        : parseFloat($("elev-gap")?.value || "0");
+      gl.uniform1f(gl.getUniformLocation(program, "uGap"), gap);
+      var gridTypeMap = { square: 0, polygon: 1, dot: 2, dotmatrix: 3, hex: 4, cross: 5 };
+      var gridTypeVal = holoMode
+        ? (gridTypeMap[$("holo-grid-type")?.value] || 0)
+        : (gridTypeMap[$("elev-grid-type")?.value] || 0);
+      gl.uniform1f(gl.getUniformLocation(program, "uGridType"), gridTypeVal);
       gl.uniform1f(gl.getUniformLocation(program, "uResY"), h);
       gl.uniform1f(gl.getUniformLocation(program, "uTime"), performance.now() / 1000.0);
 
@@ -3708,7 +3802,8 @@ async function init() {
     function startCrtLoop() {
       if (crtLoopId) return;
       function crtTick() {
-        if (holoMode && canvas.style.display !== "none" && !animId) {
+        var needsAnim = holoMode || (parseFloat($("elev-scan-speed")?.value || "0") > 0 && $("elev-scanlines")?.checked);
+        if (needsAnim && canvas.style.display !== "none" && !animId) {
           render();
         }
         crtLoopId = requestAnimationFrame(crtTick);
@@ -3741,7 +3836,7 @@ async function init() {
       canvas.style.display = "block";
       $("drop-zone").classList.add("hidden");
       render();
-      if (holoMode) startCrtLoop();
+      startCrtLoop();
     }
 
     function hideElevCanvas() {
@@ -3799,20 +3894,20 @@ async function init() {
     }, { passive: false });
 
     // --- Slider listeners ---
-    ["elev-height","elev-density","elev-linewidth","elev-glow","elev-grid-color","elev-grid-color2","elev-bg-color","elev-scan-opacity","elev-bloom","elev-smooth","elev-rz"].forEach(function(id) {
+    ["elev-height","elev-density","elev-linewidth","elev-glow","elev-grid-color","elev-grid-color2","elev-bg-color","elev-scan-opacity","elev-scan-speed","elev-gap","elev-bloom","elev-smooth","elev-rz"].forEach(function(id) {
       var el = $(id);
       if (el) el.addEventListener("input", function() { if (canvas.style.display !== "none") render(); });
     });
-    ["elev-grid","elev-image","elev-scanlines"].forEach(function(id) {
+    ["elev-grid","elev-image","elev-scanlines","elev-grid-type"].forEach(function(id) {
       var el = $(id);
       if (el) el.addEventListener("change", function() { if (canvas.style.display !== "none") render(); });
     });
     // Hologram slider listeners
-    ["holo-color1","holo-color2","holo-bg","holo-edges","holo-chromatic","holo-noise","holo-bloom","holo-transparency","holo-scan-density","holo-scan-opacity","holo-dither-size","holo-grid-density"].forEach(function(id) {
+    ["holo-color1","holo-color2","holo-bg","holo-edges","holo-chromatic","holo-noise","holo-bloom","holo-transparency","holo-scan-density","holo-scan-opacity","holo-scan-speed","holo-gap","holo-dither-size","holo-grid-density"].forEach(function(id) {
       var el = $(id);
       if (el) el.addEventListener("input", function() { if (canvas.style.display !== "none" && holoMode) render(); });
     });
-    ["holo-scanlines","holo-dither","holo-grid"].forEach(function(id) {
+    ["holo-scanlines","holo-dither","holo-grid","holo-grid-type"].forEach(function(id) {
       var el = $(id);
       if (el) el.addEventListener("change", function() { if (canvas.style.display !== "none" && holoMode) render(); });
     });
