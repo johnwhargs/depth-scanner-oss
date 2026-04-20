@@ -1764,7 +1764,7 @@ async function processBatch() {
   if (state.processing || state.batchFiles.length === 0) return;
   state.processing = true;
   $("btn-process-batch").disabled = true;
-  $("btn-open-batch").disabled = true;
+  if ($("btn-open-batch")) $("btn-open-batch").disabled = true;
 
   const model = $("model").value;
   const format = $("output-format").value;
@@ -1822,7 +1822,7 @@ async function processBatch() {
   state.processing = false;
   $("btn-process-batch").disabled = false;
   $("btn-process-batch").textContent = "Process All";
-  $("btn-open-batch").disabled = false;
+  if ($("btn-open-batch")) $("btn-open-batch").disabled = false;
 }
 
 function clearBatch() {
