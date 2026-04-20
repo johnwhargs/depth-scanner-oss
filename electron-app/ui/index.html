@@ -3043,6 +3043,7 @@ async function init() {
     renderBatchList();
     $("batch-controls").hidden = false;
     updateBatchFxBar();
+    $("btn-process").disabled = false;
     log(`Batch: ${files.length} files loaded`, "info");
     e.target.value = "";
   });
@@ -3063,6 +3064,7 @@ async function init() {
     renderBatchList();
     $("batch-controls").hidden = false;
     updateBatchFxBar();
+    $("btn-process").disabled = false;
     log(`Batch: ${state.batchFiles.length} files loaded`, "info");
   });
 
