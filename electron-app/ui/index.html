@@ -147,9 +147,15 @@ input[type="file"]{display:none}
 /* ── Batch file list ──────────────────────────────────── */
 .file-list{max-height:120px;overflow-y:auto;margin-bottom:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)}
 .file-list:empty{display:none}
-.file-item{padding:4px 8px;font-size:10px;font-family:var(--mono);color:var(--muted);border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+.file-item{padding:4px 8px;font-size:10px;font-family:var(--mono);color:var(--muted);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
 .file-item:last-child{border-bottom:none}
-.file-item .status-icon{font-size:10px}
+.file-item .fi-dot{width:6px;height:6px;border-radius:50%;background:var(--border);flex-shrink:0}
+.file-item .fi-dot.done{background:var(--ok);box-shadow:0 0 4px var(--ok)}
+.file-item .fi-dot.error{background:var(--err)}
+.file-item .fi-dot.processing{background:var(--warn);animation:pulse 1s ease infinite}
+.file-item .fi-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.file-item .fi-remove{background:none;border:none;color:var(--border);cursor:pointer;font-size:13px;padding:0 2px;line-height:1;flex-shrink:0;transition:color .15s}
+.file-item .fi-remove:hover{color:var(--err)}
 .file-done{color:var(--ok)}
 .file-processing{color:var(--warn)}
 
@@ -340,6 +346,17 @@ input[type="file"]{display:none}
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <input type="checkbox" id="auto-export"/>
         <label for="auto-export" style="font-size:11px;color:var(--muted);cursor:pointer">Export on completion</label>
+      </div>
+      <div id="review-option" style="display:none;align-items:center;gap:8px;margin-bottom:8px">
+        <input type="checkbox" id="review-each"/>
+        <label for="review-each" style="font-size:11px;color:var(--muted);cursor:pointer">Review each render</label>
+      </div>
+      <div id="review-bar" style="display:none;margin-bottom:8px;padding:6px 8px;background:var(--bg);border:1px solid var(--accent);border-radius:var(--radius);text-align:center">
+        <div style="font-size:10px;color:var(--text);margin-bottom:6px" id="review-label">Review render</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm" id="review-reject" style="flex:1;font-size:10px;border-color:var(--err);color:var(--err)">Reject</button>
+          <button class="btn btn-accent btn-sm" id="review-accept" style="flex:1;font-size:10px">Accept &amp; Next</button>
+        </div>
       </div>
       <div class="field">
         <label>Save to</label>
@@ -1757,12 +1774,21 @@ async function openBatch() {
 function renderBatchList() {
   const el = $("batch-files");
   el.innerHTML = state.batchFiles.map((f, i) => {
-    const icon = f.status === "done" ? "✓" : f.status === "processing" ? "⟳" : f.status === "error" ? "✗" : "·";
-    const cls = f.status === "done" ? "file-done" : f.status === "processing" ? "file-processing" : "";
+    const dotCls = f.status === "done" ? "done" : f.status === "processing" ? "processing" : f.status === "error" ? "error" : "";
     const isVid = isVideoFile(f.name) || f.blob?.type?.startsWith("video/");
     const badge = isVid ? '<span style="font-size:8px;background:var(--accent2);color:#fff;padding:1px 4px;border-radius:3px;margin-left:4px">VID</span>' : '';
-    return `<div class="file-item"><span>${f.name}${badge}</span><span class="status-icon ${cls}">${icon}</span></div>`;
+    return `<div class="file-item"><span class="fi-dot ${dotCls}"></span><span class="fi-name">${f.name}${badge}</span><button class="fi-remove" data-idx="${i}" title="Remove">&times;</button></div>`;
   }).join("");
+  // Wire remove buttons
+  el.querySelectorAll(".fi-remove").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      const idx = parseInt(e.target.dataset.idx);
+      state.batchFiles.splice(idx, 1);
+      renderBatchList();
+      updateBatchFxBar();
+      if (state.batchFiles.length <= 1) $("batch-controls").hidden = true;
+    });
+  });
   if ($("btn-process-batch")) $("btn-process-batch").disabled = state.batchFiles.length === 0;
   $("btn-clear-batch").disabled = state.batchFiles.length === 0;
 }
@@ -1771,14 +1797,14 @@ async function processBatch() {
   if (state.processing || state.batchFiles.length === 0) return;
   state.processing = true;
   $("btn-process").disabled = true;
-  if ($("btn-open-batch")) $("btn-open-batch").disabled = true;
 
   const model = $("model").value;
   const format = $("output-format").value;
   const colormap = $("colormap").value || "inferno";
   const total = state.batchFiles.length;
+  const reviewMode = $("review-each").checked;
 
-  log(`Batch: ${total} files, model=${model}`);
+  log(`Batch: ${total} files, model=${model}${reviewMode ? " (review mode)" : ""}`);
 
   for (let i = 0; i < total; i++) {
     const f = state.batchFiles[i];
@@ -1802,14 +1828,34 @@ async function processBatch() {
 
       const result = await r.blob();
       f.depthBlob = result;
+      f.sessionId = r.headers.get("X-Session-Id");
       f.status = "done";
 
-      // Auto-save each result
-      const ext = format === "exr" ? "exr" : "png";
-      const outName = f.name.replace(/\.[^.]+$/, "") + `_depth.${ext}`;
-      await saveBlobDirect(result, outName);
+      // Show result
+      state.currentFile = f.blob;
+      state.currentBlob = f.blob;
+      state.depthBlob = result;
+      state.sessionId = f.sessionId;
+      showImage(result, `${f.name} — depth`);
 
-      log(`[${i + 1}/${total}] ${outName}`, "success");
+      if (reviewMode) {
+        // Wait for user to accept or reject
+        const accepted = await waitForReview(f.name, i + 1, total);
+        if (accepted) {
+          const ext = format === "exr" ? "exr" : "png";
+          const outName = f.name.replace(/\.[^.]+$/, "") + `_depth.${ext}`;
+          await saveBlobDirect(result, outName);
+          log(`[${i + 1}/${total}] ${outName} — accepted`, "success");
+        } else {
+          f.status = "pending"; // reset — user can re-process later
+          log(`[${i + 1}/${total}] ${f.name} — rejected`, "warn");
+        }
+      } else {
+        const ext = format === "exr" ? "exr" : "png";
+        const outName = f.name.replace(/\.[^.]+$/, "") + `_depth.${ext}`;
+        await saveBlobDirect(result, outName);
+        log(`[${i + 1}/${total}] ${outName}`, "success");
+      }
     } catch (e) {
       f.status = "error";
       log(`[${i + 1}/${total}] ${f.name} — failed`, "error");
@@ -1817,6 +1863,7 @@ async function processBatch() {
     renderBatchList();
   }
 
+  $("review-bar").style.display = "none";
   setProgress(100);
   setTimeout(() => setProgress(0, false), 1000);
   log(`Batch complete: ${state.batchFiles.filter(f => f.status === "done").length}/${total} succeeded`, "success");
@@ -1824,7 +1871,15 @@ async function processBatch() {
   state.processing = false;
   $("btn-process").disabled = false;
   $("btn-process").textContent = "Process Depth Map";
-  if ($("btn-open-batch")) $("btn-open-batch").disabled = false;
+}
+
+function waitForReview(filename, current, total) {
+  return new Promise(resolve => {
+    $("review-bar").style.display = "";
+    $("review-label").textContent = `Review ${current}/${total}: ${filename}`;
+    $("review-accept").onclick = () => { $("review-bar").style.display = "none"; resolve(true); };
+    $("review-reject").onclick = () => { $("review-bar").style.display = "none"; resolve(false); };
+  });
 }
 
 function clearBatch() {
@@ -1832,6 +1887,8 @@ function clearBatch() {
   state._batchFxSettings = {};
   renderBatchList();
   updateBatchFxBar();
+  $("review-option").style.display = "none";
+  $("review-bar").style.display = "none";
 }
 
 // ── Batch Effect Export ─────────────────────────────────────────
@@ -1854,6 +1911,7 @@ function updateBatchFxBar() {
   const fxOn = state.fxEnabled;
   const hasSession = !!state.sessionId;
   $("batch-fx-bar").style.display = (hasBatch && fxOn) ? "" : "none";
+  $("review-option").style.display = hasBatch ? "flex" : "none";
   if (!hasBatch) return;
   const sel = $("batch-fx-select");
   const curVal = sel.value;
