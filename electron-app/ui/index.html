@@ -3249,6 +3249,7 @@ async function init() {
       "uniform sampler2D uDepth;",
       "uniform float uElevation;",
       "uniform float uElevOverride;",
+      "uniform float uGapOffset;",
       "uniform mat4 uView;",
       "uniform float uZoom;",
       "uniform float uAspect;",
@@ -3265,7 +3266,7 @@ async function init() {
       "  float x = (aGrid.x - 0.5) * 2.0;",
       "  float z = (aGrid.y - 0.5) * 2.0;",
       "  float elev = uElevOverride >= -99.0 ? uElevOverride : uElevation;",
-      "  float y = -depth * elev;",
+      "  float y = -depth * elev + uGapOffset;",
       // Apply view matrix (camera orbits around mesh)
       "  vec4 viewPos = uView * vec4(x, y, z, 1.0);",
       // Perspective projection
@@ -3720,6 +3721,7 @@ async function init() {
       // Common uniforms
       gl.uniform1f(gl.getUniformLocation(program, "uElevation"), elevation);
       gl.uniform1f(gl.getUniformLocation(program, "uElevOverride"), -100.0); // default: use uElevation
+      gl.uniform1f(gl.getUniformLocation(program, "uGapOffset"), 0.0); // default: no gap
       gl.uniformMatrix4fv(gl.getUniformLocation(program, "uView"), false, viewMat);
       gl.uniform1f(gl.getUniformLocation(program, "uZoom"), zoom);
       gl.uniform1f(gl.getUniformLocation(program, "uCamDist"), 4.0 / zoom);
@@ -3792,9 +3794,10 @@ async function init() {
         gl.drawElements(gl.TRIANGLES, meshTriCount, gl.UNSIGNED_INT, 0);
       }
 
-      // Reset override for grid pass
+      // Reset override for grid pass + apply gap as vertical offset
       if (splitElev) gl.uniform1f(gl.getUniformLocation(program, "uElevOverride"), gridElevVal);
       else gl.uniform1f(gl.getUniformLocation(program, "uElevOverride"), -100.0);
+      gl.uniform1f(gl.getUniformLocation(program, "uGapOffset"), gap * -0.005); // gap lifts grid off source
 
       // PASS 2: Wireframe grid on top (additive blend in holo mode)
       if (showGrid) {
