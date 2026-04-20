@@ -1535,10 +1535,10 @@ async function processImage() {
     log(`Processing image with Depth Anything V2 (${model})…`);
     setSidebarProgress(0, "Processing…", true);
     // Animate sidebar progress during inference
-    let _sidebarTick = 0;
-    const _sidebarTimer = setInterval(() => {
-      _sidebarTick = Math.min(_sidebarTick + 2, 90);
-      setSidebarProgress(_sidebarTick, "Processing… " + _sidebarTick + "%", true);
+    state._sidebarTick = 0;
+    state._sidebarTimer = setInterval(() => {
+      state._sidebarTick = Math.min(state._sidebarTick + 2, 90);
+      setSidebarProgress(state._sidebarTick, "Processing… " + state._sidebarTick + "%", true);
     }, 300);
 
     // Animated log progress during inference
@@ -1617,13 +1617,14 @@ async function processImage() {
     _logProgressEl = null;
     log(`Error: ${e.message}`, "error");
   } finally {
-    if (typeof _sidebarTimer !== "undefined") clearInterval(_sidebarTimer);
+    if (state._sidebarTimer) { clearInterval(state._sidebarTimer); state._sidebarTimer = null; }
+    setSidebarProgress(100, "Done", true);
+    setTimeout(() => setSidebarProgress(0, "", false), 1000);
     stopStatusPoll();
     state.processing = false;
     $("btn-process").disabled = false;
     $("btn-process").textContent = "Process Depth Map";
     setIndeterminate(false);
-    setSidebarProgress(0, "", false);
   }
 }
 
