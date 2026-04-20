@@ -863,6 +863,7 @@ input[type="file"]{display:none}
           <option value="blade">Blade Runner</option>
           <option value="nerv">NERV</option>
           <option value="tron">Tron</option>
+          <option value="robocop">Robocop</option>
           <option value="custom">Custom</option>
         </select></div>
         <div class="field"><label>Camera</label><select id="holo-cam-preset" class="fx-select">
@@ -885,6 +886,13 @@ input[type="file"]{display:none}
           <option value="noise">Noise</option>
         </select></div>
         <div class="field"><label>Elevation</label><div style="display:flex;align-items:center;gap:4px;flex:1"><button class="pm-btn" data-target="holo-elev-height" data-step="-0.05">−</button><input type="range" id="holo-elev-height" min="-1" max="1" step="0.01" value="0.3" style="flex:1" oninput="$('elev-height').value=this.value;$('elev-height-v').textContent=parseFloat(this.value).toFixed(2);$('holo-elev-v').textContent=parseFloat(this.value).toFixed(2)"/><button class="pm-btn" data-target="holo-elev-height" data-step="0.05">+</button></div><span class="range-val" id="holo-elev-v">0.30</span></div>
+        <div style="margin:4px 0">
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="holo-split-elev"/> Independent elevation</label>
+        </div>
+        <div id="holo-split-controls" style="display:none">
+          <div class="field"><label>Source elev.</label><input type="range" id="holo-src-elev" min="-1" max="1" step="0.01" value="0" oninput="$('holo-src-elev-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="holo-src-elev-v">0.00</span></div>
+          <div class="field"><label>Grid elev.</label><input type="range" id="holo-grid-elev" min="-1" max="1" step="0.01" value="0.3" oninput="$('holo-grid-elev-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="holo-grid-elev-v">0.30</span></div>
+        </div>
         <div class="field"><label>Rotate X</label><input type="range" id="holo-rx" min="-90" max="90" step="1" value="-35" oninput="$('elev-rx').value=this.value;$('elev-rx-v').textContent=this.value+'°';$('holo-rx-v').textContent=this.value+'°'"/><span class="range-val" id="holo-rx-v">-35°</span></div>
         <div class="field"><label>Rotate Y</label><input type="range" id="holo-ry" min="-180" max="180" step="1" value="15" oninput="$('elev-ry').value=this.value;$('elev-ry-v').textContent=this.value+'°';$('holo-ry-v').textContent=this.value+'°'"/><span class="range-val" id="holo-ry-v">15°</span></div>
         <div class="field"><label>Rotate Z</label><input type="range" id="holo-rz" min="-180" max="180" step="1" value="0" oninput="$('elev-rz').value=this.value;$('elev-rz-v').textContent=this.value+'°';$('holo-rz-v').textContent=this.value+'°'"/><span class="range-val" id="holo-rz-v">0°</span></div>
@@ -3238,6 +3246,7 @@ async function init() {
       "attribute vec2 aGrid;",
       "uniform sampler2D uDepth;",
       "uniform float uElevation;",
+      "uniform float uElevOverride;",
       "uniform mat4 uView;",
       "uniform float uZoom;",
       "uniform float uAspect;",
@@ -3253,7 +3262,8 @@ async function init() {
       // Mesh position (fixed in world space)
       "  float x = (aGrid.x - 0.5) * 2.0;",
       "  float z = (aGrid.y - 0.5) * 2.0;",
-      "  float y = -depth * uElevation;",
+      "  float elev = uElevOverride >= -99.0 ? uElevOverride : uElevation;",
+      "  float y = -depth * elev;",
       // Apply view matrix (camera orbits around mesh)
       "  vec4 viewPos = uView * vec4(x, y, z, 1.0);",
       // Perspective projection
@@ -3698,8 +3708,14 @@ async function init() {
         0,                  0,       0,                   1
       ]);
 
+      // Split elevation state
+      var splitElev = holoMode && $("holo-split-elev")?.checked;
+      var srcElevVal = splitElev ? parseFloat($("holo-src-elev")?.value || "0") : -100;
+      var gridElevVal = splitElev ? parseFloat($("holo-grid-elev")?.value || "0.3") : -100;
+
       // Common uniforms
       gl.uniform1f(gl.getUniformLocation(program, "uElevation"), elevation);
+      gl.uniform1f(gl.getUniformLocation(program, "uElevOverride"), -100.0); // default: use uElevation
       gl.uniformMatrix4fv(gl.getUniformLocation(program, "uView"), false, viewMat);
       gl.uniform1f(gl.getUniformLocation(program, "uZoom"), zoom);
       gl.uniform1f(gl.getUniformLocation(program, "uCamDist"), 4.0 / zoom);
@@ -3754,6 +3770,7 @@ async function init() {
 
       // PASS 1: Hologram body (filled triangles with tinted/dithered image)
       if (holoMode && srcLoaded) {
+        if (splitElev) gl.uniform1f(gl.getUniformLocation(program, "uElevOverride"), srcElevVal);
         gl.uniform1f(gl.getUniformLocation(program, "uRenderMode"), 2.0);
         gl.uniform1f(gl.getUniformLocation(program, "uGlowPass"), 0.0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshTriIBO);
@@ -3766,6 +3783,10 @@ async function init() {
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshTriIBO);
         gl.drawElements(gl.TRIANGLES, meshTriCount, gl.UNSIGNED_INT, 0);
       }
+
+      // Reset override for grid pass
+      if (splitElev) gl.uniform1f(gl.getUniformLocation(program, "uElevOverride"), gridElevVal);
+      else gl.uniform1f(gl.getUniformLocation(program, "uElevOverride"), -100.0);
 
       // PASS 2: Wireframe grid on top (additive blend in holo mode)
       if (showGrid) {
@@ -4241,12 +4262,13 @@ async function init() {
 
     // Hologram style presets
     var holoStyles = {
-      "gits":   { c1: "#00ff88", c2: "#003322", bg: "#000505" },
-      "akira":  { c1: "#ff6600", c2: "#441100", bg: "#050000" },
-      "eva":    { c1: "#9933ff", c2: "#220066", bg: "#050008" },
-      "blade":  { c1: "#00ccff", c2: "#003366", bg: "#000510" },
-      "nerv":   { c1: "#ff0066", c2: "#330015", bg: "#050005" },
-      "tron":   { c1: "#00dfff", c2: "#004466", bg: "#000008" }
+      "gits":     { c1: "#00ff88", c2: "#003322", bg: "#000505" },
+      "akira":    { c1: "#ff6600", c2: "#441100", bg: "#050000" },
+      "eva":      { c1: "#9933ff", c2: "#220066", bg: "#050008" },
+      "blade":    { c1: "#00ccff", c2: "#003366", bg: "#000510" },
+      "nerv":     { c1: "#ff0066", c2: "#330015", bg: "#050005" },
+      "tron":     { c1: "#00dfff", c2: "#004466", bg: "#000008" },
+      "robocop":  { c1: "#00ff44", c2: "#004411", bg: "#000800", splitElev: true, srcElev: 0, gridElev: 0.15, scanSpeed: 1.5, scanDensity: 4, gap: 20 }
     };
     $("holo-style").addEventListener("change", function() {
       var s = holoStyles[this.value];
@@ -4254,10 +4276,33 @@ async function init() {
       $("holo-color1").value = s.c1;
       $("holo-color2").value = s.c2;
       $("holo-bg").value = s.bg;
+      // Apply split elevation if preset defines it
+      if (s.splitElev) {
+        $("holo-split-elev").checked = true;
+        $("holo-split-controls").style.display = "";
+        $("holo-src-elev").value = s.srcElev; $("holo-src-elev-v").textContent = s.srcElev.toFixed(2);
+        $("holo-grid-elev").value = s.gridElev; $("holo-grid-elev-v").textContent = s.gridElev.toFixed(2);
+      } else {
+        $("holo-split-elev").checked = false;
+        $("holo-split-controls").style.display = "none";
+      }
+      if (s.scanSpeed !== undefined) { $("holo-scan-speed").value = s.scanSpeed; $("holo-scan-speed-v").textContent = s.scanSpeed.toFixed(1); }
+      if (s.scanDensity !== undefined) { $("holo-scan-density").value = s.scanDensity; $("holo-scan-density-v").textContent = s.scanDensity + "px"; }
+      if (s.gap !== undefined) { $("holo-gap").value = s.gap; $("holo-gap-v").textContent = s.gap; }
       if (canvas.style.display !== "none") render();
     });
     ["holo-color1","holo-color2","holo-bg"].forEach(function(id) {
       $(id).addEventListener("input", function() { $("holo-style").value = "custom"; });
+    });
+
+    // Split elevation toggle
+    $("holo-split-elev").addEventListener("change", function() {
+      $("holo-split-controls").style.display = this.checked ? "" : "none";
+      if (canvas.style.display !== "none") render();
+    });
+    ["holo-src-elev","holo-grid-elev"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("input", function() { if (canvas.style.display !== "none") render(); });
     });
 
     // Hologram sliders sync to shared elevation controls
