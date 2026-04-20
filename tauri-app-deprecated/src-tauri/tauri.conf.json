@@ -6,8 +6,10 @@
     "frontendDist": "../ui"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
         "title": "Depth Scanner OSS",
         "width": 1100,
         "height": 760,
