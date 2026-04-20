@@ -3406,36 +3406,6 @@ async function init() {
       "      float ditherMask = step(threshold, luma * 0.8 + 0.1);",
       "      tinted *= 0.3 + 0.7 * ditherMask;",
       "    }",
-      // Grid type pattern on hologram body
-      "    if (uGridType > 0.5) {",
-      "      float gx2 = gapScale(gl_FragCoord.x, uGap);",
-      "      float gy2 = gapScale(gl_FragCoord.y, uGap);",
-      "      float gridMask = 1.0;",
-      "      if (uGridType < 1.5) {",
-      "        float tri = abs(mod(gx2 * 0.15, 2.0) - 1.0) + abs(mod(gy2 * 0.15, 2.0) - 1.0);",
-      "        gridMask = 0.4 + 0.6 * step(0.8, tri);",
-      "      } else if (uGridType < 2.5) {",
-      "        float dotSz = 3.0 + uGap * 0.05;",
-      "        vec2 cell = mod(vec2(gx2, gy2), dotSz * 2.0) - dotSz;",
-      "        gridMask = smoothstep(dotSz * 0.3, dotSz * 0.5, length(cell));",
-      "      } else if (uGridType < 3.5) {",
-      "        float sz = 4.0 + uGap * 0.04;",
-      "        vec2 cell = mod(vec2(gx2, gy2), sz) - sz * 0.5;",
-      "        gridMask = 1.0 - smoothstep(sz * 0.2, sz * 0.3, max(abs(cell.x), abs(cell.y))) * 0.6;",
-      "      } else if (uGridType < 4.5) {",
-      "        float sz = 6.0 + uGap * 0.06;",
-      "        vec2 hp = vec2(gx2, gy2);",
-      "        hp.x += mod(floor(hp.y / sz), 2.0) * sz * 0.5;",
-      "        vec2 cell = mod(hp, sz) - sz * 0.5;",
-      "        gridMask = 0.3 + 0.7 * smoothstep(sz * 0.3, sz * 0.4, length(cell));",
-      "      } else {",
-      "        float cSz = 5.0 + uGap * 0.05;",
-      "        float cx2 = abs(mod(gx2, cSz) - cSz * 0.5);",
-      "        float cy2 = abs(mod(gy2, cSz) - cSz * 0.5);",
-      "        gridMask = 0.3 + 0.7 * step(0.8, min(cx2, cy2));",
-      "      }",
-      "      tinted *= gridMask;",
-      "    }",
       // Animated scan lines following depth contours
       "    if (uScanLines > 0.5) {",
       "      float sl = animScanLine(vDepth, uScanDensity, uScanSpeed, uTime);",
@@ -3452,50 +3422,9 @@ async function init() {
       "    gl_FragColor = vec4(tinted, 1.0);",
       "    return;",
       "  }",
-      // Mode 0: grid wireframe — grid type patterns
+      // Mode 0: grid wireframe
       "  vec3 gradColor = vDepth < 0.5 ? mix(uGridColor2, uHoloColorMid, vDepth * 2.0) : mix(uHoloColorMid, uGridColor, (vDepth - 0.5) * 2.0);",
       "  float bright = 0.3 + 0.7 * vDepth;",
-      // Grid type masking (applied via gap-adjusted coords)
-      "  float gx = gapScale(gl_FragCoord.x, uGap);",
-      "  float gy = gapScale(gl_FragCoord.y, uGap);",
-      "  if (uGridType > 0.5) {",
-      // 1=polygon: triangle pattern
-      "    if (uGridType < 1.5) {",
-      "      float tri = abs(mod(gx * 0.15, 2.0) - 1.0) + abs(mod(gy * 0.15, 2.0) - 1.0);",
-      "      bright *= 0.4 + 0.6 * step(0.8, tri);",
-      "    }",
-      // 2=dot: circular dots
-      "    else if (uGridType < 2.5) {",
-      "      float dotSize = 3.0 + uGap * 0.05;",
-      "      vec2 cell = mod(vec2(gx, gy), dotSize * 2.0) - dotSize;",
-      "      float d = length(cell);",
-      "      bright *= smoothstep(dotSize * 0.4, dotSize * 0.5, d);",
-      "    }",
-      // 3=dot matrix: rectangular grid of bright dots
-      "    else if (uGridType < 3.5) {",
-      "      float sz = 4.0 + uGap * 0.04;",
-      "      vec2 cell = mod(vec2(gx, gy), sz) - sz * 0.5;",
-      "      float d = max(abs(cell.x), abs(cell.y));",
-      "      bright *= 1.0 - smoothstep(sz * 0.2, sz * 0.3, d) * 0.6;",
-      "    }",
-      // 4=hex: hexagonal grid
-      "    else if (uGridType < 4.5) {",
-      "      float sz = 6.0 + uGap * 0.06;",
-      "      vec2 p = vec2(gx, gy);",
-      "      p.x += mod(floor(p.y / sz), 2.0) * sz * 0.5;",
-      "      vec2 cell = mod(p, sz) - sz * 0.5;",
-      "      float d = length(cell);",
-      "      bright *= 0.3 + 0.7 * smoothstep(sz * 0.3, sz * 0.4, d);",
-      "    }",
-      // 5=cross: cross-hatch pattern
-      "    else {",
-      "      float cSize = 5.0 + uGap * 0.05;",
-      "      float cx = abs(mod(gx, cSize) - cSize * 0.5);",
-      "      float cy = abs(mod(gy, cSize) - cSize * 0.5);",
-      "      float cross = min(cx, cy);",
-      "      bright *= 0.3 + 0.7 * step(0.8, cross);",
-      "    }",
-      "  }",
       // Animated scan lines
       "  if (uScanLines > 0.5) {",
       "    float sl = animScanLine(vDepth, uScanDensity, uScanSpeed, uTime);",
@@ -3537,9 +3466,12 @@ async function init() {
     );
 
     // --- Build mesh (lines + triangles) ---
-    function buildMesh(density) {
-      if (density === lastDensity) return;
+    var lastGridType = "";
+    function buildMesh(density, gridType) {
+      gridType = gridType || "square";
+      if (density === lastDensity && gridType === lastGridType) return;
       lastDensity = density;
+      lastGridType = gridType;
 
       var gridW = density, gridH = density;
       var verts = new Float32Array(gridW * gridH * 2);
@@ -3551,17 +3483,77 @@ async function init() {
         }
       }
 
-      // Line indices
+      // Line indices — topology varies by grid type
       var lineIdx = [];
-      for (var y2 = 0; y2 < gridH; y2++) {
-        for (var x2 = 0; x2 < gridW; x2++) {
-          var idx = y2 * gridW + x2;
-          if (x2 < gridW - 1) { lineIdx.push(idx, idx + 1); }
-          if (y2 < gridH - 1) { lineIdx.push(idx, idx + gridW); }
+      var I = function(x,y){ return y * gridW + x; };
+
+      if (gridType === "polygon" || gridType === "triangle") {
+        // Triangle mesh: horizontal + vertical + diagonal
+        for (var y2 = 0; y2 < gridH; y2++) {
+          for (var x2 = 0; x2 < gridW; x2++) {
+            if (x2 < gridW - 1) lineIdx.push(I(x2,y2), I(x2+1,y2));
+            if (y2 < gridH - 1) lineIdx.push(I(x2,y2), I(x2,y2+1));
+            // Diagonal: alternate direction per row for triangle pattern
+            if (x2 < gridW - 1 && y2 < gridH - 1) {
+              if (y2 % 2 === 0) lineIdx.push(I(x2,y2), I(x2+1,y2+1));
+              else lineIdx.push(I(x2+1,y2), I(x2,y2+1));
+            }
+          }
+        }
+      } else if (gridType === "dot" || gridType === "dotmatrix") {
+        // Dots: only very short lines (point-like) at each vertex
+        // Use tiny crosses at each grid point
+        for (var y2 = 0; y2 < gridH; y2++) {
+          for (var x2 = 0; x2 < gridW; x2++) {
+            // Connect to immediate right neighbor (short segment)
+            if (gridType === "dotmatrix") {
+              // Dot matrix: connect dots with lines at sparse intervals
+              if (x2 < gridW - 1 && x2 % 2 === 0) lineIdx.push(I(x2,y2), I(x2+1,y2));
+              if (y2 < gridH - 1 && y2 % 2 === 0) lineIdx.push(I(x2,y2), I(x2,y2+1));
+            } else {
+              // Pure dots: radial lines from each vertex (star pattern)
+              if (x2 < gridW - 1) lineIdx.push(I(x2,y2), I(x2+1,y2));
+              if (y2 < gridH - 1) lineIdx.push(I(x2,y2), I(x2,y2+1));
+              if (x2 < gridW - 1 && y2 < gridH - 1) lineIdx.push(I(x2,y2), I(x2+1,y2+1));
+              if (x2 > 0 && y2 < gridH - 1) lineIdx.push(I(x2,y2), I(x2-1,y2+1));
+            }
+          }
+        }
+      } else if (gridType === "hex") {
+        // Hexagonal: offset rows, connect in hex pattern
+        for (var y2 = 0; y2 < gridH; y2++) {
+          var odd = y2 % 2;
+          for (var x2 = 0; x2 < gridW; x2++) {
+            // Horizontal (skip every other for hex spacing)
+            if (x2 < gridW - 1 && (x2 + odd) % 2 === 0) lineIdx.push(I(x2,y2), I(x2+1,y2));
+            // Vertical connections (every other column, alternating rows)
+            if (y2 < gridH - 1) {
+              if ((x2 + odd) % 2 === 0) {
+                lineIdx.push(I(x2,y2), I(x2,y2+1));
+                if (x2 < gridW - 1) lineIdx.push(I(x2,y2), I(x2+1,y2+1));
+              }
+            }
+          }
+        }
+      } else if (gridType === "cross") {
+        // Cross-hatch: diagonals only (no horizontal/vertical)
+        for (var y2 = 0; y2 < gridH - 1; y2++) {
+          for (var x2 = 0; x2 < gridW - 1; x2++) {
+            lineIdx.push(I(x2,y2), I(x2+1,y2+1));
+            lineIdx.push(I(x2+1,y2), I(x2,y2+1));
+          }
+        }
+      } else {
+        // Square (default)
+        for (var y2 = 0; y2 < gridH; y2++) {
+          for (var x2 = 0; x2 < gridW; x2++) {
+            if (x2 < gridW - 1) lineIdx.push(I(x2,y2), I(x2+1,y2));
+            if (y2 < gridH - 1) lineIdx.push(I(x2,y2), I(x2,y2+1));
+          }
         }
       }
 
-      // Triangle indices (for filled mesh)
+      // Triangle indices (for filled mesh — always same topology)
       var triIdx = [];
       for (var y3 = 0; y3 < gridH - 1; y3++) {
         for (var x3 = 0; x3 < gridW - 1; x3++) {
@@ -3746,7 +3738,8 @@ async function init() {
       }
 
       if (smoothing !== lastSmoothing) uploadDepthTex(smoothing);
-      buildMesh(density);
+      var curGridType = holoMode ? ($("holo-grid-type")?.value || "square") : ($("elev-grid-type")?.value || "square");
+      buildMesh(density, curGridType);
 
       var w = canvas.width, h = canvas.height;
       gl.viewport(0, 0, w, h);
