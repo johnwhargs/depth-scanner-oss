@@ -264,7 +264,6 @@ input[type="file"]{display:none}
       <!-- Batch file list -->
       <div class="file-list" id="batch-files"></div>
       <div id="batch-controls" hidden>
-        <button class="btn btn-accent2 btn-sm" id="btn-process-batch">Process All</button>
         <button class="btn btn-sm" id="btn-clear-batch">Clear Batch</button>
       </div>
       <div id="file-type-badge" style="display:none;margin-bottom:8px">
@@ -1558,6 +1557,8 @@ function stopStatusPoll() {
 // ── Process depth map (auto-detects image vs video) ──────────────
 async function processDepthMap() {
   if (state._fileType === "video") return processVideo();
+  // If batch loaded, process all files
+  if (state.batchFiles.length > 1) return processBatch();
   return processImage();
 }
 
@@ -1757,14 +1758,14 @@ function renderBatchList() {
     const badge = isVid ? '<span style="font-size:8px;background:var(--accent2);color:#fff;padding:1px 4px;border-radius:3px;margin-left:4px">VID</span>' : '';
     return `<div class="file-item"><span>${f.name}${badge}</span><span class="status-icon ${cls}">${icon}</span></div>`;
   }).join("");
-  $("btn-process-batch").disabled = state.batchFiles.length === 0;
+  if ($("btn-process-batch")) $("btn-process-batch").disabled = state.batchFiles.length === 0;
   $("btn-clear-batch").disabled = state.batchFiles.length === 0;
 }
 
 async function processBatch() {
   if (state.processing || state.batchFiles.length === 0) return;
   state.processing = true;
-  $("btn-process-batch").disabled = true;
+  $("btn-process").disabled = true;
   if ($("btn-open-batch")) $("btn-open-batch").disabled = true;
 
   const model = $("model").value;
@@ -1782,7 +1783,7 @@ async function processBatch() {
     renderBatchList();
     setProgress(Math.round((i / total) * 100));
     logProgress(i + 1, total, "Batch");
-    $("btn-process-batch").textContent = `Processing ${i + 1}/${total}`;
+    $("btn-process").textContent = `Batch ${i + 1}/${total}`;
 
     try {
       const fd = new FormData();
@@ -1821,8 +1822,8 @@ async function processBatch() {
   log(`Batch complete: ${state.batchFiles.filter(f => f.status === "done").length}/${total} succeeded`, "success");
 
   state.processing = false;
-  $("btn-process-batch").disabled = false;
-  $("btn-process-batch").textContent = "Process All";
+  $("btn-process").disabled = false;
+  $("btn-process").textContent = "Process Depth Map";
   if ($("btn-open-batch")) $("btn-open-batch").disabled = false;
 }
 
@@ -2967,7 +2968,6 @@ async function init() {
     e.target.value = "";  // reset so same file can be re-selected
   });
   // Batch buttons
-  $("btn-process-batch").addEventListener("click", processBatch);
   $("btn-clear-batch").addEventListener("click", () => {
     clearBatch();
     $("batch-controls").hidden = true;
