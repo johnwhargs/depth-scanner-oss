@@ -166,6 +166,8 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
 .mp-tag.gif{background:rgba(240,167,50,.2);color:var(--warn)}
 .mp-item .mp-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 2px;flex-shrink:0}
 .mp-item .mp-remove:hover{color:var(--err)}
+.pm-btn{width:22px;height:22px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:3px;cursor:pointer;font-size:14px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center}
+.fx-select{flex:1;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;font-family:var(--mono)}
 </style>
 </head>
 <body>
@@ -173,8 +175,8 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
 <!-- ── Header ─────────────────────────────────────────────── -->
 <div class="header">
   <div class="header-left">
-    <a href="index.html" class="back-link">&larr; Back to Renderer</a>
-    <div class="header-title"><span>Effects</span> Workspace</div>
+    <a href="index.html" class="back-link">&larr; Back to Depth Map Render</a>
+    <div class="header-title"><span>Effects</span> Workshop</div>
   </div>
   <div class="status">
     <div class="dot dot-off" id="statusDot"></div>
@@ -449,70 +451,225 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
 
       <!-- Elevation -->
       <div class="fx-pane" id="pane-elevation">
-        <div class="field"><label>Elevation</label><input type="range" id="elv-height" min="-1" max="1" value="0.3" step="0.01"/><span class="range-val" id="elv-height-val">0.30</span></div>
-        <div class="field"><label>Rotate X</label><input type="range" id="elv-rx" min="-90" max="90" value="-35" step="1"/><span class="range-val" id="elv-rx-val">-35°</span></div>
-        <div class="field"><label>Rotate Y</label><input type="range" id="elv-ry" min="-180" max="180" value="15" step="1"/><span class="range-val" id="elv-ry-val">15°</span></div>
-        <div class="field"><label>Zoom</label><input type="range" id="elv-zoom" min="0.5" max="3" value="1.2" step="0.05"/><span class="range-val" id="elv-zoom-val">1.20</span></div>
-        <div class="field"><label>Grid density</label><input type="range" id="elv-density" min="10" max="80" value="40" step="1"/><span class="range-val" id="elv-density-val">40</span></div>
-        <div class="field"><label>Line width</label><input type="range" id="elv-linewidth" min="1" max="4" value="1" step="1"/><span class="range-val" id="elv-linewidth-val">1</span></div>
-        <div class="field"><label>Glow</label><input type="range" id="elv-glow" min="0" max="2" value="0.8" step="0.1"/><span class="range-val" id="elv-glow-val">0.8</span></div>
-        <div class="field"><label>Grid color</label><input type="color" id="elv-grid-color" value="#00ff88"/></div>
-        <div class="field"><label>BG color</label><input type="color" id="elv-bg-color" value="#0a0a14"/></div>
-        <div style="display:flex;gap:8px;margin:6px 0">
-          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="elv-grid" checked/> Grid</label>
-          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="elv-image"/> Image</label>
-          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="elv-scanlines"/> Scan lines</label>
+        <div class="field"><label>Glow style</label><select id="elev-glow-preset" class="fx-select">
+          <option value="">Custom</option>
+          <option value="cyber" selected>Cyberpunk</option>
+          <option value="neon-pink">Neon Pink</option>
+          <option value="vaporwave">Vaporwave</option>
+          <option value="matrix">Matrix</option>
+          <option value="fire">Inferno</option>
+          <option value="ice">Frozen</option>
+          <option value="gold">Gold Rush</option>
+          <option value="sunset">Sunset</option>
+          <option value="ocean">Deep Ocean</option>
+          <option value="toxic">Toxic</option>
+          <option value="plasma">Plasma</option>
+          <option value="hologram">Hologram</option>
+          <option value="midnight">Midnight</option>
+          <option value="lava">Lava</option>
+          <option value="aurora">Aurora</option>
+        </select></div>
+        <div class="field"><label>Camera</label><select id="elev-cam-preset" class="fx-select">
+          <option value="">—</option>
+          <option value="default">Default</option>
+          <option value="iso">Isometric</option>
+          <option value="top">Top</option>
+          <option value="front">Front</option>
+          <option value="side">Side</option>
+          <option value="close">Close</option>
+          <option value="rear">Rear</option>
+          <option value="wide">Wide</option>
+        </select></div>
+        <div class="field"><label>Elevation</label><div style="display:flex;align-items:center;gap:4px;flex:1"><button class="pm-btn" data-target="elev-height" data-step="-0.05">−</button><input type="range" id="elev-height" min="-1" max="1" step="0.01" value="0.3" style="flex:1" oninput="$('elev-height-v').textContent=parseFloat(this.value).toFixed(2)"/><button class="pm-btn" data-target="elev-height" data-step="0.05">+</button></div><span class="range-val" id="elev-height-v">0.30</span></div>
+        <div class="field"><label>Rotate X</label><input type="range" id="elev-rx" min="-90" max="90" step="1" value="-35" oninput="$('elev-rx-v').textContent=this.value+'°'"/><span class="range-val" id="elev-rx-v">-35°</span></div>
+        <div class="field"><label>Rotate Y</label><input type="range" id="elev-ry" min="-180" max="180" step="1" value="15" oninput="$('elev-ry-v').textContent=this.value+'°'"/><span class="range-val" id="elev-ry-v">15°</span></div>
+        <div class="field"><label>Rotate Z</label><input type="range" id="elev-rz" min="-180" max="180" step="1" value="0" oninput="$('elev-rz-v').textContent=this.value+'°'"/><span class="range-val" id="elev-rz-v">0°</span></div>
+        <div class="field"><label>Zoom</label><input type="range" id="elev-zoom" min="0.5" max="3" step="0.05" value="1.2" oninput="$('elev-zoom-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="elev-zoom-v">1.20</span></div>
+        <div style="font-size:10px;color:var(--muted);margin:8px 0 3px">Animation</div>
+        <div class="field"><label>Type</label><select id="elev-anim-select" class="fx-select">
+          <option value="">Off</option>
+          <option value="orbit-y">Orbit Y</option>
+          <option value="orbit-x">Orbit X</option>
+          <option value="orbit-y">Orbit</option>
+          <option value="wiggle">Wiggle</option>
+          <option value="handheld">Handheld</option>
+          <option value="dolly">Dolly Zoom</option>
+          <option value="breathe">Breathe</option>
+          <option value="orbit-x">Orbit X</option>
+          <option value="orbit-z">Orbit Z</option>
+          <option value="spin">Spin</option>
+          <option value="tilt">Tilt</option>
+          <option value="flyover">Flyover</option>
+        </select></div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <div class="field" style="flex:1;margin:0"><label>Speed</label><input type="range" id="elev-anim-speed" min="0.1" max="3" step="0.1" value="1.0" style="flex:1" oninput="$('elev-anim-speed-v').textContent=parseFloat(this.value).toFixed(1)+'×'"/><span class="range-val" id="elev-anim-speed-v">1.0×</span></div>
+          <div class="field" style="flex-shrink:0;margin:0"><label>Dir</label><select id="elev-anim-dir" class="fx-select" style="width:50px">
+            <option value="1">→</option>
+            <option value="-1">←</option>
+          </select></div>
         </div>
-        <div class="field"><label>Scan opacity</label><input type="range" id="elv-scan-opacity" min="0" max="1" value="0.3" step="0.05"/><span class="range-val" id="elv-scan-opacity-val">0.30</span></div>
-        <div class="btn-row">
-          <button class="btn" id="elv-preview">Preview</button>
-          <button class="btn btn-accent" id="elv-export">Export</button>
+        <div class="field"><label>Density</label><input type="range" id="elev-density" min="10" max="80" step="5" value="40" oninput="$('elev-density-v').textContent=this.value"/><span class="range-val" id="elev-density-v">40</span></div>
+        <div class="field"><label>Line width</label><input type="range" id="elev-linewidth" min="1" max="4" step="1" value="1" oninput="$('elev-linewidth-v').textContent=this.value+'px'"/><span class="range-val" id="elev-linewidth-v">1px</span></div>
+        <div class="field"><label>Glow</label><input type="range" id="elev-glow" min="0" max="1" step="0.05" value="0.8" oninput="$('elev-glow-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="elev-glow-v">0.80</span></div>
+        <div class="field"><label>Bloom</label><input type="range" id="elev-bloom" min="0" max="3" step="0.1" value="1.5" oninput="$('elev-bloom-v').textContent=parseFloat(this.value).toFixed(1)"/><span class="range-val" id="elev-bloom-v">1.5</span></div>
+        <div class="field"><label>Smoothing</label><input type="range" id="elev-smooth" min="0" max="20" step="1" value="3" oninput="$('elev-smooth-v').textContent=this.value"/><span class="range-val" id="elev-smooth-v">3</span></div>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <div class="field" style="flex:1;margin:0"><label>Near</label><input type="color" id="elev-grid-color" value="#00ff88"/></div>
+          <div class="field" style="flex:1;margin:0"><label>Far</label><input type="color" id="elev-grid-color2" value="#0044ff"/></div>
+          <div class="field" style="flex:1;margin:0"><label>BG</label><input type="color" id="elev-bg-color" value="#0a0a14"/></div>
         </div>
+        <div style="display:flex;gap:12px;margin-bottom:4px;flex-wrap:wrap">
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="elev-grid" checked/> Grid</label>
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="elev-image"/> Image</label>
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="elev-scanlines"/> Scan lines</label>
+        </div>
+        <div class="field"><label>Scan opacity</label><input type="range" id="elev-scan-opacity" min="0" max="1" step="0.05" value="0.3" oninput="$('elev-scan-opacity-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="elev-scan-opacity-v">0.30</span></div>
+        <div class="field"><label>Scan speed</label><input type="range" id="elev-scan-speed" min="0" max="3" step="0.1" value="0.5" oninput="$('elev-scan-speed-v').textContent=parseFloat(this.value).toFixed(1)"/><span class="range-val" id="elev-scan-speed-v">0.5</span></div>
+        <div class="field"><label>Scan dir</label><select id="elev-scan-dir" class="fx-select" style="width:80px"><option value="1">Close → Back</option><option value="-1">Back → Close</option></select></div>
+        <div class="field"><label>Gap</label><input type="range" id="elev-gap" min="-100" max="100" step="1" value="0" oninput="$('elev-gap-v').textContent=this.value"/><span class="range-val" id="elev-gap-v">0</span></div>
+        <div class="field"><label>Grid type</label><select id="elev-grid-type" class="fx-select">
+          <option value="square">Square</option>
+          <option value="polygon">Polygon</option>
+          <option value="dot">Dot</option>
+          <option value="dotmatrix">Dot Matrix</option>
+          <option value="hex">Hexagon</option>
+          <option value="cross">Cross</option>
+        </select></div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn" id="elev-export-gif" style="font-size:10px;padding:3px 8px;flex:1">Export GIF</button>
+          <button class="btn" id="elev-export-mp4" style="font-size:10px;padding:3px 8px;flex:1">Export MP4</button>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">Drag preview to orbit · Scroll to zoom</div>
       </div>
 
       <!-- Hologram -->
       <div class="fx-pane" id="pane-hologram">
-        <div class="field"><label>Style</label>
-          <select id="hol-style">
-            <option value="gits">Ghost in the Shell</option>
-            <option value="akira">Akira</option>
-            <option value="eva">Evangelion</option>
-            <option value="blade">Blade Runner</option>
-            <option value="nerv">NERV</option>
-            <option value="tron">Tron</option>
-            <option value="robocop">Robocop</option>
-            <option value="predator">Predator</option>
-            <option value="ironman">Iron Man</option>
+        <div class="field"><label>Style</label><select id="holo-style" class="fx-select">
+          <option value="gits">Ghost in the Shell</option>
+          <option value="akira">Akira</option>
+          <option value="eva">Evangelion</option>
+          <option value="blade">Blade Runner</option>
+          <option value="nerv">NERV</option>
+          <option value="tron">Tron</option>
+          <option value="robocop">Robocop</option>
+          <option value="predator">Predator</option>
+          <option value="ironman">Iron Man</option>
+          <option value="matrix">Matrix</option>
+          <option value="terminator">Terminator</option>
+          <option value="alien">Alien</option>
+          <option value="minority">Minority Report</option>
+          <option value="cyberpunk">Cyberpunk</option>
+          <option value="westworld">Westworld</option>
+          <option value="prometheus">Prometheus</option>
+          <option value="custom">Custom</option>
+        </select></div>
+        <div class="field"><label>Camera</label><select id="holo-cam-preset" class="fx-select">
+          <option value="">—</option>
+          <option value="default">Default</option>
+          <option value="iso">Isometric</option>
+          <option value="top">Top</option>
+          <option value="front">Front</option>
+          <option value="side">Side</option>
+          <option value="close">Close</option>
+          <option value="rear">Rear</option>
+          <option value="wide">Wide</option>
+        </select></div>
+        <div class="field"><label>Dither</label><select id="holo-dither-style" class="fx-select">
+          <option value="none">None</option>
+          <option value="bayer4" selected>Bayer 4×4</option>
+          <option value="bayer8">Bayer 8×8</option>
+          <option value="halftone">Halftone</option>
+          <option value="crosshatch">Crosshatch</option>
+          <option value="noise">Noise</option>
+        </select></div>
+        <div class="field"><label>Elevation</label><div style="display:flex;align-items:center;gap:4px;flex:1"><button class="pm-btn" data-target="holo-elev-height" data-step="-0.05">−</button><input type="range" id="holo-elev-height" min="-1" max="1" step="0.01" value="0.3" style="flex:1" oninput="$('elev-height').value=this.value;$('elev-height-v').textContent=parseFloat(this.value).toFixed(2);$('holo-elev-v').textContent=parseFloat(this.value).toFixed(2)"/><button class="pm-btn" data-target="holo-elev-height" data-step="0.05">+</button></div><span class="range-val" id="holo-elev-v">0.30</span></div>
+        <div style="margin:4px 0">
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="holo-split-elev"/> Independent elevation</label>
+        </div>
+        <div id="holo-split-controls" style="display:none">
+          <div class="field"><label>Source elev.</label><input type="range" id="holo-src-elev" min="-1" max="1" step="0.01" value="0" oninput="$('holo-src-elev-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="holo-src-elev-v">0.00</span></div>
+          <div class="field"><label>Grid elev.</label><input type="range" id="holo-grid-elev" min="-1" max="1" step="0.01" value="0.3" oninput="$('holo-grid-elev-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="holo-grid-elev-v">0.30</span></div>
+        </div>
+        <div class="field"><label>Rotate X</label><input type="range" id="holo-rx" min="-90" max="90" step="1" value="-35" oninput="$('elev-rx').value=this.value;$('elev-rx-v').textContent=this.value+'°';$('holo-rx-v').textContent=this.value+'°'"/><span class="range-val" id="holo-rx-v">-35°</span></div>
+        <div class="field"><label>Rotate Y</label><input type="range" id="holo-ry" min="-180" max="180" step="1" value="15" oninput="$('elev-ry').value=this.value;$('elev-ry-v').textContent=this.value+'°';$('holo-ry-v').textContent=this.value+'°'"/><span class="range-val" id="holo-ry-v">15°</span></div>
+        <div class="field"><label>Rotate Z</label><input type="range" id="holo-rz" min="-180" max="180" step="1" value="0" oninput="$('elev-rz').value=this.value;$('elev-rz-v').textContent=this.value+'°';$('holo-rz-v').textContent=this.value+'°'"/><span class="range-val" id="holo-rz-v">0°</span></div>
+        <div class="field"><label>Zoom</label><input type="range" id="holo-zoom" min="0.5" max="3" step="0.05" value="1.2" oninput="$('elev-zoom').value=this.value;$('elev-zoom-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="holo-zoom-v">1.20</span></div>
+        <div class="field"><label>Density</label><input type="range" id="holo-density" min="10" max="80" step="5" value="40" oninput="$('elev-density').value=this.value;$('elev-density-v').textContent=this.value;$('holo-density-v').textContent=this.value"/><span class="range-val" id="holo-density-v">40</span></div>
+        <div class="field"><label>Line width</label><input type="range" id="holo-linewidth" min="1" max="4" step="1" value="1" oninput="$('elev-linewidth').value=this.value;$('elev-linewidth-v').textContent=this.value+'px'"/><span class="range-val" id="holo-linewidth-v">1px</span></div>
+        <div class="field"><label>Glow</label><input type="range" id="holo-glow" min="0" max="1" step="0.05" value="0.8" oninput="$('elev-glow').value=this.value;$('elev-glow-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="holo-glow-v">0.80</span></div>
+        <div class="field"><label>Bloom</label><input type="range" id="holo-bloom2" min="0" max="3" step="0.1" value="1.5" oninput="$('elev-bloom').value=this.value;$('elev-bloom-v').textContent=parseFloat(this.value).toFixed(1)"/><span class="range-val" id="holo-bloom2-v">1.5</span></div>
+        <div class="field"><label>Smoothing</label><input type="range" id="holo-smooth" min="0" max="20" step="1" value="3" oninput="$('elev-smooth').value=this.value;$('elev-smooth-v').textContent=this.value;$('holo-smooth-v').textContent=this.value"/><span class="range-val" id="holo-smooth-v">3</span></div>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <div class="field" style="flex:1;margin:0"><label>Near</label><input type="color" id="holo-color1" value="#00ff88"/></div>
+          <div class="field" style="flex:1;margin:0"><label>Mid</label><input type="color" id="holo-color-mid" value="#00aa55"/></div>
+          <div class="field" style="flex:1;margin:0"><label>Far</label><input type="color" id="holo-color2" value="#003322"/></div>
+        </div>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <div class="field" style="flex:1;margin:0"><label>BG</label><input type="color" id="holo-bg" value="#000505"/></div>
+          <div class="field" style="flex:1;margin:0"><label>Source</label><input type="color" id="holo-src-color" value="#ffffff"/></div>
+        </div>
+        <div class="field"><label>Source tint</label><input type="range" id="holo-src-tint" min="0" max="1" step="0.05" value="0" oninput="$('holo-src-tint-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="holo-src-tint-v">0.00</span></div>
+        <!-- Gradient map builder -->
+        <div style="margin:6px 0;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:4px">
+          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Gradient Map</div>
+          <canvas id="holo-gradmap" width="240" height="16" style="width:100%;height:16px;border-radius:3px;border:1px solid var(--border);cursor:pointer;margin-bottom:4px"></canvas>
+          <div class="field" style="margin:0"><label>Preset</label><select id="holo-gradmap-preset" class="fx-select" style="font-size:10px">
+            <option value="none">None (use colors)</option>
             <option value="matrix">Matrix</option>
-            <option value="terminator">Terminator</option>
-            <option value="alien">Alien</option>
-            <option value="minority">Minority Report</option>
-            <option value="cyberpunk">Cyberpunk</option>
-            <option value="westworld">Westworld</option>
-            <option value="prometheus">Prometheus</option>
-          </select>
+            <option value="infrared">Infrared</option>
+            <option value="ocean">Ocean</option>
+            <option value="fire">Fire</option>
+            <option value="neon">Neon</option>
+            <option value="thermal">Thermal</option>
+            <option value="midnight">Midnight</option>
+            <option value="custom">Custom</option>
+          </select></div>
         </div>
-        <div class="field"><label>Color 1</label><input type="color" id="hol-color1" value="#00ff88"/></div>
-        <div class="field"><label>Color 2</label><input type="color" id="hol-color2" value="#004422"/></div>
-        <div class="field"><label>BG color</label><input type="color" id="hol-bg" value="#000000"/></div>
-        <div class="field"><label>Edge strength</label><input type="range" id="hol-edges" min="0" max="2" value="0.8" step="0.1"/><span class="range-val" id="hol-edges-val">0.8</span></div>
-        <div class="field"><label>Chromatic</label><input type="range" id="hol-chromatic" min="0" max="1" value="0.3" step="0.05"/><span class="range-val" id="hol-chromatic-val">0.30</span></div>
-        <div class="field"><label>Noise</label><input type="range" id="hol-noise" min="0" max="0.5" value="0.15" step="0.01"/><span class="range-val" id="hol-noise-val">0.15</span></div>
-        <div class="field"><label>Bloom</label><input type="range" id="hol-bloom" min="0" max="3" value="1.5" step="0.1"/><span class="range-val" id="hol-bloom-val">1.5</span></div>
-        <div class="field"><label>Transparency</label><input type="range" id="hol-transparency" min="0" max="1" value="0.6" step="0.05"/><span class="range-val" id="hol-transparency-val">0.60</span></div>
-        <div class="field"><label>Scan density</label><input type="range" id="hol-scan-density" min="2" max="8" value="3" step="1"/><span class="range-val" id="hol-scan-density-val">3px</span></div>
-        <div class="field"><label>Scan opacity</label><input type="range" id="hol-scan-opacity" min="0" max="1" value="0.4" step="0.05"/><span class="range-val" id="hol-scan-opacity-val">0.40</span></div>
-        <div class="field"><label>Dither size</label><input type="range" id="hol-dither-size" min="1" max="4" value="2" step="1"/><span class="range-val" id="hol-dither-size-val">2</span></div>
-        <div class="field"><label>Grid density</label><input type="range" id="hol-grid-density" min="10" max="60" value="30" step="1"/><span class="range-val" id="hol-grid-density-val">30</span></div>
-        <div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
-          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="hol-scanlines" checked/> Scan lines</label>
-          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="hol-dither" checked/> Dither</label>
-          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="hol-grid-overlay" checked/> Grid</label>
+        <div style="display:flex;gap:12px;margin:4px 0;flex-wrap:wrap">
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="holo-scanlines" checked/> Scan lines</label>
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="holo-dither" checked/> Dither</label>
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="holo-grid" checked/> Grid</label>
         </div>
-        <div class="btn-row">
-          <button class="btn" id="hol-preview">Preview</button>
-          <button class="btn btn-accent" id="hol-export">Export</button>
+        <div class="field"><label>Scan density</label><input type="range" id="holo-scan-density" min="2" max="8" step="1" value="3" oninput="$('holo-scan-density-v').textContent=this.value+'px'"/><span class="range-val" id="holo-scan-density-v">3px</span></div>
+        <div class="field"><label>Scan speed</label><input type="range" id="holo-scan-speed" min="0" max="3" step="0.1" value="0.5" oninput="$('holo-scan-speed-v').textContent=parseFloat(this.value).toFixed(1)"/><span class="range-val" id="holo-scan-speed-v">0.5</span></div>
+        <div class="field"><label>Scan dir</label><select id="holo-scan-dir" class="fx-select" style="width:80px"><option value="1">Close → Back</option><option value="-1">Back → Close</option></select></div>
+        <div class="field"><label>Gap</label><input type="range" id="holo-gap" min="-100" max="100" step="1" value="0" oninput="$('holo-gap-v').textContent=this.value"/><span class="range-val" id="holo-gap-v">0</span></div>
+        <div class="field"><label>Grid type</label><select id="holo-grid-type" class="fx-select">
+          <option value="square">Square</option>
+          <option value="polygon">Polygon</option>
+          <option value="dot">Dot</option>
+          <option value="dotmatrix">Dot Matrix</option>
+          <option value="hex">Hexagon</option>
+          <option value="cross">Cross</option>
+        </select></div>
+        <div style="font-size:10px;color:var(--muted);margin:8px 0 3px">Animation</div>
+        <div class="field"><label>Type</label><select id="holo-anim-select" class="fx-select">
+          <option value="">Off</option>
+          <option value="orbit-y">Orbit Y</option>
+          <option value="orbit-x">Orbit X</option>
+          <option value="orbit-y">Orbit</option>
+          <option value="wiggle">Wiggle</option>
+          <option value="handheld">Handheld</option>
+          <option value="dolly">Dolly Zoom</option>
+          <option value="breathe">Breathe</option>
+          <option value="orbit-x">Orbit X</option>
+          <option value="orbit-z">Orbit Z</option>
+          <option value="spin">Spin</option>
+          <option value="tilt">Tilt</option>
+          <option value="flyover">Flyover</option>
+        </select></div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <div class="field" style="flex:1;margin:0"><label>Speed</label><input type="range" id="holo-anim-speed" min="0.1" max="3" step="0.1" value="1.0" style="flex:1" oninput="$('holo-anim-speed-v').textContent=parseFloat(this.value).toFixed(1)+'×'"/><span class="range-val" id="holo-anim-speed-v">1.0×</span></div>
+          <div class="field" style="flex-shrink:0;margin:0"><label>Dir</label><select id="holo-anim-dir" class="fx-select" style="width:50px">
+            <option value="1">→</option>
+            <option value="-1">←</option>
+          </select></div>
         </div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn" id="holo-export-gif" style="font-size:10px;padding:3px 8px;flex:1">Export GIF</button>
+          <button class="btn" id="holo-export-mp4" style="font-size:10px;padding:3px 8px;flex:1">Export MP4</button>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">Drag preview to orbit · Scroll to zoom</div>
       </div>
     </div>
     </div><!-- /sidebar-normal -->
@@ -643,6 +800,8 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
   <div class="main-area">
     <div class="canvas-container" id="canvasContainer" style="position:relative">
       <canvas id="previewCanvas"></canvas>
+      <canvas id="elev-canvas" style="display:none;max-width:100%;max-height:100%;object-fit:contain;cursor:grab"></canvas>
+      <canvas id="gizmo-canvas" style="display:none;position:absolute;bottom:16px;right:16px;width:100px;height:100px;pointer-events:none;z-index:6"></canvas>
       <div class="canvas-placeholder" id="canvasPlaceholder">Load a source image to begin</div>
       <div class="ws-progress" id="wsProgress"><div class="ws-progress-bar" id="wsProgressBar"></div></div>
     </div>
@@ -926,6 +1085,10 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
         var target = $('pane-' + tab.getAttribute('data-fx'));
         if(target) target.classList.add('active');
         state.activeFx = tab.getAttribute('data-fx');
+        // Hide 3D canvas when switching away from elevation/hologram
+        if (tab.getAttribute('data-fx') !== 'elevation' && tab.getAttribute('data-fx') !== 'hologram' && window._elevRenderer) {
+          window._elevRenderer.hide();
+        }
       });
     })(fxTabs[i]);
   }
@@ -976,25 +1139,7 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
   bindRange('fog-near');
   bindRange('fog-far');
   bindRange('fog-noise');
-  // Elevation
-  bindRange('elv-height');
-  bindRange('elv-rx', '°');
-  bindRange('elv-ry', '°');
-  bindRange('elv-zoom');
-  bindRange('elv-density');
-  bindRange('elv-linewidth');
-  bindRange('elv-glow');
-  bindRange('elv-scan-opacity');
-  // Hologram
-  bindRange('hol-edges');
-  bindRange('hol-chromatic');
-  bindRange('hol-noise');
-  bindRange('hol-bloom');
-  bindRange('hol-transparency');
-  bindRange('hol-scan-density', 'px');
-  bindRange('hol-scan-opacity');
-  bindRange('hol-dither-size');
-  bindRange('hol-grid-density');
+  // Elevation + Hologram: range bindings handled by inline oninput in HTML (WebGL panes)
   // Grade
   bindRange('grd-opacity');
   bindRange('grd-gamma');
@@ -1137,38 +1282,32 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
         };
       case 'elevation':
         return {
-          elevation: parseFloat($('elv-height').value),
-          rotate_x: parseInt($('elv-rx').value, 10),
-          rotate_y: parseInt($('elv-ry').value, 10),
-          zoom: parseFloat($('elv-zoom').value),
-          grid_density: parseInt($('elv-density').value, 10),
-          line_width: parseInt($('elv-linewidth').value, 10),
-          grid_glow: parseFloat($('elv-glow').value),
-          grid_color: $('elv-grid-color').value,
-          bg_color: $('elv-bg-color').value,
-          show_grid: $('elv-grid').checked,
-          show_image: $('elv-image').checked,
-          scan_lines: $('elv-scanlines').checked,
-          scan_line_opacity: parseFloat($('elv-scan-opacity').value)
+          elevation: parseFloat($('elev-height').value),
+          rotate_x: parseInt($('elev-rx').value, 10),
+          rotate_y: parseInt($('elev-ry').value, 10),
+          zoom: parseFloat($('elev-zoom').value),
+          grid_density: parseInt($('elev-density').value, 10),
+          line_width: parseInt($('elev-linewidth').value, 10),
+          grid_glow: parseFloat($('elev-glow').value),
+          grid_color: $('elev-grid-color').value,
+          bg_color: $('elev-bg-color').value,
+          show_grid: $('elev-grid').checked,
+          show_image: $('elev-image').checked,
+          scan_lines: $('elev-scanlines').checked,
+          scan_line_opacity: parseFloat($('elev-scan-opacity').value)
         };
       case 'hologram':
         return {
-          style: $('hol-style').value,
-          color: $('hol-color1').value,
-          color2: $('hol-color2').value,
-          bg_color: $('hol-bg').value,
-          edge_strength: parseFloat($('hol-edges').value),
-          chromatic: parseFloat($('hol-chromatic').value),
-          noise: parseFloat($('hol-noise').value),
-          bloom: parseFloat($('hol-bloom').value),
-          transparency: parseFloat($('hol-transparency').value),
-          scan_lines: $('hol-scanlines').checked,
-          scan_density: parseInt($('hol-scan-density').value, 10),
-          scan_opacity: parseFloat($('hol-scan-opacity')?.value || '0.4'),
-          dither: $('hol-dither').checked,
-          dither_size: parseInt($('hol-dither-size')?.value || '2', 10),
-          grid_overlay: $('hol-grid-overlay').checked,
-          grid_density: parseInt($('hol-grid-density')?.value || '30', 10)
+          style: $('holo-style').value,
+          color: $('holo-color1').value,
+          color2: $('holo-color2').value,
+          bg_color: $('holo-bg').value,
+          scan_lines: $('holo-scanlines').checked,
+          scan_density: parseInt($('holo-scan-density').value, 10),
+          scan_opacity: parseFloat($('holo-scan-opacity')?.value || '0.4'),
+          dither: $('holo-dither').checked,
+          grid_overlay: $('holo-grid')?.checked || false,
+          density: parseInt($('holo-density')?.value || '40', 10)
         };
       default:
         return {};
@@ -1358,48 +1497,7 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
   on('slc-preview', 'click', function(){ runEffect('slice', true); });
   on('slc-export', 'click', function(){ runEffect('slice', false); });
 
-  // Elevation
-  async function runElevation(preview) {
-    if (!requireFiles()) return;
-    try {
-      var sid = await ensureSession();
-      var params = getEffectParams();
-      logMsg((preview ? 'Preview' : 'Export') + ' elevation...');
-      $('infoRight').textContent = 'Processing...';
-      var fd = new FormData();
-      fd.append('session_id', sid);
-      fd.append('elevation', params.elevation.toString());
-      fd.append('rotate_x', params.rotate_x.toString());
-      fd.append('rotate_y', params.rotate_y.toString());
-      fd.append('zoom', params.zoom.toString());
-      fd.append('grid_density', params.grid_density.toString());
-      fd.append('line_width', params.line_width.toString());
-      fd.append('grid_glow', params.grid_glow.toString());
-      fd.append('grid_color', params.grid_color);
-      fd.append('bg_color', params.bg_color);
-      fd.append('show_grid', params.show_grid.toString());
-      fd.append('show_image', params.show_image.toString());
-      fd.append('scan_lines', params.scan_lines.toString());
-      fd.append('scan_line_opacity', params.scan_line_opacity.toString());
-      var r = await fetchWithProgress(SERVER + '/elevation', { method: 'POST', body: fd });
-      if (!r.ok) throw new Error('Server error: ' + r.status);
-      var blob = await r.blob();
-      var bitmap = await createImageBitmap(blob);
-      drawImage(bitmap);
-      $('infoRight').textContent = 'Done';
-      logMsg('Elevation ' + (preview ? 'preview' : 'export') + ' complete', 'ok');
-      if (!preview) saveBlob(blob, 'elevation_result.png');
-    } catch (err) {
-      logMsg('Elevation failed: ' + err.message, 'err');
-      $('infoRight').textContent = 'Error';
-    }
-  }
-  on('elv-preview', 'click', function(){ runElevation(true); });
-  on('elv-export', 'click', function(){ runElevation(false); });
-
-  // Hologram
-  on('hol-preview', 'click', function(){ runEffect('hologram', true); });
-  on('hol-export', 'click', function(){ runEffect('hologram', false); });
+  // Elevation + Hologram: now handled by WebGL IIFE below
 
   // Video comb
   var combVideoFile = null;
@@ -2518,6 +2616,1222 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
       document.addEventListener('mousemove', function(e){ if (dragging) setOffsetFromX(e.clientX, true); });
       document.addEventListener('mouseup', function(){ if (dragging) { dragging = false; stopPreview(); } });
     }
+  })();
+
+  // ── WebGL elevation renderer (ported from index.html) ──
+  (function() {
+    // Workspace compatibility: create depthBlob/currentBlob from files if needed
+    if (!state.depthBlob && state.depthFile) {
+      state.depthBlob = state.depthFile;
+    }
+    if (!state.currentBlob && state.sourceFile) {
+      state.currentBlob = state.sourceFile;
+    }
+
+    var elevCanvas = $("elev-canvas");
+    var gl = elevCanvas.getContext("webgl", { antialias: true, alpha: false });
+    if (!gl) { console.error("WebGL not available"); return; }
+
+    var depthTex = null, srcTex = null;
+    var depthLoaded = false, srcLoaded = false;
+    var meshVBO = null, meshLineIBO = null, meshTriIBO = null;
+    var meshLineCount = 0, meshTriCount = 0;
+    var lastDensity = 0, lastSmoothing = -1;
+    var animId = null, animType = null, animT = 0;
+    var program = null;
+    var depthW = 0, depthH = 0;
+    var depthDataRaw = null;
+    var holoMode = false;
+
+    // --- Shaders ---
+    var vsSource = [
+      "attribute vec2 aGrid;",
+      "uniform sampler2D uDepth;",
+      "uniform float uElevation;",
+      "uniform float uElevOverride;",
+      "uniform float uGapOffset;",
+      "uniform mat4 uView;",
+      "uniform float uZoom;",
+      "uniform float uAspect;",
+      "uniform float uCamDist;",
+      "varying float vDepth;",
+      "varying vec2 vUV;",
+      "varying vec2 vScreen;",
+      "void main() {",
+      "  vec4 d = texture2D(uDepth, aGrid);",
+      "  float depth = d.r;",
+      "  vDepth = depth;",
+      "  vUV = aGrid;",
+      "  float x = (aGrid.x - 0.5) * 2.0;",
+      "  float z = (aGrid.y - 0.5) * 2.0;",
+      "  float elev = uElevOverride >= -99.0 ? uElevOverride : uElevation;",
+      "  float y = -depth * elev + uGapOffset;",
+      "  vec4 viewPos = uView * vec4(x, y, z, 1.0);",
+      "  float camZ = viewPos.z + uCamDist;",
+      "  float fov = 1.5;",
+      "  float persp = fov / max(camZ, 0.1);",
+      "  vec4 pos = vec4(viewPos.x * persp * uAspect, viewPos.y * persp, camZ * 0.05, 1.0);",
+      "  gl_Position = pos;",
+      "  vScreen = pos.xy * 0.5 + 0.5;",
+      "  gl_PointSize = 3.0;",
+      "}"
+    ].join("\n");
+
+    var fsSource = [
+      "precision mediump float;",
+      "varying float vDepth;",
+      "varying vec2 vUV;",
+      "varying vec2 vScreen;",
+      "uniform vec3 uGridColor;",
+      "uniform vec3 uGridColor2;",
+      "uniform vec3 uBgColor;",
+      "uniform float uGlowPass;",
+      "uniform float uGlow;",
+      "uniform float uRenderMode;",
+      "uniform sampler2D uSrcTex;",
+      "uniform vec3 uHoloColor;",
+      "uniform vec3 uHoloColorMid;",
+      "uniform vec3 uSrcTint;",
+      "uniform float uSrcTintAmt;",
+      "uniform float uDither;",
+      "uniform float uScanLines;",
+      "uniform float uScanDensity;",
+      "uniform float uScanOpacity;",
+      "uniform float uScanSpeed;",
+      "uniform float uScanDir;",
+      "uniform float uGap;",
+      "uniform float uGridType;",
+      "uniform float uResY;",
+      "uniform float uTime;",
+      "float hash(float n) { return fract(sin(n) * 43758.5453); }",
+      "float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }",
+      "",
+      "float animScanLine(float depth, float density, float speed, float time) {",
+      "  float pulse = mod(time * speed, 1.0);",
+      "  float d = uScanDir > 0.0 ? depth : 1.0 - depth;",
+      "  float depthPhase = d * 40.0 / density;",
+      "  float contour = mod(depthPhase - pulse * 40.0 / density, 1.0);",
+      "  float line = smoothstep(0.4, 0.5, contour) * (1.0 - smoothstep(0.5, 0.6, contour));",
+      "  float accel = 0.5 + 0.5 * d;",
+      "  return line * accel;",
+      "}",
+      "",
+      "float gapScale(float coord, float gap) {",
+      "  float scale = 1.0 + gap * 0.02;",
+      "  return coord * scale;",
+      "}",
+      "",
+      "void main() {",
+      "  if (uRenderMode > 0.5 && uRenderMode < 1.5) {",
+      "    vec3 c = texture2D(uSrcTex, vUV).rgb;",
+      "    if (uScanLines > 0.5) {",
+      "      float sl = animScanLine(vDepth, uScanDensity, uScanSpeed, uTime);",
+      "      c *= 1.0 - sl * uScanOpacity;",
+      "    }",
+      "    gl_FragColor = vec4(c, 1.0);",
+      "    return;",
+      "  }",
+      "  if (uRenderMode > 1.5) {",
+      "    vec2 uv = vUV;",
+      "    float glitchLine = floor(vDepth * 200.0 + gl_FragCoord.x * 0.1);",
+      "    float glitchRand = hash(glitchLine + floor(uTime * 8.0));",
+      "    if (glitchRand > 0.97) {",
+      "      uv.x += (hash(glitchLine * 7.0 + uTime) - 0.5) * 0.08 * vDepth;",
+      "    }",
+      "    vec3 img = texture2D(uSrcTex, uv).rgb;",
+      "    float luma = dot(img, vec3(0.299, 0.587, 0.114));",
+      "    vec3 depthColor = vDepth < 0.5 ? mix(uGridColor2, uHoloColorMid, vDepth * 2.0) : mix(uHoloColorMid, uHoloColor, (vDepth - 0.5) * 2.0);",
+      "    vec3 srcTint = img * uSrcTint * uSrcTintAmt;",
+      "    vec3 tinted = depthColor * (0.2 + 0.8 * luma) * (0.4 + 0.6 * vDepth) + srcTint;",
+      "    if (glitchRand > 0.97) {",
+      "      float rShift = texture2D(uSrcTex, uv + vec2(0.01 * vDepth, 0.0)).r;",
+      "      float bShift = texture2D(uSrcTex, uv - vec2(0.01 * vDepth, 0.0)).b;",
+      "      tinted.r = uHoloColor.r * (0.2 + 0.8 * rShift) * (0.4 + 0.6 * vDepth);",
+      "      tinted.b = uHoloColor.b * (0.2 + 0.8 * bShift) * (0.4 + 0.6 * vDepth);",
+      "    }",
+      "    if (uDither > 0.5) {",
+      "      float px = floor(mod(gl_FragCoord.x / 2.0, 4.0));",
+      "      float py = floor(mod(gl_FragCoord.y / 2.0, 4.0));",
+      "      float idx = py * 4.0 + px;",
+      "      float threshold = 0.0;",
+      "      if (idx < 0.5) threshold = 0.0/16.0;",
+      "      else if (idx < 1.5) threshold = 8.0/16.0;",
+      "      else if (idx < 2.5) threshold = 2.0/16.0;",
+      "      else if (idx < 3.5) threshold = 10.0/16.0;",
+      "      else if (idx < 4.5) threshold = 12.0/16.0;",
+      "      else if (idx < 5.5) threshold = 4.0/16.0;",
+      "      else if (idx < 6.5) threshold = 14.0/16.0;",
+      "      else if (idx < 7.5) threshold = 6.0/16.0;",
+      "      else if (idx < 8.5) threshold = 3.0/16.0;",
+      "      else if (idx < 9.5) threshold = 11.0/16.0;",
+      "      else if (idx < 10.5) threshold = 1.0/16.0;",
+      "      else if (idx < 11.5) threshold = 9.0/16.0;",
+      "      else if (idx < 12.5) threshold = 15.0/16.0;",
+      "      else if (idx < 13.5) threshold = 7.0/16.0;",
+      "      else if (idx < 14.5) threshold = 13.0/16.0;",
+      "      else threshold = 5.0/16.0;",
+      "      float ditherMask = step(threshold, luma * 0.8 + 0.1);",
+      "      tinted *= 0.3 + 0.7 * ditherMask;",
+      "    }",
+      "    if (uScanLines > 0.5) {",
+      "      float sl = animScanLine(vDepth, uScanDensity, uScanSpeed, uTime);",
+      "      tinted *= 1.0 - sl * uScanOpacity;",
+      "    }",
+      "    float sweepPhase = mod(uTime * 0.3, 1.4) - 0.2;",
+      "    float sweepDist = abs(vDepth - sweepPhase);",
+      "    float sweep = smoothstep(0.15, 0.0, sweepDist) * 0.35;",
+      "    tinted += uHoloColor * sweep;",
+      "    float grain = (hash2(gl_FragCoord.xy + uTime * 100.0) - 0.5) * 0.06;",
+      "    tinted += grain;",
+      "    gl_FragColor = vec4(tinted, 1.0);",
+      "    return;",
+      "  }",
+      "  if (uRenderMode > 2.5 && uRenderMode < 3.5) {",
+      "    vec2 pc = gl_PointCoord - 0.5;",
+      "    if (dot(pc, pc) > 0.25) discard;",
+      "    vec3 ptColor = vDepth < 0.5 ? mix(uGridColor2, uHoloColorMid, vDepth * 2.0) : mix(uHoloColorMid, uGridColor, (vDepth - 0.5) * 2.0);",
+      "    float ptBright = 0.5 + 0.5 * vDepth;",
+      "    gl_FragColor = vec4(ptColor * ptBright, 1.0);",
+      "    return;",
+      "  }",
+      "  vec3 gradColor = vDepth < 0.5 ? mix(uGridColor2, uHoloColorMid, vDepth * 2.0) : mix(uHoloColorMid, uGridColor, (vDepth - 0.5) * 2.0);",
+      "  float bright = 0.3 + 0.7 * vDepth;",
+      "  if (uScanLines > 0.5) {",
+      "    float sl = animScanLine(vDepth, uScanDensity, uScanSpeed, uTime);",
+      "    bright *= 1.0 - sl * uScanOpacity;",
+      "  }",
+      "  if (uGlowPass > 0.5) {",
+      "    gl_FragColor = vec4(gradColor * uGlow * 0.3, 1.0);",
+      "  } else {",
+      "    gl_FragColor = vec4(gradColor * bright, 1.0);",
+      "  }",
+      "}"
+    ].join("\n");
+
+    function compileShader(src, type) {
+      var s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        console.error("Shader error:", gl.getShaderInfoLog(s));
+        return null;
+      }
+      return s;
+    }
+
+    function linkProgram(vs, fs) {
+      var p = gl.createProgram();
+      gl.attachShader(p, vs); gl.attachShader(p, fs);
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+        console.error("Program link error:", gl.getProgramInfoLog(p));
+        return null;
+      }
+      return p;
+    }
+
+    program = linkProgram(
+      compileShader(vsSource, gl.VERTEX_SHADER),
+      compileShader(fsSource, gl.FRAGMENT_SHADER)
+    );
+
+    // --- Build mesh (lines + triangles) ---
+    var lastGridType = "";
+    function buildMesh(density, gridType) {
+      gridType = gridType || "square";
+      if (density === lastDensity && gridType === lastGridType) return;
+      lastDensity = density;
+      lastGridType = gridType;
+
+      var gridW = density, gridH = density;
+      var verts = new Float32Array(gridW * gridH * 2);
+      for (var y = 0; y < gridH; y++) {
+        for (var x = 0; x < gridW; x++) {
+          var i = (y * gridW + x) * 2;
+          verts[i] = x / (gridW - 1);
+          verts[i + 1] = y / (gridH - 1);
+        }
+      }
+
+      var lineIdx = [];
+      var I = function(x,y){ return y * gridW + x; };
+
+      if (gridType === "polygon" || gridType === "triangle") {
+        for (var y2 = 0; y2 < gridH; y2++) {
+          for (var x2 = 0; x2 < gridW; x2++) {
+            if (x2 < gridW - 1) lineIdx.push(I(x2,y2), I(x2+1,y2));
+            if (y2 < gridH - 1) lineIdx.push(I(x2,y2), I(x2,y2+1));
+            if (x2 < gridW - 1 && y2 < gridH - 1) {
+              if (y2 % 2 === 0) lineIdx.push(I(x2,y2), I(x2+1,y2+1));
+              else lineIdx.push(I(x2+1,y2), I(x2,y2+1));
+            }
+          }
+        }
+      } else if (gridType === "dot" || gridType === "dotmatrix") {
+        for (var y2 = 0; y2 < gridH; y2++) {
+          for (var x2 = 0; x2 < gridW; x2++) {
+            if (gridType === "dotmatrix") {
+              if (x2 < gridW - 1 && x2 % 2 === 0) lineIdx.push(I(x2,y2), I(x2+1,y2));
+              if (y2 < gridH - 1 && y2 % 2 === 0) lineIdx.push(I(x2,y2), I(x2,y2+1));
+            } else {
+              if (x2 < gridW - 1) lineIdx.push(I(x2,y2), I(x2+1,y2));
+              if (y2 < gridH - 1) lineIdx.push(I(x2,y2), I(x2,y2+1));
+              if (x2 < gridW - 1 && y2 < gridH - 1) lineIdx.push(I(x2,y2), I(x2+1,y2+1));
+              if (x2 > 0 && y2 < gridH - 1) lineIdx.push(I(x2,y2), I(x2-1,y2+1));
+            }
+          }
+        }
+      } else if (gridType === "hex") {
+        for (var y2 = 0; y2 < gridH; y2++) {
+          var odd = y2 % 2;
+          for (var x2 = 0; x2 < gridW; x2++) {
+            if (x2 < gridW - 1 && (x2 + odd) % 2 === 0) lineIdx.push(I(x2,y2), I(x2+1,y2));
+            if (y2 < gridH - 1) {
+              if ((x2 + odd) % 2 === 0) {
+                lineIdx.push(I(x2,y2), I(x2,y2+1));
+                if (x2 < gridW - 1) lineIdx.push(I(x2,y2), I(x2+1,y2+1));
+              }
+            }
+          }
+        }
+      } else if (gridType === "cross") {
+        for (var y2 = 0; y2 < gridH - 1; y2++) {
+          for (var x2 = 0; x2 < gridW - 1; x2++) {
+            lineIdx.push(I(x2,y2), I(x2+1,y2+1));
+            lineIdx.push(I(x2+1,y2), I(x2,y2+1));
+          }
+        }
+      } else {
+        for (var y2 = 0; y2 < gridH; y2++) {
+          for (var x2 = 0; x2 < gridW; x2++) {
+            if (x2 < gridW - 1) lineIdx.push(I(x2,y2), I(x2+1,y2));
+            if (y2 < gridH - 1) lineIdx.push(I(x2,y2), I(x2,y2+1));
+          }
+        }
+      }
+
+      var triIdx = [];
+      for (var y3 = 0; y3 < gridH - 1; y3++) {
+        for (var x3 = 0; x3 < gridW - 1; x3++) {
+          var tl = y3 * gridW + x3;
+          var tr = tl + 1;
+          var bl = tl + gridW;
+          var br = bl + 1;
+          triIdx.push(tl, bl, tr, tr, bl, br);
+        }
+      }
+
+      if (meshVBO) gl.deleteBuffer(meshVBO);
+      if (meshLineIBO) gl.deleteBuffer(meshLineIBO);
+      if (meshTriIBO) gl.deleteBuffer(meshTriIBO);
+
+      meshVBO = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, meshVBO);
+      gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+
+      meshLineIBO = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshLineIBO);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(lineIdx), gl.STATIC_DRAW);
+      meshLineCount = lineIdx.length;
+
+      meshTriIBO = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshTriIBO);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(triIdx), gl.STATIC_DRAW);
+      meshTriCount = triIdx.length;
+    }
+
+    // --- Texture helpers ---
+    function createTexFromImage(img) {
+      var tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return tex;
+    }
+
+    function createTexFromData(data, w, h) {
+      var rgba = new Uint8Array(w * h * 4);
+      for (var i = 0; i < w * h; i++) {
+        var v = Math.round(data[i] * 255);
+        rgba[i * 4] = v; rgba[i * 4 + 1] = v; rgba[i * 4 + 2] = v; rgba[i * 4 + 3] = 255;
+      }
+      var tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return tex;
+    }
+
+    function blurDepth(d, w, h, radius) {
+      if (radius <= 0) return d;
+      var tmp = new Float32Array(d.length);
+      var out = new Float32Array(d.length);
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          var sum = 0, count = 0;
+          for (var dx = -radius; dx <= radius; dx++) {
+            var nx = x + dx;
+            if (nx >= 0 && nx < w) { sum += d[y * w + nx]; count++; }
+          }
+          tmp[y * w + x] = sum / count;
+        }
+      }
+      for (var x2 = 0; x2 < w; x2++) {
+        for (var y2 = 0; y2 < h; y2++) {
+          var sum2 = 0, count2 = 0;
+          for (var dy = -radius; dy <= radius; dy++) {
+            var ny = y2 + dy;
+            if (ny >= 0 && ny < h) { sum2 += tmp[ny * w + x2]; count2++; }
+          }
+          out[y2 * w + x2] = sum2 / count2;
+        }
+      }
+      return out;
+    }
+
+    function uploadDepthTex(smoothing) {
+      if (!depthDataRaw) return;
+      var data = smoothing > 0 ? blurDepth(depthDataRaw, depthW, depthH, smoothing) : depthDataRaw;
+      if (depthTex) gl.deleteTexture(depthTex);
+      depthTex = createTexFromData(data, depthW, depthH);
+      lastSmoothing = smoothing;
+    }
+
+    // --- Load depth ---
+    function loadDepth(callback) {
+      // Workspace compatibility: create blob from file if needed
+      var blob = state.depthBlob || state.depthFile;
+      if (!blob) return;
+      var img = new Image();
+      img.onload = function() {
+        var tc = document.createElement("canvas");
+        tc.width = img.width; tc.height = img.height;
+        var tctx = tc.getContext("2d");
+        tctx.drawImage(img, 0, 0);
+        var id = tctx.getImageData(0, 0, img.width, img.height);
+        depthW = img.width; depthH = img.height;
+        depthDataRaw = new Float32Array(depthW * depthH);
+        for (var i = 0; i < depthDataRaw.length; i++) {
+          depthDataRaw[i] = id.data[i * 4] / 255.0;
+        }
+        URL.revokeObjectURL(img.src);
+        uploadDepthTex(parseInt($("elev-smooth").value));
+        depthLoaded = true;
+        if (callback) callback();
+      };
+      img.src = URL.createObjectURL(blob);
+    }
+
+    function loadSourceImage(callback) {
+      var blob = state.currentBlob || state.sourceFile;
+      if (!blob) {
+        console.warn("[Elev] loadSourceImage: no source blob/file");
+        if (callback) callback();
+        return;
+      }
+      var img = new Image();
+      img.onload = function() {
+        if (srcTex) gl.deleteTexture(srcTex);
+        srcTex = createTexFromImage(img);
+        srcLoaded = true;
+        URL.revokeObjectURL(img.src);
+        console.log("[Elev] Source image loaded for WebGL");
+        if (callback) callback();
+      };
+      img.onerror = function() {
+        console.error("[Elev] Failed to load source image");
+        if (callback) callback();
+      };
+      img.src = URL.createObjectURL(blob);
+    }
+
+    function hexToVec3(hex) {
+      hex = hex.replace("#", "");
+      return [parseInt(hex.substring(0,2),16)/255, parseInt(hex.substring(2,4),16)/255, parseInt(hex.substring(4,6),16)/255];
+    }
+
+    // --- Render ---
+    function render() {
+      if (!depthLoaded || !program) return;
+
+      if (!gl._uint32ext) { gl._uint32ext = gl.getExtension("OES_element_index_uint"); }
+
+      var elevation = parseFloat($("elev-height").value);
+      var rx = parseFloat($("elev-rx").value) * Math.PI / 180;
+      var ry = parseFloat($("elev-ry").value) * Math.PI / 180;
+      var zoom = parseFloat($("elev-zoom").value);
+      var density = parseInt($("elev-density").value);
+      var lineWidth = parseInt($("elev-linewidth").value);
+      var glow = parseFloat($("elev-glow").value);
+      var showGrid = $("elev-grid").checked;
+      var showImage = $("elev-image").checked;
+      var smoothing = parseInt($("elev-smooth").value);
+      var gc = hexToVec3($("elev-grid-color").value);
+      var gc2 = hexToVec3($("elev-grid-color2").value);
+      var bg = hexToVec3($("elev-bg-color").value);
+
+      var holoColor = gc;
+      var holoDither = false;
+      var holoScan = $("elev-scanlines")?.checked || false;
+      var holoScanDensity = 3.0;
+      if (holoMode) {
+        holoColor = hexToVec3($("holo-color1")?.value || "#00ff88");
+        gc = hexToVec3($("holo-color1")?.value || "#00ff88");
+        gc2 = hexToVec3($("holo-color2")?.value || "#003322");
+        bg = hexToVec3($("holo-bg")?.value || "#000505");
+        var ditherStyle = $("holo-dither-style")?.value || "none";
+        holoDither = $("holo-dither")?.checked && ditherStyle !== "none";
+        holoScan = $("holo-scanlines")?.checked;
+        holoScanDensity = parseFloat($("holo-scan-density")?.value || "3");
+        showGrid = $("holo-grid")?.checked;
+        showImage = true;
+      }
+
+      if (smoothing !== lastSmoothing) uploadDepthTex(smoothing);
+      var curGridType = holoMode ? ($("holo-grid-type")?.value || "square") : ($("elev-grid-type")?.value || "square");
+      buildMesh(density, curGridType);
+
+      var w = elevCanvas.width, h = elevCanvas.height;
+      gl.viewport(0, 0, w, h);
+      gl.clearColor(bg[0], bg[1], bg[2], 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.DEPTH_TEST);
+
+      gl.useProgram(program);
+
+      var rz = parseFloat($("elev-rz")?.value || "0") * Math.PI / 180;
+      var cx = Math.cos(rx), sx = Math.sin(rx);
+      var cy = Math.cos(ry), sy = Math.sin(ry);
+      var cz = Math.cos(rz), sz = Math.sin(rz);
+      var viewMat = new Float32Array([
+        cy*cz + sy*sx*sz,   cx*sz,   -sy*cz + cy*sx*sz,  0,
+        -cy*sz + sy*sx*cz,  cx*cz,   sy*sz + cy*sx*cz,   0,
+        sy*cx,              -sx,     cy*cx,               0,
+        0,                  0,       0,                   1
+      ]);
+
+      var splitElev = holoMode && $("holo-split-elev")?.checked;
+      var srcElevVal = splitElev ? parseFloat($("holo-src-elev")?.value || "0") : -100;
+      var gridElevVal = splitElev ? parseFloat($("holo-grid-elev")?.value || "0.3") : -100;
+
+      gl.uniform1f(gl.getUniformLocation(program, "uElevation"), elevation);
+      gl.uniform1f(gl.getUniformLocation(program, "uElevOverride"), -100.0);
+      gl.uniform1f(gl.getUniformLocation(program, "uGapOffset"), 0.0);
+      gl.uniformMatrix4fv(gl.getUniformLocation(program, "uView"), false, viewMat);
+      gl.uniform1f(gl.getUniformLocation(program, "uZoom"), zoom);
+      gl.uniform1f(gl.getUniformLocation(program, "uCamDist"), 4.0 / zoom);
+      gl.uniform1f(gl.getUniformLocation(program, "uAspect"), h / w);
+      gl.uniform3fv(gl.getUniformLocation(program, "uGridColor"), gc);
+      gl.uniform3fv(gl.getUniformLocation(program, "uGridColor2"), gc2);
+      gl.uniform3fv(gl.getUniformLocation(program, "uBgColor"), bg);
+      gl.uniform1f(gl.getUniformLocation(program, "uGlow"), glow);
+      gl.uniform3fv(gl.getUniformLocation(program, "uHoloColor"), holoColor);
+      var midColor = holoMode ? hexToVec3($("holo-color-mid")?.value || "#00aa55") : [gc[0]*0.5+gc2[0]*0.5, gc[1]*0.5+gc2[1]*0.5, gc[2]*0.5+gc2[2]*0.5];
+      gl.uniform3fv(gl.getUniformLocation(program, "uHoloColorMid"), midColor);
+      var srcTintColor = holoMode ? hexToVec3($("holo-src-color")?.value || "#ffffff") : [1,1,1];
+      var srcTintAmt = holoMode ? parseFloat($("holo-src-tint")?.value || "0") : 0;
+      gl.uniform3fv(gl.getUniformLocation(program, "uSrcTint"), srcTintColor);
+      gl.uniform1f(gl.getUniformLocation(program, "uSrcTintAmt"), srcTintAmt);
+      gl.uniform1f(gl.getUniformLocation(program, "uDither"), holoDither ? 1.0 : 0.0);
+      var scanOpacity = holoMode
+        ? parseFloat($("holo-scan-opacity")?.value || "0.5")
+        : parseFloat($("elev-scan-opacity")?.value || "0.3");
+      gl.uniform1f(gl.getUniformLocation(program, "uScanLines"), holoScan ? 1.0 : 0.0);
+      gl.uniform1f(gl.getUniformLocation(program, "uScanDensity"), holoScanDensity);
+      gl.uniform1f(gl.getUniformLocation(program, "uScanOpacity"), scanOpacity);
+      var scanSpeed = holoMode
+        ? parseFloat($("holo-scan-speed")?.value || "0.5")
+        : parseFloat($("elev-scan-speed")?.value || "0.5");
+      gl.uniform1f(gl.getUniformLocation(program, "uScanSpeed"), scanSpeed);
+      var scanDir = holoMode
+        ? parseFloat($("holo-scan-dir")?.value || "1")
+        : parseFloat($("elev-scan-dir")?.value || "1");
+      gl.uniform1f(gl.getUniformLocation(program, "uScanDir"), scanDir);
+      var gap = holoMode
+        ? parseFloat($("holo-gap")?.value || "0")
+        : parseFloat($("elev-gap")?.value || "0");
+      gl.uniform1f(gl.getUniformLocation(program, "uGap"), gap);
+      var gridTypeMap = { square: 0, polygon: 1, dot: 2, dotmatrix: 3, hex: 4, cross: 5 };
+      var gridTypeVal = holoMode
+        ? (gridTypeMap[$("holo-grid-type")?.value] || 0)
+        : (gridTypeMap[$("elev-grid-type")?.value] || 0);
+      gl.uniform1f(gl.getUniformLocation(program, "uGridType"), gridTypeVal);
+      gl.uniform1f(gl.getUniformLocation(program, "uResY"), h);
+      gl.uniform1f(gl.getUniformLocation(program, "uTime"), performance.now() / 1000.0);
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, depthTex);
+      gl.uniform1i(gl.getUniformLocation(program, "uDepth"), 0);
+
+      if (srcTex) {
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, srcTex);
+        gl.uniform1i(gl.getUniformLocation(program, "uSrcTex"), 1);
+      }
+
+      var aGrid = gl.getAttribLocation(program, "aGrid");
+      gl.bindBuffer(gl.ARRAY_BUFFER, meshVBO);
+      gl.enableVertexAttribArray(aGrid);
+      gl.vertexAttribPointer(aGrid, 2, gl.FLOAT, false, 0, 0);
+
+      gl.lineWidth(lineWidth);
+
+      // PASS 1: Hologram body
+      if (holoMode && srcLoaded) {
+        if (splitElev) gl.uniform1f(gl.getUniformLocation(program, "uElevOverride"), srcElevVal);
+        gl.uniform1f(gl.getUniformLocation(program, "uRenderMode"), 2.0);
+        gl.uniform1f(gl.getUniformLocation(program, "uGlowPass"), 0.0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshTriIBO);
+        gl.drawElements(gl.TRIANGLES, meshTriCount, gl.UNSIGNED_INT, 0);
+      }
+      else if (showImage && srcLoaded && !showGrid) {
+        gl.uniform1f(gl.getUniformLocation(program, "uRenderMode"), 1.0);
+        gl.uniform1f(gl.getUniformLocation(program, "uGlowPass"), 0.0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshTriIBO);
+        gl.drawElements(gl.TRIANGLES, meshTriCount, gl.UNSIGNED_INT, 0);
+      }
+
+      if (splitElev) gl.uniform1f(gl.getUniformLocation(program, "uElevOverride"), gridElevVal);
+      else gl.uniform1f(gl.getUniformLocation(program, "uElevOverride"), -100.0);
+      gl.uniform1f(gl.getUniformLocation(program, "uGapOffset"), gap * -0.005);
+
+      // PASS 2: Wireframe grid
+      if (showGrid) {
+        if (holoMode) {
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.ONE, gl.ONE);
+          gl.depthMask(false);
+        }
+
+        gl.uniform1f(gl.getUniformLocation(program, "uRenderMode"), 0.0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshLineIBO);
+
+        if (glow > 0) {
+          gl.uniform1f(gl.getUniformLocation(program, "uGlowPass"), 1.0);
+          gl.drawElements(gl.LINES, meshLineCount, gl.UNSIGNED_INT, 0);
+        }
+
+        gl.uniform1f(gl.getUniformLocation(program, "uGlowPass"), 0.0);
+        gl.drawElements(gl.LINES, meshLineCount, gl.UNSIGNED_INT, 0);
+
+        if (holoMode) {
+          gl.disable(gl.BLEND);
+          gl.depthMask(true);
+        }
+      }
+
+      // PASS 3: Points for dot/dotmatrix
+      if (showGrid && (curGridType === "dot" || curGridType === "dotmatrix")) {
+        if (holoMode) {
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.ONE, gl.ONE);
+          gl.depthMask(false);
+        }
+        gl.uniform1f(gl.getUniformLocation(program, "uRenderMode"), 3.0);
+        gl.uniform1f(gl.getUniformLocation(program, "uGlowPass"), 0.0);
+        gl.drawArrays(gl.POINTS, 0, lastDensity * lastDensity);
+        if (holoMode) {
+          gl.disable(gl.BLEND);
+          gl.depthMask(true);
+        }
+      }
+
+      gl.disableVertexAttribArray(aGrid);
+
+      drawGizmo(rx, ry, parseFloat($("elev-rz")?.value || "0") * Math.PI / 180);
+    }
+
+    function drawGizmo(rx, ry, rz) {
+      var gc = $("gizmo-canvas");
+      if (!gc || elevCanvas.style.display === "none") { gc.style.display = "none"; return; }
+      gc.style.display = "";
+      var s = 100 * (window.devicePixelRatio || 1);
+      gc.width = s; gc.height = s;
+      var g = gc.getContext("2d");
+      g.clearRect(0, 0, s, s);
+
+      var gCx = s * 0.45, gCy = s * 0.5, len = s * 0.3;
+
+      var cRx = Math.cos(rx), sRx = Math.sin(rx);
+      var cRy = Math.cos(ry), sRy = Math.sin(ry);
+      var cRz = Math.cos(rz), sRz = Math.sin(rz);
+
+      function project(x, y, z) {
+        var x1 = (cRy*cRz + sRy*sRx*sRz)*x + cRx*sRz*y + (-sRy*cRz + cRy*sRx*sRz)*z;
+        var y1 = (-cRy*sRz + sRy*sRx*cRz)*x + cRx*cRz*y + (sRy*sRz + cRy*sRx*cRz)*z;
+        return { x: gCx + x1 * len, y: gCy - y1 * len };
+      }
+
+      var axes = [
+        { dx:1, dy:0, dz:0, color:"#ff4466", label:"X" },
+        { dx:0, dy:1, dz:0, color:"#88dd00", label:"Y" },
+        { dx:0, dy:0, dz:1, color:"#4488ff", label:"Z" }
+      ];
+
+      axes.forEach(function(a) {
+        var p = project(a.dx, a.dy, a.dz);
+        var z1 = sRy*cRx*a.dx + (-sRx)*a.dy + cRy*cRx*a.dz;
+        a.p = p; a.depth = z1;
+      });
+      axes.sort(function(a, b) { return a.depth - b.depth; });
+
+      var origin = project(0, 0, 0);
+
+      axes.forEach(function(a) {
+        g.beginPath();
+        g.moveTo(origin.x, origin.y);
+        g.lineTo(a.p.x, a.p.y);
+        g.strokeStyle = a.color;
+        g.lineWidth = 2.5;
+        g.stroke();
+
+        g.beginPath();
+        g.arc(a.p.x, a.p.y, s * 0.08, 0, Math.PI * 2);
+        g.fillStyle = a.color;
+        g.fill();
+
+        g.fillStyle = "#fff";
+        g.font = "bold " + Math.round(s * 0.12) + "px sans-serif";
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.fillText(a.label, a.p.x, a.p.y);
+      });
+
+      g.beginPath();
+      g.arc(origin.x, origin.y, s * 0.04, 0, Math.PI * 2);
+      g.fillStyle = "#aaa";
+      g.fill();
+    }
+
+    // CRT continuous render loop
+    var crtLoopId = null;
+    function startCrtLoop() {
+      if (crtLoopId) return;
+      function crtTick() {
+        var needsAnim = holoMode || (parseFloat($("elev-scan-speed")?.value || "0") > 0 && $("elev-scanlines")?.checked);
+        if (needsAnim && elevCanvas.style.display !== "none" && !animId) {
+          render();
+        }
+        crtLoopId = requestAnimationFrame(crtTick);
+      }
+      crtLoopId = requestAnimationFrame(crtTick);
+    }
+    function stopCrtLoop() {
+      if (crtLoopId) { cancelAnimationFrame(crtLoopId); crtLoopId = null; }
+    }
+
+    // --- Show/hide (adapted for workspace: hide previewCanvas instead of preview-img) ---
+    function showElevCanvas() {
+      console.log("[Elev] showElevCanvas holoMode=" + holoMode + " depthLoaded=" + depthLoaded + " srcLoaded=" + srcLoaded);
+      if (!depthLoaded) {
+        console.log("[Elev] Loading depth...");
+        loadDepth(function() {
+          loadSourceImage(function() { showElevCanvas(); });
+        });
+        return;
+      }
+      if (holoMode && !srcLoaded) {
+        console.log("[Elev] Loading source image for hologram...");
+        loadSourceImage(function() { showElevCanvas(); });
+        return;
+      }
+      elevCanvas.width = 1200; elevCanvas.height = 800;
+      $("previewCanvas").style.display = "none";
+      elevCanvas.style.display = "block";
+      if ($("canvasPlaceholder")) $("canvasPlaceholder").style.display = "none";
+      render();
+      startCrtLoop();
+    }
+
+    function hideElevCanvas() {
+      stopCrtLoop();
+      elevCanvas.style.display = "none";
+      $("previewCanvas").style.display = "";
+      stopAnimation();
+    }
+
+    window._elevRenderer = {
+      show: function(asHolo) { holoMode = !!asHolo; showElevCanvas(); },
+      hide: function() { holoMode = false; hideElevCanvas(); },
+      render: render,
+      reload: function(cb) { depthLoaded = false; srcLoaded = false; lastSmoothing = -1; loadDepth(function() { loadSourceImage(cb); }); },
+      getCanvas: function() { return elevCanvas; },
+      setHoloMode: function(v) { holoMode = v; }
+    };
+
+    // --- Drag orbit ---
+    var orbiting = false, startX = 0, startY = 0, startRX = 0, startRY = 0;
+
+    elevCanvas.addEventListener("mousedown", function(e) {
+      orbiting = true;
+      startX = e.clientX; startY = e.clientY;
+      startRY = parseFloat($("elev-ry").value);
+      startRX = parseFloat($("elev-rx").value);
+      elevCanvas.style.cursor = "grabbing";
+      e.preventDefault();
+    });
+
+    window.addEventListener("mousemove", function(e) {
+      if (!orbiting) return;
+      var dx = e.clientX - startX, dy = e.clientY - startY;
+      var newRY = Math.max(-180, Math.min(180, startRY + dx * 0.5));
+      var newRX = Math.max(-90, Math.min(90, startRX + dy * 0.3));
+      $("elev-ry").value = newRY;
+      $("elev-rx").value = newRX;
+      $("elev-ry-v").textContent = Math.round(newRY) + "\u00B0";
+      $("elev-rx-v").textContent = Math.round(newRX) + "\u00B0";
+      render();
+    });
+
+    window.addEventListener("mouseup", function() {
+      if (orbiting) { orbiting = false; elevCanvas.style.cursor = "grab"; }
+    });
+
+    elevCanvas.addEventListener("wheel", function(e) {
+      e.preventDefault();
+      var z = $("elev-zoom");
+      var cur = parseFloat(z.value);
+      var delta = e.deltaY > 0 ? -0.1 : 0.1;
+      var newZ = Math.max(0.5, Math.min(3, cur + delta));
+      z.value = newZ;
+      $("elev-zoom-v").textContent = newZ.toFixed(2);
+      render();
+    }, { passive: false });
+
+    // --- Slider listeners ---
+    ["elev-height","elev-density","elev-linewidth","elev-glow","elev-grid-color","elev-grid-color2","elev-bg-color","elev-scan-opacity","elev-scan-speed","elev-gap","elev-bloom","elev-smooth","elev-rz"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("input", function() { if (elevCanvas.style.display !== "none") render(); });
+    });
+    ["elev-grid","elev-image","elev-scanlines","elev-grid-type","elev-scan-dir"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("change", function() { if (elevCanvas.style.display !== "none") render(); });
+    });
+    // Hologram slider listeners
+    ["holo-color1","holo-color2","holo-bg","holo-color-mid","holo-src-color","holo-src-tint","holo-edges","holo-chromatic","holo-noise","holo-bloom","holo-transparency","holo-scan-density","holo-scan-opacity","holo-scan-speed","holo-gap","holo-dither-size","holo-grid-density","holo-smooth"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("input", function() { if (elevCanvas.style.display !== "none" && holoMode) render(); });
+    });
+    ["holo-scanlines","holo-dither","holo-grid","holo-grid-type","holo-scan-dir","holo-dither-style"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("change", function() { if (elevCanvas.style.display !== "none" && holoMode) render(); });
+    });
+
+    // --- Animations ---
+    function stopAnimation() {
+      if (animId) { cancelAnimationFrame(animId); animId = null; }
+      animType = null;
+      if ($("elev-anim-select")) $("elev-anim-select").value = "";
+      if ($("holo-anim-select")) $("holo-anim-select").value = "";
+    }
+
+    var TWO_PI = Math.PI * 2;
+
+    function getAnimPeriod() {
+      return TWO_PI;
+    }
+
+    function getAnimSpeed() {
+      return parseFloat($("elev-anim-speed")?.value || $("holo-anim-speed")?.value || "1");
+    }
+    function getAnimDir() {
+      return parseInt($("elev-anim-dir")?.value || $("holo-anim-dir")?.value || "1");
+    }
+
+    function applyAnimFrame(type, t, baseRX, baseRY, baseRZ, baseZoom) {
+      var frac = t / TWO_PI;
+
+      if (type === "orbit-y" || type === "orbit") {
+        var ry = baseRY + frac * 360;
+        while (ry > 180) ry -= 360;
+        setCamera(baseRX, ry, baseRZ, baseZoom);
+      } else if (type === "orbit-x") {
+        var rx = baseRX + frac * 360;
+        while (rx > 180) rx -= 360;
+        setCamera(rx, baseRY, baseRZ, baseZoom);
+      } else if (type === "orbit-z") {
+        var rz = baseRZ + frac * 360;
+        while (rz > 180) rz -= 360;
+        setCamera(baseRX, baseRY, rz, baseZoom);
+      } else if (type === "wiggle") {
+        var wry = baseRY - Math.cos(t) * 15;
+        setCamera(baseRX, wry, baseRZ, baseZoom);
+      } else if (type === "spin") {
+        var sry = baseRY + frac * 360;
+        var srx = baseRX + Math.sin(t) * 25;
+        var srz = baseRZ + frac * 180;
+        while (sry > 180) sry -= 360;
+        while (srz > 180) srz -= 360;
+        setCamera(srx, sry, srz, baseZoom);
+      } else if (type === "handheld") {
+        var hx = baseRX + Math.sin(t * 2) * 2.5 + Math.sin(t * 5) * 1.2;
+        var hy = baseRY + Math.sin(t * 3) * 3.0 + Math.sin(t * 7) * 1.0;
+        var hz = baseRZ + Math.sin(t * 4) * 1.0;
+        setCamera(hx, hy, hz, baseZoom);
+      } else if (type === "dolly") {
+        var dz = baseZoom + Math.sin(t) * 0.8;
+        var dry = baseRY + Math.sin(t * 2) * 8;
+        $("elev-zoom").value = dz;
+        $("elev-zoom-v").textContent = dz.toFixed(2);
+        if ($("holo-zoom")) $("holo-zoom").value = dz;
+        setCamera(baseRX, dry, baseRZ, dz);
+      } else if (type === "breathe") {
+        var bry = baseRY + Math.sin(t) * 15;
+        var baseElev = parseFloat($("elev-height").value);
+        var pulseElev = baseElev + Math.sin(t * 2) * 0.05;
+        $("elev-height").value = pulseElev;
+        $("elev-height-v").textContent = pulseElev.toFixed(2);
+        if ($("holo-elev-height")) $("holo-elev-height").value = pulseElev;
+        setCamera(baseRX, bry, baseRZ, baseZoom);
+      } else if (type === "tilt") {
+        var trx = baseRX + Math.sin(t) * 30;
+        var trY = baseRY + Math.sin(t * 2) * 20;
+        setCamera(trx, trY, baseRZ, baseZoom);
+      } else if (type === "flyover") {
+        var frx = baseRX + Math.sin(t) * 25 - 40;
+        var fry = baseRY + frac * 360;
+        var fzm = baseZoom + Math.sin(t * 2) * 0.3;
+        while (fry > 180) fry -= 360;
+        setCamera(frx, fry, baseRZ, fzm);
+        $("elev-zoom").value = fzm;
+        $("elev-zoom-v").textContent = fzm.toFixed(2);
+        if ($("holo-zoom")) $("holo-zoom").value = fzm;
+      }
+    }
+
+    function startAnimation(type) {
+      stopAnimation();
+      animType = type;
+      animT = 0;
+      var baseRX = parseFloat($("elev-rx").value);
+      var baseRY = parseFloat($("elev-ry").value);
+      var baseRZ = parseFloat($("elev-rz")?.value || "0");
+      var baseZoom = parseFloat($("elev-zoom").value);
+
+      if (elevCanvas.style.display === "none") {
+        var isHolo = document.querySelector(".fx-tab.active")?.dataset.fx === "hologram";
+        showElevCanvas();
+        if (isHolo) holoMode = true;
+      }
+
+      function tick() {
+        var speed = getAnimSpeed();
+        var dir = getAnimDir();
+        animT += 0.01 * speed * dir;
+        var period = getAnimPeriod();
+        if (animT >= period) animT -= period;
+        if (animT < 0) animT += period;
+        applyAnimFrame(animType, animT, baseRX, baseRY, baseRZ, baseZoom);
+        render();
+        animId = requestAnimationFrame(tick);
+      }
+      animId = requestAnimationFrame(tick);
+    }
+
+    // --- Export animation ---
+    function exportAnimation(format) {
+      if (!animType && !$("elev-anim-select").value && !$("holo-anim-select").value) {
+        logMsg("Select an animation first", "warn");
+        return;
+      }
+      var type = animType || $("elev-anim-select").value || $("holo-anim-select").value;
+      if (!type) { logMsg("Select an animation first", "warn"); return; }
+
+      stopAnimation();
+      logMsg("Capturing animation frames...", "info");
+
+      var fps = 24;
+      var duration = 3;
+      var totalFrames = fps * duration;
+      var period = getAnimPeriod();
+      var baseRX = parseFloat($("elev-rx").value);
+      var baseRY = parseFloat($("elev-ry").value);
+      var baseRZ = parseFloat($("elev-rz")?.value || "0");
+      var baseZoom = parseFloat($("elev-zoom").value);
+      var frames = [];
+      var frameIdx = 0;
+
+      function captureNext() {
+        if (frameIdx >= totalFrames) {
+          sendFramesForExport(frames, fps, format);
+          return;
+        }
+        var t = (frameIdx / totalFrames) * period;
+        applyAnimFrame(type, t, baseRX, baseRY, baseRZ, baseZoom);
+        render();
+
+        elevCanvas.toBlob(function(blob) {
+          frames.push(blob);
+          frameIdx++;
+          setTimeout(captureNext, 0);
+        }, "image/png");
+      }
+      captureNext();
+    }
+
+    async function sendFramesForExport(frames, fps, format) {
+      try {
+        logMsg("Encoding " + frames.length + " frames as " + format + "...", "info");
+        var fd = new FormData();
+        for (var i = 0; i < frames.length; i++) {
+          fd.append("frames", frames[i], "frame_" + String(i).padStart(4, "0") + ".png");
+        }
+        fd.append("fps", fps.toString());
+        fd.append("format", format);
+        fd.append("loop", "true");
+
+        var r = await fetch(SERVER + "/animate/export", { method: "POST", body: fd });
+        if (!r.ok) throw new Error("Export failed: " + r.status);
+        var blob = await r.blob();
+        var ext = format === "gif" ? ".gif" : ".mp4";
+        var name = (state.sourceFile?.name || "animation").replace(/\.[^.]+$/, "") + "_3d" + ext;
+        await saveBlob(blob, name);
+        logMsg("Animation saved: " + name, "ok");
+      } catch(e) {
+        logMsg("Export error: " + e.message, "err");
+      }
+    }
+
+    window._elevExport = exportAnimation;
+
+    // Glow style presets
+    var glowPresets = {
+      "cyber":      { near: "#00ff88", far: "#0044ff", bg: "#0a0a14", glow: 0.8,  bloom: 1.5 },
+      "neon-pink":  { near: "#ff00ff", far: "#ff6ec7", bg: "#0d0015", glow: 0.9,  bloom: 2.0 },
+      "vaporwave":  { near: "#ff71ce", far: "#01cdfe", bg: "#120025", glow: 0.7,  bloom: 1.8 },
+      "matrix":     { near: "#00ff41", far: "#008f11", bg: "#000000", glow: 0.6,  bloom: 1.2 },
+      "fire":       { near: "#ffff00", far: "#ff2200", bg: "#0a0000", glow: 0.8,  bloom: 2.2 },
+      "ice":        { near: "#ffffff", far: "#00b4d8", bg: "#001220", glow: 0.7,  bloom: 1.6 },
+      "gold":       { near: "#ffd700", far: "#b8860b", bg: "#0a0800", glow: 0.9,  bloom: 1.8 },
+      "sunset":     { near: "#ff6b35", far: "#9b2335", bg: "#0a0510", glow: 0.7,  bloom: 1.5 },
+      "ocean":      { near: "#00ffff", far: "#000080", bg: "#000510", glow: 0.8,  bloom: 1.4 },
+      "toxic":      { near: "#39ff14", far: "#ccff00", bg: "#050a00", glow: 1.0,  bloom: 2.5 },
+      "plasma":     { near: "#ff00ff", far: "#0000ff", bg: "#050005", glow: 0.9,  bloom: 2.0 },
+      "hologram":   { near: "#00ffff", far: "#ff00ff", bg: "#000008", glow: 0.8,  bloom: 2.2 },
+      "midnight":   { near: "#4169e1", far: "#191970", bg: "#000005", glow: 0.5,  bloom: 1.0 },
+      "lava":       { near: "#ff4500", far: "#8b0000", bg: "#0a0000", glow: 1.0,  bloom: 2.8 },
+      "aurora":     { near: "#00ff88", far: "#8b00ff", bg: "#000a10", glow: 0.7,  bloom: 1.6 }
+    };
+
+    $("elev-glow-preset").addEventListener("change", function() {
+      var p = glowPresets[this.value];
+      if (!p) return;
+      $("elev-grid-color").value = p.near;
+      $("elev-grid-color2").value = p.far;
+      $("elev-bg-color").value = p.bg;
+      $("elev-glow").value = p.glow;
+      $("elev-glow-v").textContent = p.glow.toFixed(2);
+      $("elev-bloom").value = p.bloom;
+      $("elev-bloom-v").textContent = p.bloom.toFixed(1);
+      if (elevCanvas.style.display !== "none") render();
+    });
+
+    ["elev-grid-color","elev-grid-color2","elev-bg-color"].forEach(function(id) {
+      $(id).addEventListener("input", function() { $("elev-glow-preset").value = ""; });
+    });
+
+    // Camera preset data
+    var camPresets = {
+      "default": { rx: -35, ry: 15, zoom: 1.2 },
+      "iso":     { rx: -35, ry: 45, zoom: 1.2 },
+      "top":     { rx: -90, ry: 0, zoom: 1.0 },
+      "front":   { rx: 0, ry: 0, zoom: 1.2 },
+      "side":    { rx: 0, ry: 90, zoom: 1.2 },
+      "close":   { rx: -60, ry: 30, zoom: 1.5 },
+      "rear":    { rx: -20, ry: 160, zoom: 1.0 },
+      "wide":    { rx: -70, ry: -45, zoom: 0.8 }
+    };
+
+    function setCamera(rx, ry, rz, zm) {
+      $("elev-rx").value = rx; $("elev-rx-v").textContent = Math.round(rx) + "\u00B0";
+      $("elev-ry").value = ry; $("elev-ry-v").textContent = Math.round(ry) + "\u00B0";
+      if ($("elev-rz")) { $("elev-rz").value = rz; $("elev-rz-v").textContent = Math.round(rz) + "\u00B0"; }
+      $("elev-zoom").value = zm; $("elev-zoom-v").textContent = zm.toFixed(2);
+      if ($("holo-rx")) { $("holo-rx").value = rx; $("holo-rx-v").textContent = Math.round(rx) + "\u00B0"; }
+      if ($("holo-ry")) { $("holo-ry").value = ry; $("holo-ry-v").textContent = Math.round(ry) + "\u00B0"; }
+      if ($("holo-rz")) { $("holo-rz").value = rz; $("holo-rz-v").textContent = Math.round(rz) + "\u00B0"; }
+      if ($("holo-zoom")) $("holo-zoom").value = zm;
+    }
+
+    function applyCamPreset(val) {
+      var p = camPresets[val];
+      if (!p) return;
+      stopAnimation();
+      setCamera(p.rx, p.ry, p.rz || 0, p.zoom);
+      if (elevCanvas.style.display === "none") {
+        var isHolo = document.querySelector(".fx-tab.active")?.dataset.fx === "hologram";
+        if (isHolo) holoMode = true;
+        showElevCanvas();
+      } else {
+        render();
+      }
+    }
+
+    ["elev-cam-preset", "holo-cam-preset"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("change", function() {
+        applyCamPreset(this.value);
+      });
+    });
+
+    ["elev-anim-select", "holo-anim-select"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("change", function() {
+        if ($("elev-anim-select")) $("elev-anim-select").value = this.value;
+        if ($("holo-anim-select")) $("holo-anim-select").value = this.value;
+        if (this.value) {
+          startAnimation(this.value);
+        } else {
+          stopAnimation();
+        }
+      });
+    });
+    ["elev-anim-speed","holo-anim-speed"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("input", function() {
+        if ($("elev-anim-speed")) $("elev-anim-speed").value = this.value;
+        if ($("holo-anim-speed")) $("holo-anim-speed").value = this.value;
+        if ($("elev-anim-speed-v")) $("elev-anim-speed-v").textContent = parseFloat(this.value).toFixed(1) + "\u00D7";
+        if ($("holo-anim-speed-v")) $("holo-anim-speed-v").textContent = parseFloat(this.value).toFixed(1) + "\u00D7";
+      });
+    });
+    ["elev-anim-dir","holo-anim-dir"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("change", function() {
+        if ($("elev-anim-dir")) $("elev-anim-dir").value = this.value;
+        if ($("holo-anim-dir")) $("holo-anim-dir").value = this.value;
+      });
+    });
+
+    // Plus/minus buttons
+    document.querySelectorAll(".pm-btn").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        var target = $(btn.dataset.target);
+        if (!target) return;
+        var step = parseFloat(btn.dataset.step);
+        var min = parseFloat(target.min), max = parseFloat(target.max);
+        var val = Math.max(min, Math.min(max, parseFloat(target.value) + step));
+        target.value = val;
+        target.dispatchEvent(new Event("input"));
+        if (elevCanvas.style.display !== "none") render();
+      });
+    });
+
+    // Hologram style presets
+    var holoStyles = {
+      "gits":       { c1: "#00ff88", c2: "#003322", mid: "#00aa55", bg: "#000505" },
+      "akira":      { c1: "#ff6600", c2: "#441100", mid: "#cc3300", bg: "#050000", gridType: "polygon", scanSpeed: 0.8 },
+      "eva":        { c1: "#9933ff", c2: "#220066", mid: "#6622cc", bg: "#050008", gridType: "hex", dither: true, ditherStyle: "bayer4" },
+      "blade":      { c1: "#00ccff", c2: "#003366", mid: "#006699", bg: "#000510", scanSpeed: 0.3, scanDir: -1, gap: 15 },
+      "nerv":       { c1: "#ff0066", c2: "#330015", mid: "#990033", bg: "#050005", gridType: "cross", scanSpeed: 1.0 },
+      "tron":       { c1: "#00dfff", c2: "#004466", mid: "#0088cc", bg: "#000008", gridType: "square", gap: 10 },
+      "robocop":    { c1: "#00ff44", c2: "#004411", mid: "#00aa22", bg: "#000800", splitElev: true, srcElev: 0, gridElev: 0.15, scanSpeed: 1.5, scanDensity: 4, gap: 20, dither: false, ditherStyle: "none", gridType: "square" },
+      "predator":   { c1: "#ffff00", c2: "#ff0000", mid: "#ff8800", bg: "#000400", srcTint: 0.6, srcColor: "#ff4400", dither: true, ditherStyle: "noise", gridType: "dot", scanSpeed: 0.2, gap: -30 },
+      "ironman":    { c1: "#00ccff", c2: "#ff8800", mid: "#44aaff", bg: "#040810", splitElev: true, srcElev: 0.05, gridElev: 0.25, gridType: "hex", scanSpeed: 2.0, scanDensity: 3, gap: 30, dither: false, ditherStyle: "none" },
+      "matrix":     { c1: "#00ff00", c2: "#003300", mid: "#008800", bg: "#000200", gridType: "dotmatrix", scanSpeed: 2.5, scanDir: 1, dither: true, ditherStyle: "bayer4", gap: 5 },
+      "terminator": { c1: "#ff0000", c2: "#440000", mid: "#cc0000", bg: "#080000", splitElev: true, srcElev: 0, gridElev: 0.1, srcTint: 0.4, srcColor: "#ff2200", gridType: "cross", scanSpeed: 0.5, dither: false, ditherStyle: "none" },
+      "alien":      { c1: "#33ff66", c2: "#003310", mid: "#118833", bg: "#000800", gridType: "square", scanSpeed: 0.4, scanDensity: 6, dither: true, ditherStyle: "halftone", gap: 0 },
+      "minority":   { c1: "#aaccff", c2: "#002244", mid: "#4488cc", bg: "#000208", splitElev: true, srcElev: 0.08, gridElev: 0.2, gridType: "polygon", srcTint: 0.3, srcColor: "#88bbff", scanSpeed: 0.6, scanDir: -1, gap: 25 },
+      "cyberpunk":  { c1: "#ff00ff", c2: "#00ffff", mid: "#ff44aa", bg: "#080010", gridType: "polygon", scanSpeed: 1.8, dither: true, ditherStyle: "crosshatch", gap: -10 },
+      "westworld":  { c1: "#ffffff", c2: "#444444", mid: "#999999", bg: "#0a0a0a", gridType: "polygon", dither: false, ditherStyle: "none", scanSpeed: 0.1, gap: 0, srcTint: 0.15, srcColor: "#ffffff" },
+      "prometheus": { c1: "#4488ff", c2: "#001133", mid: "#2266cc", bg: "#000108", splitElev: true, srcElev: 0, gridElev: 0.3, gridType: "dot", scanSpeed: 1.2, scanDir: -1, gap: 40, dither: false, ditherStyle: "none" }
+    };
+    $("holo-style").addEventListener("change", function() {
+      var s = holoStyles[this.value];
+      if (!s) return;
+      $("holo-color1").value = s.c1;
+      $("holo-color2").value = s.c2;
+      $("holo-bg").value = s.bg;
+      if (s.splitElev) {
+        $("holo-split-elev").checked = true;
+        $("holo-split-controls").style.display = "";
+        $("holo-src-elev").value = s.srcElev; $("holo-src-elev-v").textContent = s.srcElev.toFixed(2);
+        $("holo-grid-elev").value = s.gridElev; $("holo-grid-elev-v").textContent = s.gridElev.toFixed(2);
+      } else {
+        $("holo-split-elev").checked = false;
+        $("holo-split-controls").style.display = "none";
+      }
+      if (s.mid) $("holo-color-mid").value = s.mid;
+      if (s.dither !== undefined) $("holo-dither").checked = s.dither;
+      if (s.ditherStyle) $("holo-dither-style").value = s.ditherStyle;
+      if (s.scanSpeed !== undefined) { $("holo-scan-speed").value = s.scanSpeed; $("holo-scan-speed-v").textContent = s.scanSpeed.toFixed(1); }
+      if (s.scanDensity !== undefined) { $("holo-scan-density").value = s.scanDensity; $("holo-scan-density-v").textContent = s.scanDensity + "px"; }
+      if (s.scanDir !== undefined && $("holo-scan-dir")) $("holo-scan-dir").value = s.scanDir;
+      if (s.gap !== undefined) { $("holo-gap").value = s.gap; $("holo-gap-v").textContent = s.gap; }
+      if (s.gridType && $("holo-grid-type")) $("holo-grid-type").value = s.gridType;
+      if (s.srcTint !== undefined) { $("holo-src-tint").value = s.srcTint; $("holo-src-tint-v").textContent = s.srcTint.toFixed(2); }
+      if (s.srcColor) $("holo-src-color").value = s.srcColor;
+      drawHoloGradmap();
+      if (elevCanvas.style.display !== "none") render();
+    });
+    ["holo-color1","holo-color2","holo-bg","holo-color-mid","holo-src-color"].forEach(function(id) {
+      $(id).addEventListener("input", function() { $("holo-style").value = "custom"; if (elevCanvas.style.display !== "none") render(); });
+    });
+
+    // Gradient map builder
+    var holoGradPresets = {
+      none: null,
+      matrix: ["#001100","#003300","#00ff44"],
+      infrared: ["#000040","#ff0040","#ffff00"],
+      ocean: ["#000820","#0044aa","#00ffcc"],
+      fire: ["#100000","#ff4400","#ffee00"],
+      neon: ["#ff00ff","#00ffff","#ffff00"],
+      thermal: ["#000040","#ff0000","#ffff00"],
+      midnight: ["#0a0020","#2244aa","#88aaff"]
+    };
+    function drawHoloGradmap() {
+      var cv = $("holo-gradmap");
+      if (!cv) return;
+      var ctx2 = cv.getContext("2d");
+      var c1 = $("holo-color2").value, c2 = $("holo-color-mid").value, c3 = $("holo-color1").value;
+      var g = ctx2.createLinearGradient(0,0,cv.width,0);
+      g.addColorStop(0, c1); g.addColorStop(0.5, c2); g.addColorStop(1, c3);
+      ctx2.fillStyle = g; ctx2.fillRect(0,0,cv.width,cv.height);
+    }
+    drawHoloGradmap();
+    ["holo-color1","holo-color2","holo-color-mid"].forEach(function(id) {
+      $(id).addEventListener("input", drawHoloGradmap);
+    });
+    $("holo-gradmap-preset").addEventListener("change", function() {
+      var p = holoGradPresets[this.value];
+      if (!p) return;
+      $("holo-color2").value = p[0]; $("holo-color-mid").value = p[1]; $("holo-color1").value = p[2];
+      drawHoloGradmap();
+      $("holo-style").value = "custom";
+      if (elevCanvas.style.display !== "none") render();
+    });
+
+    // Split elevation toggle
+    $("holo-split-elev").addEventListener("change", function() {
+      $("holo-split-controls").style.display = this.checked ? "" : "none";
+      if (elevCanvas.style.display !== "none") render();
+    });
+    ["holo-src-elev","holo-grid-elev"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("input", function() { if (elevCanvas.style.display !== "none") render(); });
+    });
+
+    // Hologram sliders sync to shared elevation controls
+    ["holo-density","holo-glow","holo-smooth","holo-elev-height","holo-rx","holo-ry","holo-rz","holo-zoom","holo-linewidth","holo-bloom2"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("input", function() { if (elevCanvas.style.display !== "none") render(); });
+    });
+
+    // Export buttons
+    ["elev-export-gif","holo-export-gif"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("click", function() { exportAnimation("gif"); });
+    });
+    ["elev-export-mp4","holo-export-mp4"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("click", function() { exportAnimation("mp4"); });
+    });
   })();
 
 })();
