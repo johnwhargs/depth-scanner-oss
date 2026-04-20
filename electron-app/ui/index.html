@@ -3250,9 +3250,19 @@ async function init() {
     if (state.fxEnabled) {
       $("btn-fx-preview").disabled = false;
       $("btn-fx-apply").disabled = false;
+      // Hide render view tabs during effects
+      $("viewport-bar").style.display = "none";
       runEffect(true);
     } else {
+      // Restore render view with tabs
+      showViewportBar(true);
+      // Hide 3D canvas if showing
+      if (window._elevRenderer) window._elevRenderer.hide();
       if (state.depthBlob) showImage(state.depthBlob, "Depth map");
+      // Restore video timeline if video loaded
+      if (state._fileType === "video" && state.videoInfo) {
+        showTimeline(state.videoInfo);
+      }
     }
   });
 
@@ -3306,6 +3316,7 @@ async function init() {
       "  vec4 pos = vec4(viewPos.x * persp * uAspect, viewPos.y * persp, camZ * 0.05, 1.0);",
       "  gl_Position = pos;",
       "  vScreen = pos.xy * 0.5 + 0.5;",
+      "  gl_PointSize = 3.0;",
       "}"
     ].join("\n");
 
@@ -3429,6 +3440,15 @@ async function init() {
       "    float grain = (hash2(gl_FragCoord.xy + uTime * 100.0) - 0.5) * 0.06;",
       "    tinted += grain;",
       "    gl_FragColor = vec4(tinted, 1.0);",
+      "    return;",
+      "  }",
+      // Mode 3: points (circles) — discard outside radius
+      "  if (uRenderMode > 2.5 && uRenderMode < 3.5) {",
+      "    vec2 pc = gl_PointCoord - 0.5;",
+      "    if (dot(pc, pc) > 0.25) discard;",
+      "    vec3 ptColor = vDepth < 0.5 ? mix(uGridColor2, uHoloColorMid, vDepth * 2.0) : mix(uHoloColorMid, uGridColor, (vDepth - 0.5) * 2.0);",
+      "    float ptBright = 0.5 + 0.5 * vDepth;",
+      "    gl_FragColor = vec4(ptColor * ptBright, 1.0);",
       "    return;",
       "  }",
       // Mode 0: grid wireframe
@@ -3884,6 +3904,22 @@ async function init() {
         gl.uniform1f(gl.getUniformLocation(program, "uGlowPass"), 0.0);
         gl.drawElements(gl.LINES, meshLineCount, gl.UNSIGNED_INT, 0);
 
+        if (holoMode) {
+          gl.disable(gl.BLEND);
+          gl.depthMask(true);
+        }
+      }
+
+      // PASS 3: Points (filled circles) for dot/dotmatrix grid types
+      if (showGrid && (curGridType === "dot" || curGridType === "dotmatrix")) {
+        if (holoMode) {
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.ONE, gl.ONE);
+          gl.depthMask(false);
+        }
+        gl.uniform1f(gl.getUniformLocation(program, "uRenderMode"), 3.0);
+        gl.uniform1f(gl.getUniformLocation(program, "uGlowPass"), 0.0);
+        gl.drawArrays(gl.POINTS, 0, lastDensity * lastDensity);
         if (holoMode) {
           gl.disable(gl.BLEND);
           gl.depthMask(true);
