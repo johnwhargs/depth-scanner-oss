@@ -3,198 +3,8 @@
 <head>
 <meta charset="UTF-8"/>
 <title>Depth Scanner Lab</title>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#1a1a1c;--surface:#242428;--raised:#2e2e34;--border:#3a3a42;
-  --accent:#5b8fff;--accent2:#ff6b35;--ok:#3ddc84;--warn:#f0a732;--err:#ff5c5c;
-  --text:#d8d8e0;--muted:#6e6e80;--radius:6px;
-  --mono:'SF Mono','Menlo','Consolas','Courier New',monospace;
-  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-}
-html,body{height:100%;overflow:hidden}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.5;display:flex;flex-direction:column}
-
-/* ── Header ───────────────────────────────────────────── */
-.header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px 12px 84px;border-bottom:1px solid var(--border);-webkit-app-region:drag;user-select:none}
-.header-left{display:flex;align-items:center;gap:10px;-webkit-app-region:no-drag}
-.logo{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
-.logo span{color:var(--accent);font-weight:700}
-.nav-btn{background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:4px 10px;transition:all .15s}
-.nav-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
-.nav-btn:hover:not(.active){color:var(--text);border-color:var(--text)}
-.status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);-webkit-app-region:no-drag}
-.dot{width:7px;height:7px;border-radius:50%}
-.dot-on{background:var(--ok);box-shadow:0 0 6px var(--ok)}
-.dot-off{background:var(--err)}
-.dot-wait{background:var(--warn);animation:pulse 1.2s ease infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-
-/* ── Global scrollbar ─────────────────────────────────── */
-::-webkit-scrollbar{width:6px;height:6px}
-::-webkit-scrollbar-track{background:var(--bg)}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:var(--muted)}
-::-webkit-scrollbar-corner{background:var(--bg)}
-
-/* ── Layout ───────────────────────────────────────────── */
-.main{flex:1;display:flex;overflow:hidden}
-.sidebar{width:320px;min-width:300px;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
-.canvas{flex:1;display:flex;flex-direction:column;overflow:hidden}
-
-/* ── Sidebar sections ─────────────────────────────────── */
-.sb-section{padding:14px 20px;border-bottom:1px solid var(--border)}
-.sb-title{font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
-.field{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.field label{width:80px;flex-shrink:0;color:var(--muted);font-size:11px}
-
-/* ── Custom select ───────────────────────────────────── */
-select,input[type="number"]{flex:1;background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:12px;padding:5px 8px;outline:none;-webkit-appearance:none;appearance:none}
-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236e6e80'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px;cursor:pointer}
-select:hover{border-color:var(--accent)}
-select:focus,input:focus{border-color:var(--accent);box-shadow:0 0 0 1px rgba(91,143,255,.15)}
-
-/* ── Custom range slider ─────────────────────────────── */
-input[type="range"]{flex:1;padding:0;height:20px;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
-input[type="range"]::-webkit-slider-runnable-track{height:4px;background:var(--border);border-radius:2px}
-input[type="range"]:hover::-webkit-slider-runnable-track{background:#4a4a52}
-input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--surface);margin-top:-5px;box-shadow:0 1px 4px rgba(0,0,0,.4);transition:transform .1s,box-shadow .1s}
-input[type="range"]::-webkit-slider-thumb:hover{transform:scale(1.15);box-shadow:0 0 0 3px rgba(91,143,255,.2),0 1px 4px rgba(0,0,0,.4)}
-input[type="range"]:active::-webkit-slider-thumb{transform:scale(1.1);background:#4070e0}
-
-/* ── Custom checkbox ─────────────────────────────────── */
-input[type="checkbox"]{-webkit-appearance:none;appearance:none;width:16px;height:16px;border:1.5px solid var(--border);border-radius:3px;background:var(--raised);cursor:pointer;position:relative;flex-shrink:0;transition:all .15s}
-input[type="checkbox"]:checked{background:var(--accent);border-color:var(--accent)}
-input[type="checkbox"]:checked::after{content:"";position:absolute;left:4px;top:1px;width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
-input[type="checkbox"]:hover{border-color:var(--accent)}
-
-/* ── Custom color input ──────────────────────────────── */
-input[type="color"]{-webkit-appearance:none;appearance:none;padding:2px;height:28px;cursor:pointer;width:44px;flex:none;border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);transition:border-color .15s}
-input[type="color"]:hover{border-color:var(--accent)}
-input[type="color"]::-webkit-color-swatch-wrapper{padding:2px}
-input[type="color"]::-webkit-color-swatch{border:none;border-radius:3px}
-
-/* ── Hidden file inputs ──────────────────────────────── */
-input[type="file"]{display:none}
-
-.range-val{font-family:var(--mono);font-size:11px;color:var(--text);min-width:40px;text-align:right;flex-shrink:0}
-.fx-select{flex:1;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;font-family:var(--mono)}
-.pm-btn{width:22px;height:22px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:3px;cursor:pointer;font-size:14px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center}
-.pm-btn:hover{background:var(--border)}
-
-/* ── Buttons ──────────────────────────────────────────── */
-.btn{display:block;width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);color:var(--text);font-family:var(--sans);font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s;margin-bottom:6px}
-.btn:hover:not(:disabled){background:var(--border)}
-.btn:disabled{opacity:.35;cursor:not-allowed}
-.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-.btn-primary:hover:not(:disabled){background:#4070e0}
-.btn-accent2{background:var(--accent2);border-color:var(--accent2);color:#fff}
-.btn-accent2:hover:not(:disabled){background:#e05020}
-.btn-row{display:flex;gap:6px;margin-bottom:6px}
-.btn-row .btn{margin-bottom:0}
-.btn-sm{padding:5px 10px;font-size:11px}
-
-/* ── Mode tabs ────────────────────────────────────────── */
-.mode-tabs{display:flex;gap:2px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--border)}
-.mode-tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:10px 4px;transition:all .15s;text-align:center}
-.mode-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
-.mode-tab:hover:not(.active){color:var(--text)}
-.mode-pane{display:none}
-.mode-pane.active{display:block}
-
-/* ── Effect sub-tabs ──────────────────────────────────── */
-.fx-tabs{display:flex;gap:4px;margin-bottom:10px}
-.fx-tab{flex:1;background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer;font-size:10px;padding:6px;text-align:center;transition:all .15s}
-.fx-tab.active{border-color:var(--accent);color:var(--accent)}
-.fx-pane{display:none}
-.fx-pane.active{display:block}
-
-/* ── Canvas / preview ─────────────────────────────────── */
-.preview-area{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;background:#111113}
-.preview-area img{max-width:100%;max-height:100%;object-fit:contain}
-.drop-zone{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:12px;pointer-events:none}
-.drop-zone.hidden{display:none}
-.drop-icon{font-size:48px;opacity:.3}
-.drop-text{font-size:13px}
-.drop-sub{font-size:11px;color:var(--border)}
-.drop-active .drop-zone{background:rgba(91,143,255,.08);border:2px dashed var(--accent);pointer-events:none}
-/* Viewport bar */
-.viewport-bar{display:flex;gap:2px;padding:4px 8px;background:var(--surface);border-bottom:1px solid var(--border)}
-.vp-btn{background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;transition:all .15s}
-.vp-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
-.vp-btn:hover:not(.active){color:var(--text);border-color:var(--text)}
-.wipe-label{position:absolute;bottom:12px;background:rgba(0,0,0,.6);color:var(--muted);font-family:var(--mono);font-size:9px;letter-spacing:.15em;padding:3px 8px;border-radius:3px;z-index:4;pointer-events:none}
-
-/* ── Info bar ─────────────────────────────────────────── */
-.info-bar{display:flex;align-items:center;gap:12px;padding:6px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);background:var(--surface);flex-shrink:0}
-.info-bar .spacer{flex:1}
-
-/* ── Progress ─────────────────────────────────────────── */
-.progress-track{background:var(--raised);border-radius:2px;height:3px;overflow:hidden;margin-bottom:8px}
-.progress-bar{height:100%;background:var(--accent);transition:width .3s}
-.progress-wrap{display:none}
-.progress-wrap.show{display:block}
-.progress-indeterminate .progress-bar{animation:indeterminate 1.5s linear infinite}
-@keyframes indeterminate{0%{transform:translateX(-100%);width:60%}100%{transform:translateX(260%);width:60%}}
-
-/* ── Log ──────────────────────────────────────────────── */
-.log-area{height:100px;overflow-y:auto;border-top:1px solid var(--border);padding:6px 16px;font-family:var(--mono);font-size:10px;background:#111113;flex-shrink:0}
-.log-area::-webkit-scrollbar{width:4px}
-.log-area::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.log-line{padding:1px 0}
-.log-info{color:var(--muted)}.log-success{color:var(--ok)}.log-warn{color:var(--warn)}.log-error{color:var(--err)}
-
-/* ── Batch file list ──────────────────────────────────── */
-.file-list{max-height:120px;overflow-y:auto;margin-bottom:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)}
-.file-list:empty{display:none}
-.file-item{padding:4px 8px;font-size:10px;font-family:var(--mono);color:var(--muted);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
-.file-item:last-child{border-bottom:none}
-.file-item .fi-dot{width:6px;height:6px;border-radius:50%;background:var(--border);flex-shrink:0}
-.file-item .fi-dot.done{background:var(--ok);box-shadow:0 0 4px var(--ok)}
-.file-item .fi-dot.error{background:var(--err)}
-.file-item .fi-dot.processing{background:var(--warn);animation:pulse 1s ease infinite}
-.file-item .fi-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.file-item .fi-remove{background:none;border:none;color:var(--border);cursor:pointer;font-size:13px;padding:0 2px;line-height:1;flex-shrink:0;transition:color .15s}
-.file-item .fi-remove:hover{color:var(--err)}
-.file-done{color:var(--ok)}
-.file-processing{color:var(--warn)}
-
-/* ── Toggle switch ───────────────────────────────────── */
-.toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.toggle-label{font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
-.toggle{position:relative;width:36px;height:20px;background:var(--border);border-radius:10px;cursor:pointer;transition:background .2s;flex-shrink:0}
-.toggle.on{background:var(--accent)}
-.toggle::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .2s}
-.toggle.on::after{transform:translateX(16px)}
-.fx-disabled{opacity:.4;pointer-events:none}
-
-/* ── Timeline ────────────────────────────────────────── */
-.timeline{display:none;padding:0 16px 8px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
-.timeline.show{display:block}
-.tl-header{display:flex;align-items:center;justify-content:space-between;padding:6px 0 4px;font-family:var(--mono);font-size:10px;color:var(--muted)}
-.tl-time{color:var(--text);font-size:11px}
-.tl-track{position:relative;height:40px;background:var(--bg);border-radius:3px;margin-bottom:4px;cursor:pointer;overflow:visible;user-select:none}
-.tl-fill{position:absolute;top:0;height:100%;background:var(--raised);border-radius:3px}
-.tl-trim{position:absolute;top:0;height:100%;background:rgba(91,143,255,.15);border:1px solid var(--accent);border-radius:3px;pointer-events:none}
-.tl-handle{position:absolute;top:-4px;width:14px;height:48px;background:var(--accent);border-radius:3px;cursor:col-resize;z-index:3;transition:background .1s}
-.tl-handle:hover,.tl-handle:active{background:#4070e0;width:16px}
-.tl-handle-left{left:-7px;border-radius:3px 0 0 3px}
-.tl-handle-right{right:-7px;border-radius:0 3px 3px 0}
-.tl-playhead{position:absolute;top:-6px;width:2px;height:52px;background:var(--ok);z-index:4;pointer-events:none}
-.tl-playhead::before{content:"";position:absolute;top:0;left:-5px;width:12px;height:8px;background:var(--ok);border-radius:3px 3px 0 0}
-.tl-thumbs{position:absolute;top:0;left:0;right:0;height:100%;display:flex;overflow:hidden;border-radius:3px;pointer-events:none}
-.tl-thumbs img{height:100%;flex-shrink:0;object-fit:cover;opacity:.6}
-.tl-ruler{display:flex;justify-content:space-between;font-family:var(--mono);font-size:8px;color:var(--border);padding:0 2px}
-
-/* ── Confirm modal ───────────────────────────────────── */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center}
-.modal-overlay.show{display:flex}
-.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;max-width:360px;width:90%;text-align:center}
-.modal-title{font-family:var(--mono);font-size:12px;color:var(--text);margin-bottom:8px;font-weight:600}
-.modal-msg{font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.6}
-.modal-btns{display:flex;gap:8px;justify-content:center}
-.modal-btns .btn{width:auto;padding:7px 20px;margin:0}
-</style>
+<link rel="stylesheet" href="css/common.css"/>
+<link rel="stylesheet" href="css/render.css"/>
 </head>
 <body>
 
@@ -236,17 +46,17 @@ input[type="file"]{display:none}
 <div class="header">
   <div class="header-left">
     <div class="logo"><span>DEPTH</span> SCANNER LAB</div>
-    <div style="display:flex;gap:4px;margin-left:12px">
+    <div class="nav-group">
       <button class="nav-btn active" id="nav-render">Depth Map Render</button>
       <button class="nav-btn" id="nav-3d">Effects Workshop</button>
       <button class="nav-btn" id="nav-studio">Wigglegram Studio</button>
     </div>
   </div>
   <div class="status">
-    <span id="device-info"></span>
-    <div id="status-dot" class="dot dot-wait"></div>
-    <span id="status-text">connecting…</span>
-    <button id="btn-restart-server" title="Restart server" style="display:none;background:none;border:1px solid var(--border);color:var(--muted);font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer;margin-left:4px">Restart</button>
+    <span id="device-info" style="font-size:11px"></span>
+    <div class="dot dot-wait" id="statusDot"></div>
+    <span id="statusText">connecting…</span>
+    <button id="btn-restart-server" title="Restart server" style="display:none;background:none;border:1px solid var(--border);color:var(--muted);font-size:10px;padding:2px 6px;border-radius:var(--radius);cursor:pointer;margin-left:4px">Restart</button>
   </div>
 </div>
 
@@ -1059,10 +869,31 @@ input[type="file"]{display:none}
       <span id="depth-info"></span>
     </div>
 
-    <div class="log-area" id="log"></div>
+    <!-- Log panel -->
+    <div class="log-wrapper" id="logWrapper">
+      <div class="log-drag" id="logDrag"></div>
+      <div class="log-header" id="logHeader">
+        <div class="log-header-left">
+          <span class="log-label">Log</span>
+          <span class="log-count" id="logCount">0</span>
+        </div>
+        <span class="log-chevron" id="logChevron">&#9660;</span>
+      </div>
+      <div class="log-body" id="log" style="height:100px"></div>
+    </div>
   </div>
 
 </div>
+
+<script src="lib/three.min.js"></script>
+<script src="lib/three-addons/EffectComposer.js"></script>
+<script src="lib/three-addons/RenderPass.js"></script>
+<script src="lib/three-addons/ShaderPass.js"></script>
+<script src="lib/three-addons/CopyShader.js"></script>
+<script src="lib/three-addons/UnrealBloomPass.js"></script>
+<script src="lib/three-addons/LuminosityHighPassShader.js"></script>
+<script src="js/renderer3d-shaders.js"></script>
+<script src="js/renderer3d.js"></script>
 
 <script>
 const SERVER = "http://127.0.0.1:7843";
@@ -1087,6 +918,7 @@ const state = {
 const VIDEO_EXTS = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
 
 // ── Logging ──────────────────────────────────────────────────────
+let _logLineCount = 0;
 function log(msg, type = "info") {
   const el = $("log");
   const line = document.createElement("div");
@@ -1095,7 +927,39 @@ function log(msg, type = "info") {
   el.appendChild(line);
   el.scrollTop = el.scrollHeight;
   while (el.children.length > 100) el.removeChild(el.firstChild);
+  _logLineCount++;
+  const counter = $("logCount");
+  if (counter) counter.textContent = _logLineCount;
 }
+
+// Log panel: drag resize + collapse
+(function() {
+  const logDrag = $("logDrag");
+  const logBody = $("log");
+  const logChevron = $("logChevron");
+  const logHeader = $("logHeader");
+  if (!logDrag || !logBody) return;
+  let dragging = false, startY = 0, startH = 0, collapsed = false, lastHeight = 100;
+  logDrag.addEventListener("mousedown", e => {
+    e.preventDefault(); dragging = true; startY = e.clientY; startH = logBody.offsetHeight;
+    document.body.style.cursor = "ns-resize"; document.body.style.userSelect = "none";
+  });
+  document.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    logBody.style.height = Math.min(500, Math.max(40, startH + startY - e.clientY)) + "px";
+    lastHeight = logBody.offsetHeight;
+  });
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return; dragging = false;
+    document.body.style.cursor = ""; document.body.style.userSelect = "";
+  });
+  if (logHeader) logHeader.addEventListener("click", () => {
+    collapsed = !collapsed;
+    logBody.classList.toggle("collapsed", collapsed);
+    if (logChevron) logChevron.classList.toggle("collapsed", collapsed);
+    if (!collapsed) logBody.style.height = lastHeight + "px";
+  });
+})();
 
 // Progress bar in log — terminal style
 // Sidebar progress bar
@@ -1131,8 +995,8 @@ function logProgress(current, total, label, extra) {
 }
 
 function setStatus(ok) {
-  $("status-dot").className = "dot " + (ok ? "dot-on" : "dot-off");
-  $("status-text").textContent = ok ? "Server ready" : "Server offline";
+  $("statusDot").className = "dot " + (ok ? "dot-on" : "dot-off");
+  $("statusText").textContent = ok ? "Server ready" : "Server offline";
   $("btn-restart-server").style.display = ok ? "none" : "inline-block";
 }
 
@@ -1256,6 +1120,8 @@ function hideAllPreviews() {
   $("wipe-handle").style.display = "none";
   $("wipe-label-left").style.display = "none";
   $("wipe-label-right").style.display = "none";
+  var ec = $("elev-canvas"); if (ec) ec.style.display = "none";
+  var gc = $("gizmo-canvas"); if (gc) gc.style.display = "none";
 }
 
 function showImage(blob, label) {
@@ -1489,6 +1355,13 @@ async function loadFile(file) {
   state.fxEnabled = false;
   $("fx-toggle").classList.remove("on");
   $("fx-controls").classList.add("fx-disabled");
+  // Hide WebGL 3D canvas if visible
+  if (window._elevRenderer) window._elevRenderer.hide();
+  // Stop transition animation loop
+  if (state._trLooping) { state._trLooping = false; if (state._trAnimId) cancelAnimationFrame(state._trAnimId); }
+  // Clear cached compare frames
+  if (compare.sourceFrames.length) { compare.sourceFrames.forEach(function(u) { if (u) URL.revokeObjectURL(u); }); compare.sourceFrames = []; }
+  if (compare.depthFrames.length) { compare.depthFrames.forEach(function(u) { if (u) URL.revokeObjectURL(u); }); compare.depthFrames = []; }
   // effects section always visible;
   $("viewport-bar").style.display = "none";
   $("depth-info").textContent = "";
@@ -3024,8 +2897,8 @@ async function init() {
     $("btn-restart-server").disabled = true;
     $("btn-restart-server").textContent = "Restarting…";
     setStatus(false);
-    $("status-text").textContent = "restarting…";
-    $("status-dot").className = "dot dot-wait";
+    $("statusText").textContent = "restarting…";
+    $("statusDot").className = "dot dot-wait";
     log("Restarting server…");
 
     if (window.electronAPI && window.electronAPI.restartBackend) {
@@ -3240,7 +3113,7 @@ async function init() {
   }
 
   function goToStudio() {
-    var url = `workspace.html?server=${encodeURIComponent(SERVER)}&studio=1`;
+    var url = `studio.html?server=${encodeURIComponent(SERVER)}`;
     if (state.sessionId) url += `&session=${state.sessionId}`;
     window.location.href = url;
   }
@@ -3276,6 +3149,62 @@ async function init() {
   });
 
   // WebGL elevation renderer
+  // Three.js adapter (when Renderer3D available, skip old WebGL)
+  if (typeof Renderer3D !== 'undefined' && Renderer3D.init) {
+    (function() {
+      var elevCanvas = $("elev-canvas");
+      function showElev(asHolo) {
+        Renderer3D.show(elevCanvas, asHolo);
+        elevCanvas.width = 1200; elevCanvas.height = 800;
+        $("preview-img").style.display = "none";
+        if ($("compare-canvas")) $("compare-canvas").style.display = "none";
+        elevCanvas.style.display = "block";
+        if ($("gizmo-canvas")) $("gizmo-canvas").style.display = "";
+        var depthBlob = state._latestDepthBlob || state.depthBlob;
+        var srcBlob = state.currentBlob || state.currentFile;
+        var smoothing = parseInt($("elev-smooth")?.value || "3");
+        Renderer3D.reload(depthBlob, srcBlob, smoothing);
+      }
+      function hideElev() {
+        Renderer3D.hide();
+        elevCanvas.style.display = "none";
+        $("preview-img").style.display = "";
+        if ($("gizmo-canvas")) $("gizmo-canvas").style.display = "none";
+      }
+      window._elevRenderer = {
+        show: function(asHolo) { showElev(asHolo); },
+        hide: function() { hideElev(); },
+        render: function() { Renderer3D.render(); },
+        reload: function(cb) {
+          var depthBlob = state._latestDepthBlob || state.depthBlob;
+          var srcBlob = state.currentBlob || state.currentFile;
+          Renderer3D.reload(depthBlob, srcBlob, parseInt($("elev-smooth")?.value || "3"), cb);
+        },
+        getCanvas: function() { return elevCanvas; },
+        setHoloMode: function(v) { Renderer3D.setHoloMode(v); }
+      };
+      window._elevExport = function(format) {
+        var type = $("elev-anim-select")?.value || $("holo-anim-select")?.value;
+        if (!type) { log("Select an animation first", "warn"); return; }
+        Renderer3D.captureAnimation(type, 24, 3).then(function(frames) {
+          log("Encoding " + frames.length + " frames as " + format + "...");
+          var fd = new FormData();
+          for (var i = 0; i < frames.length; i++) fd.append("frames", frames[i], "frame_" + String(i).padStart(4, "0") + ".png");
+          fd.append("fps", "24"); fd.append("format", format); fd.append("loop", "true");
+          fetch(SERVER + "/animate/export", { method: "POST", body: fd }).then(r => {
+            if (!r.ok) throw new Error("Export failed: " + r.status);
+            return r.blob();
+          }).then(blob => {
+            var ext = format === "gif" ? ".gif" : ".mp4";
+            var name = (state.currentFile?.name || "animation").replace(/\.[^.]+$/, "") + "_3d" + ext;
+            saveBlob(blob, name);
+            log("Animation saved: " + name, "ok");
+          }).catch(e => log("Export error: " + e.message, "err"));
+        });
+      };
+      console.log("[R3D] Three.js renderer active on render page");
+    })();
+  } else
   (function() {
     var canvas = $("elev-canvas");
     var gl = canvas.getContext("webgl", { antialias: true, alpha: false });
