@@ -865,6 +865,15 @@ input[type="file"]{display:none}
           <option value="nerv">NERV</option>
           <option value="tron">Tron</option>
           <option value="robocop">Robocop</option>
+          <option value="predator">Predator</option>
+          <option value="ironman">Iron Man</option>
+          <option value="matrix">Matrix</option>
+          <option value="terminator">Terminator</option>
+          <option value="alien">Alien</option>
+          <option value="minority">Minority Report</option>
+          <option value="cyberpunk">Cyberpunk</option>
+          <option value="westworld">Westworld</option>
+          <option value="prometheus">Prometheus</option>
           <option value="custom">Custom</option>
         </select></div>
         <div class="field"><label>Camera</label><select id="holo-cam-preset" class="fx-select">
@@ -983,7 +992,7 @@ input[type="file"]{display:none}
         </div>
       </div>
       </div><!-- /fx-controls -->
-      <button class="btn" id="btn-3d" disabled style="margin-top:8px;border-color:var(--accent);color:var(--accent);font-size:10px">Open in Effects Workspace →</button>
+      <!-- Effects Workspace access via nav header only -->
     </div>
 
   </div>
@@ -1710,7 +1719,7 @@ async function processImage() {
     $("btn-save").disabled = false;
     $("btn-fx-preview").disabled = false;
     $("btn-fx-apply").disabled = false;
-    $("btn-3d").disabled = false;
+    if ($("btn-3d")) $("btn-3d").disabled = false;
     updateBatchFxBar();
     // effects section always visible;
     const imgTime = ((Date.now() - imgStart) / 1000).toFixed(1);
@@ -2380,7 +2389,7 @@ async function processVideo() {
               state.sessionId = sr.headers.get("X-Session-Id");
               state.depthBlob = blob;
               state.currentBlob = srcB;
-              $("btn-3d").disabled = false;
+              if ($("btn-3d")) $("btn-3d").disabled = false;
               log(`Effects ready (session ${state.sessionId})`, "info");
             }
           }
@@ -2435,7 +2444,7 @@ async function processVideo() {
     if (depthBlobs.length > 0) {
       state.depthBlob = depthBlobs[depthBlobs.length - 1];
     }
-    $("btn-3d").disabled = false;
+    if ($("btn-3d")) $("btn-3d").disabled = false;
 
     log(`Processing complete — click Save Result to export`, "success");
 
@@ -3154,7 +3163,7 @@ async function init() {
   });
   $("btn-fx-preview").addEventListener("click", () => runEffect(true));
   $("btn-fx-apply").addEventListener("click", () => runEffect(false));
-  $("btn-3d").addEventListener("click", goTo3D);
+  if ($("btn-3d")) $("btn-3d").addEventListener("click", goTo3D);
   $("nav-3d").addEventListener("click", goTo3D);
 
   // Wiggle pivot reset
@@ -4328,13 +4337,22 @@ async function init() {
 
     // Hologram style presets
     var holoStyles = {
-      "gits":     { c1: "#00ff88", c2: "#003322", bg: "#000505" },
-      "akira":    { c1: "#ff6600", c2: "#441100", bg: "#050000" },
-      "eva":      { c1: "#9933ff", c2: "#220066", bg: "#050008" },
-      "blade":    { c1: "#00ccff", c2: "#003366", bg: "#000510" },
-      "nerv":     { c1: "#ff0066", c2: "#330015", bg: "#050005" },
-      "tron":     { c1: "#00dfff", c2: "#004466", bg: "#000008" },
-      "robocop":  { c1: "#00ff44", c2: "#004411", bg: "#000800", splitElev: true, srcElev: 0, gridElev: 0.15, scanSpeed: 1.5, scanDensity: 4, gap: 20, dither: false, ditherStyle: "none" }
+      "gits":       { c1: "#00ff88", c2: "#003322", mid: "#00aa55", bg: "#000505" },
+      "akira":      { c1: "#ff6600", c2: "#441100", mid: "#cc3300", bg: "#050000", gridType: "polygon", scanSpeed: 0.8 },
+      "eva":        { c1: "#9933ff", c2: "#220066", mid: "#6622cc", bg: "#050008", gridType: "hex", dither: true, ditherStyle: "bayer4" },
+      "blade":      { c1: "#00ccff", c2: "#003366", mid: "#006699", bg: "#000510", scanSpeed: 0.3, scanDir: -1, gap: 15 },
+      "nerv":       { c1: "#ff0066", c2: "#330015", mid: "#990033", bg: "#050005", gridType: "cross", scanSpeed: 1.0 },
+      "tron":       { c1: "#00dfff", c2: "#004466", mid: "#0088cc", bg: "#000008", gridType: "square", gap: 10 },
+      "robocop":    { c1: "#00ff44", c2: "#004411", mid: "#00aa22", bg: "#000800", splitElev: true, srcElev: 0, gridElev: 0.15, scanSpeed: 1.5, scanDensity: 4, gap: 20, dither: false, ditherStyle: "none", gridType: "square" },
+      "predator":   { c1: "#ffff00", c2: "#ff0000", mid: "#ff8800", bg: "#000400", srcTint: 0.6, srcColor: "#ff4400", dither: true, ditherStyle: "noise", gridType: "dot", scanSpeed: 0.2, gap: -30 },
+      "ironman":    { c1: "#00ccff", c2: "#ff8800", mid: "#44aaff", bg: "#040810", splitElev: true, srcElev: 0.05, gridElev: 0.25, gridType: "hex", scanSpeed: 2.0, scanDensity: 3, gap: 30, dither: false, ditherStyle: "none" },
+      "matrix":     { c1: "#00ff00", c2: "#003300", mid: "#008800", bg: "#000200", gridType: "dotmatrix", scanSpeed: 2.5, scanDir: 1, dither: true, ditherStyle: "bayer4", gap: 5 },
+      "terminator": { c1: "#ff0000", c2: "#440000", mid: "#cc0000", bg: "#080000", splitElev: true, srcElev: 0, gridElev: 0.1, srcTint: 0.4, srcColor: "#ff2200", gridType: "cross", scanSpeed: 0.5, dither: false, ditherStyle: "none" },
+      "alien":      { c1: "#33ff66", c2: "#003310", mid: "#118833", bg: "#000800", gridType: "square", scanSpeed: 0.4, scanDensity: 6, dither: true, ditherStyle: "halftone", gap: 0 },
+      "minority":   { c1: "#aaccff", c2: "#002244", mid: "#4488cc", bg: "#000208", splitElev: true, srcElev: 0.08, gridElev: 0.2, gridType: "polygon", srcTint: 0.3, srcColor: "#88bbff", scanSpeed: 0.6, scanDir: -1, gap: 25 },
+      "cyberpunk":  { c1: "#ff00ff", c2: "#00ffff", mid: "#ff44aa", bg: "#080010", gridType: "polygon", scanSpeed: 1.8, dither: true, ditherStyle: "crosshatch", gap: -10 },
+      "westworld":  { c1: "#ffffff", c2: "#444444", mid: "#999999", bg: "#0a0a0a", gridType: "polygon", dither: false, ditherStyle: "none", scanSpeed: 0.1, gap: 0, srcTint: 0.15, srcColor: "#ffffff" },
+      "prometheus": { c1: "#4488ff", c2: "#001133", mid: "#2266cc", bg: "#000108", splitElev: true, srcElev: 0, gridElev: 0.3, gridType: "dot", scanSpeed: 1.2, scanDir: -1, gap: 40, dither: false, ditherStyle: "none" }
     };
     $("holo-style").addEventListener("change", function() {
       var s = holoStyles[this.value];
@@ -4352,11 +4370,17 @@ async function init() {
         $("holo-split-elev").checked = false;
         $("holo-split-controls").style.display = "none";
       }
+      if (s.mid) $("holo-color-mid").value = s.mid;
       if (s.dither !== undefined) $("holo-dither").checked = s.dither;
       if (s.ditherStyle) $("holo-dither-style").value = s.ditherStyle;
       if (s.scanSpeed !== undefined) { $("holo-scan-speed").value = s.scanSpeed; $("holo-scan-speed-v").textContent = s.scanSpeed.toFixed(1); }
       if (s.scanDensity !== undefined) { $("holo-scan-density").value = s.scanDensity; $("holo-scan-density-v").textContent = s.scanDensity + "px"; }
+      if (s.scanDir !== undefined && $("holo-scan-dir")) $("holo-scan-dir").value = s.scanDir;
       if (s.gap !== undefined) { $("holo-gap").value = s.gap; $("holo-gap-v").textContent = s.gap; }
+      if (s.gridType && $("holo-grid-type")) $("holo-grid-type").value = s.gridType;
+      if (s.srcTint !== undefined) { $("holo-src-tint").value = s.srcTint; $("holo-src-tint-v").textContent = s.srcTint.toFixed(2); }
+      if (s.srcColor) $("holo-src-color").value = s.srcColor;
+      drawHoloGradmap();
       if (canvas.style.display !== "none") render();
     });
     ["holo-color1","holo-color2","holo-bg","holo-color-mid","holo-src-color"].forEach(function(id) {
