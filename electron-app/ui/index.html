@@ -1532,7 +1532,13 @@ async function processImage() {
     const imgStart = Date.now();
 
     log(`Processing image with Depth Anything V2 (${model})…`);
-    setSidebarProgress(50, "Processing…", true);
+    setSidebarProgress(0, "Processing…", true);
+    // Animate sidebar progress during inference
+    let _sidebarTick = 0;
+    const _sidebarTimer = setInterval(() => {
+      _sidebarTick = Math.min(_sidebarTick + 2, 90);
+      setSidebarProgress(_sidebarTick, "Processing… " + _sidebarTick + "%", true);
+    }, 300);
 
     // Animated log progress during inference
     let _inferTick = 0;
@@ -1610,6 +1616,7 @@ async function processImage() {
     _logProgressEl = null;
     log(`Error: ${e.message}`, "error");
   } finally {
+    if (typeof _sidebarTimer !== "undefined") clearInterval(_sidebarTimer);
     stopStatusPoll();
     state.processing = false;
     $("btn-process").disabled = false;
@@ -3150,7 +3157,8 @@ async function init() {
 
   // WebGL elevation renderer
   // Three.js adapter (when Renderer3D available, skip old WebGL)
-  if (typeof Renderer3D !== 'undefined' && Renderer3D.init) {
+  // Three.js renderer loaded but not ready for takeover yet — use legacy WebGL
+  if (false && typeof Renderer3D !== 'undefined' && Renderer3D.init) {
     (function() {
       var elevCanvas = $("elev-canvas");
       function showElev(asHolo) {

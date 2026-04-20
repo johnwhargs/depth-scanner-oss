@@ -464,7 +464,8 @@
 
   // ── WebGL elevation renderer ──────────────────────────
   // Three.js renderer available — wire up backward-compat shim
-  if (typeof Renderer3D !== 'undefined' && Renderer3D.init) {
+  // Three.js renderer loaded but not ready for takeover yet — use legacy WebGL
+  if (false && typeof Renderer3D !== 'undefined' && Renderer3D.init) {
     (function() {
       var elevCanvas = $("elev-canvas");
 

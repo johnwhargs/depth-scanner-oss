@@ -79,7 +79,7 @@ input[type="file"]{display:none}
 .toggle.on{background:var(--accent)}
 .toggle::after{content:"";position:absolute;top:var(--sp-xs);left:var(--sp-xs);width:var(--checkbox-size);height:var(--checkbox-size);background:#fff;border-radius:50%;transition:transform .2s}
 .toggle.on::after{transform:translateX(var(--checkbox-size))}
-.fx-disabled{opacity:.4;pointer-events:none}
+.fx-disabled{display:none}
 
 /* ── Timeline ────────────────────────────────────────── */
 .timeline{display:none;padding:0 var(--sp-4xl) var(--sp-lg);background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
