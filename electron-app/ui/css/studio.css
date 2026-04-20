@@ -1,40 +1,36 @@
-/* ── Studio navigation ─────────────────────────────────── */
-.studio-back{display:inline-flex;align-items:center;gap:4px;background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;font-family:var(--sans);padding:0;margin-bottom:10px;transition:color .15s}
-.studio-back:hover{color:var(--accent)}
-
 /* ── Drop zone ─────────────────────────────────────────── */
-.studio-drop{border:2px dashed var(--border);border-radius:var(--radius);padding:20px;text-align:center;color:var(--muted);font-size:11px;cursor:pointer;transition:all .15s;margin-bottom:8px}
+.studio-drop{border:2px dashed var(--border);border-radius:var(--radius);padding:var(--sp-5xl);text-align:center;color:var(--muted);font-size:var(--fs-base);cursor:pointer;transition:all .15s;margin-bottom:var(--sp-lg)}
 .studio-drop:hover,.studio-drop.drag-over{border-color:var(--accent);color:var(--text)}
 
 /* ── Timeline items ────────────────────────────────────── */
-.tl-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:4px;cursor:grab;background:var(--surface);transition:all .15s;user-select:none}
+.tl-item{display:flex;align-items:center;gap:var(--sp-lg);padding:var(--sp-md) var(--sp-lg);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:var(--sp-sm);cursor:grab;background:var(--surface);transition:all .15s;user-select:none}
 .tl-item:hover{border-color:var(--accent)}
 .tl-item.selected{border-color:var(--accent);background:rgba(91,143,255,.1)}
-.tl-item.drag-over{border-top:2px solid var(--accent);padding-top:5px}
-.tl-thumb{width:40px;height:30px;border-radius:3px;object-fit:cover;flex-shrink:0;background:var(--bg)}
+.tl-item.drag-over{border-top:2px solid var(--accent);padding-top:var(--btn-pad-sm)}
+.tl-thumb{width:40px;height:30px;border-radius:var(--radius-sm);object-fit:cover;flex-shrink:0;background:var(--bg)}
 .tl-info{flex:1;min-width:0}
-.tl-name{font-size:10px;font-family:var(--mono);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tl-meta{font-size:9px;color:var(--muted);font-family:var(--mono)}
-.tl-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 2px;line-height:1;flex-shrink:0;transition:color .15s}
+.tl-name{font-size:var(--fs-md);font-family:var(--mono);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-meta{font-size:var(--fs-sm);color:var(--muted);font-family:var(--mono)}
+.tl-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:var(--checkbox-size);padding:0 var(--sp-xs);line-height:1;flex-shrink:0;transition:color .15s}
 .tl-remove:hover{color:var(--err)}
-.tl-empty{color:var(--muted);font-size:11px;text-align:center;padding:16px 0;font-family:var(--mono)}
+.tl-empty{color:var(--muted);font-size:var(--fs-base);text-align:center;padding:var(--sp-4xl) 0;font-family:var(--mono)}
 
 /* ── Audio track ───────────────────────────────────────── */
-.audio-track{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:8px;margin-top:4px;position:relative}
-.audio-track .audio-name{font-size:10px;font-family:var(--mono);color:var(--text);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between}
-.audio-wave{width:100%;height:40px;border-radius:3px;background:var(--surface);cursor:ew-resize;position:relative;overflow:hidden}
+.audio-track{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:var(--sp-lg);margin-top:var(--sp-sm);position:relative}
+.audio-track .audio-name{font-size:var(--fs-md);font-family:var(--mono);color:var(--text);margin-bottom:var(--sp-md);display:flex;align-items:center;justify-content:space-between}
+.audio-wave{width:100%;height:40px;border-radius:var(--radius-sm);background:var(--surface);cursor:ew-resize;position:relative;overflow:hidden}
 .audio-wave canvas{width:100%;height:100%}
-.audio-offset-marker{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);pointer-events:none}
-.audio-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;transition:color .15s}
+.audio-offset-marker{position:absolute;top:0;bottom:0;width:var(--sp-xs);background:var(--accent);pointer-events:none}
+.audio-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:var(--fs-2xl);transition:color .15s}
 .audio-remove:hover{color:var(--err)}
 
 /* ── Media pool ────────────────────────────────────────── */
-.mp-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;margin-bottom:3px;font-size:10px;font-family:var(--mono);background:var(--surface)}
-.mp-item .mp-thumb{width:28px;height:22px;border-radius:2px;object-fit:cover;flex-shrink:0;background:var(--bg)}
+.mp-item{display:flex;align-items:center;gap:var(--sp-md);padding:var(--sp-sm) var(--sp-md);border:1px solid var(--border);border-radius:var(--sp-sm);margin-bottom:var(--radius-sm);font-size:var(--fs-md);font-family:var(--mono);background:var(--surface)}
+.mp-item .mp-thumb{width:28px;height:22px;border-radius:var(--sp-xs);object-fit:cover;flex-shrink:0;background:var(--bg)}
 .mp-item .mp-name{flex:1;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.mp-item .mp-tag{font-size:8px;padding:1px 4px;border-radius:3px;text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}
+.mp-item .mp-tag{font-size:var(--fs-xs);padding:1px var(--sp-sm);border-radius:var(--radius-sm);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}
 .mp-tag.source{background:rgba(91,143,255,.2);color:var(--accent)}
 .mp-tag.depth{background:rgba(61,220,132,.2);color:var(--ok)}
 .mp-tag.gif{background:rgba(240,167,50,.2);color:var(--warn)}
-.mp-item .mp-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 2px;flex-shrink:0}
+.mp-item .mp-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:var(--fs-xl);padding:0 var(--sp-xs);flex-shrink:0}
 .mp-item .mp-remove:hover{color:var(--err)}
