@@ -1,11 +1,11 @@
 {
-  "name": "depth-scanner",
-  "version": "1.1.0",
+  "name": "depth-scanner-lab",
+  "version": "1.1.0-beta",
   "description": "Depth Scanner OSS — AI depth map generator",
   "main": "main.js",
   "scripts": {
     "start": "unset ELECTRON_RUN_AS_NODE && electron .",
-    "dev": "electron . --dev",
+    "dev": "unset ELECTRON_RUN_AS_NODE && electron . --dev",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
@@ -13,14 +13,16 @@
   },
   "build": {
     "appId": "com.depthscanner.oss",
-    "productName": "Depth Scanner",
+    "productName": "Depth Scanner Lab",
     "directories": {
       "output": "dist"
     },
     "files": [
       "main.js",
+      "setup.js",
       "preload.js",
-      "ui/**/*"
+      "ui/**/*",
+      "icons/**/*"
     ],
     "extraResources": [
       {
@@ -31,11 +33,11 @@
     ],
     "mac": {
       "category": "public.app-category.video",
-      "icon": "../tauri-app/src-tauri/icons/icon.icns",
-      "target": ["dmg", "zip"]
+      "icon": "icons/icon.png",
+      "target": ["dmg"]
     },
     "win": {
-      "target": ["nsis", "zip"]
+      "target": ["nsis"]
     },
     "linux": {
       "target": ["AppImage"]

@@ -239,6 +239,7 @@ input[type="file"]{display:none}
     <div style="display:flex;gap:4px;margin-left:12px">
       <button class="nav-btn active" id="nav-render">Render</button>
       <button class="nav-btn" id="nav-3d">Effects</button>
+      <button class="nav-btn" id="nav-studio">Studio</button>
     </div>
   </div>
   <div class="status">
@@ -1019,6 +1020,7 @@ input[type="file"]{display:none}
       <div id="pivot-crosshair-h" style="display:none;position:absolute;height:1px;left:0;right:0;background:rgba(255,255,255,.3);pointer-events:none;z-index:4"></div>
       <div id="pivot-crosshair-v" style="display:none;position:absolute;width:1px;top:0;bottom:0;background:rgba(255,255,255,.3);pointer-events:none;z-index:4"></div>
       <canvas id="elev-canvas" style="display:none;max-width:100%;max-height:100%;object-fit:contain;cursor:grab"></canvas>
+      <canvas id="gizmo-canvas" style="display:none;position:absolute;bottom:16px;right:16px;width:100px;height:100px;pointer-events:none;z-index:6"></canvas>
       <canvas id="compare-canvas" width="1920" height="1080" style="display:none;max-width:100%;max-height:100%;object-fit:contain;cursor:col-resize"></canvas>
       <div id="frame-counter" style="display:none;position:absolute;top:10px;right:10px;background:rgba(0,0,0,.7);color:var(--ok);font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:4px"></div>
       <!-- Wipe labels -->
@@ -3165,6 +3167,7 @@ async function init() {
   $("btn-fx-apply").addEventListener("click", () => runEffect(false));
   if ($("btn-3d")) $("btn-3d").addEventListener("click", goTo3D);
   $("nav-3d").addEventListener("click", goTo3D);
+  $("nav-studio").addEventListener("click", goToStudio);
 
   // Wiggle pivot reset
   if ($("wig-pivot-reset")) $("wig-pivot-reset").addEventListener("click", () => {
@@ -3232,6 +3235,12 @@ async function init() {
 
   function goTo3D() {
     var url = `workspace.html?server=${encodeURIComponent(SERVER)}`;
+    if (state.sessionId) url += `&session=${state.sessionId}`;
+    window.location.href = url;
+  }
+
+  function goToStudio() {
+    var url = `workspace.html?server=${encodeURIComponent(SERVER)}&studio=1`;
     if (state.sessionId) url += `&session=${state.sessionId}`;
     window.location.href = url;
   }
@@ -3927,6 +3936,81 @@ async function init() {
       }
 
       gl.disableVertexAttribArray(aGrid);
+
+      // Draw 3D axis gizmo on overlay canvas (not part of GL export)
+      drawGizmo(rx, ry, parseFloat($("elev-rz")?.value || "0") * Math.PI / 180);
+    }
+
+    function drawGizmo(rx, ry, rz) {
+      var gc = $("gizmo-canvas");
+      if (!gc || canvas.style.display === "none") { gc.style.display = "none"; return; }
+      gc.style.display = "";
+      var s = 100 * (window.devicePixelRatio || 1);
+      gc.width = s; gc.height = s;
+      var g = gc.getContext("2d");
+      g.clearRect(0, 0, s, s);
+
+      var cx = s * 0.45, cy = s * 0.5, len = s * 0.3;
+
+      // Rotation matrices (same as mesh view)
+      var cRx = Math.cos(rx), sRx = Math.sin(rx);
+      var cRy = Math.cos(ry), sRy = Math.sin(ry);
+      var cRz = Math.cos(rz), sRz = Math.sin(rz);
+
+      function project(x, y, z) {
+        // Rz * Rx * Ry (same order as mesh)
+        var x1 = (cRy*cRz + sRy*sRx*sRz)*x + cRx*sRz*y + (-sRy*cRz + cRy*sRx*sRz)*z;
+        var y1 = (-cRy*sRz + sRy*sRx*cRz)*x + cRx*cRz*y + (sRy*sRz + cRy*sRx*cRz)*z;
+        return { x: cx + x1 * len, y: cy - y1 * len };
+      }
+
+      // Axes: X=right(red), Y=up(green), Z=forward(blue)
+      var axes = [
+        { dx:1, dy:0, dz:0, color:"#ff4466", label:"X" },
+        { dx:0, dy:1, dz:0, color:"#88dd00", label:"Y" },
+        { dx:0, dy:0, dz:1, color:"#4488ff", label:"Z" }
+      ];
+
+      // Sort by depth (draw back-to-front)
+      axes.forEach(function(a) {
+        var p = project(a.dx, a.dy, a.dz);
+        // Depth for sorting
+        var z1 = sRy*cRx*a.dx + (-sRx)*a.dy + cRy*cRx*a.dz;
+        a.p = p; a.depth = z1;
+      });
+      axes.sort(function(a, b) { return a.depth - b.depth; });
+
+      var origin = project(0, 0, 0);
+
+      // Draw axes
+      axes.forEach(function(a) {
+        // Line
+        g.beginPath();
+        g.moveTo(origin.x, origin.y);
+        g.lineTo(a.p.x, a.p.y);
+        g.strokeStyle = a.color;
+        g.lineWidth = 2.5;
+        g.stroke();
+
+        // Endpoint circle
+        g.beginPath();
+        g.arc(a.p.x, a.p.y, s * 0.08, 0, Math.PI * 2);
+        g.fillStyle = a.color;
+        g.fill();
+
+        // Label
+        g.fillStyle = "#fff";
+        g.font = "bold " + Math.round(s * 0.12) + "px sans-serif";
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.fillText(a.label, a.p.x, a.p.y);
+      });
+
+      // Origin dot
+      g.beginPath();
+      g.arc(origin.x, origin.y, s * 0.04, 0, Math.PI * 2);
+      g.fillStyle = "#aaa";
+      g.fill();
     }
 
     // CRT continuous render loop (for scan sweep + glitch animation)

@@ -1522,8 +1522,8 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
         var srcImg = await createImageBitmap(srcBlob);
         state.sourceImg = srcImg;
         drawImage(srcImg);
-        $('srcName').textContent = 'session:' + session;
-        $('srcName').className = 'file-name loaded';
+        $('sourceFilename').textContent = 'session:' + session;
+        $('sourceFilename').classList.add('loaded');
         logMsg('Source loaded from session', 'ok');
       }
 
@@ -1532,14 +1532,20 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
       if(depthR.ok){
         var depthBlob = await depthR.blob();
         state.depthFile = new File([depthBlob], 'session_depth.png', {type: depthBlob.type});
-        $('depthName').textContent = 'session:' + session;
-        $('depthName').className = 'file-name loaded';
+        $('depthFilename').textContent = 'session:' + session;
+        $('depthFilename').classList.add('loaded');
         logMsg('Depth map loaded from session', 'ok');
       }
 
       logMsg('Session ' + session + ' ready', 'ok');
     } catch(e){
       logMsg('Session load failed: ' + e.message + ' — load files manually', 'warn');
+    }
+
+    // Auto-open studio if requested via URL
+    if (params.get('studio') === '1') {
+      // Find enterStudio and call it (defined in studio IIFE)
+      if (typeof window._enterStudio === 'function') window._enterStudio();
     }
   })();
 
@@ -2298,6 +2304,7 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
     }
 
     // --- Mode switching ---
+    window._enterStudio = enterStudio;
     function enterStudio() {
       studioMode = true;
       $('sidebar-normal').style.display = 'none';
