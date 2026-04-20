@@ -213,6 +213,8 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
         <button class="fx-tab" data-fx="spatial">Spatial</button>
         <button class="fx-tab" data-fx="bokeh">Bokeh</button>
         <button class="fx-tab" data-fx="fog">Fog</button>
+        <button class="fx-tab" data-fx="grade">Grade</button>
+        <button class="fx-tab" data-fx="slice">Slice</button>
         <button class="fx-tab" data-fx="elevation">Elevation</button>
         <button class="fx-tab" data-fx="hologram">Hologram</button>
       </div>
@@ -409,6 +411,42 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
         </div>
       </div>
 
+      <!-- Grade -->
+      <div class="fx-pane" id="pane-grade">
+        <div class="field"><label>Near color</label><input type="color" id="grd-near" value="#ff8800"/></div>
+        <div class="field"><label>Far color</label><input type="color" id="grd-far" value="#0044ff"/></div>
+        <div class="field"><label>Opacity</label><input type="range" id="grd-opacity" min="0" max="1" value="0.5" step="0.05"/><span class="range-val" id="grd-opacity-val">0.50</span></div>
+        <div class="field"><label>Gamma</label><input type="range" id="grd-gamma" min="0.2" max="3" value="1.0" step="0.1"/><span class="range-val" id="grd-gamma-val">1.0</span></div>
+        <div class="field"><label>Blend</label>
+          <select id="grd-blend">
+            <option value="normal">Normal</option>
+            <option value="overlay">Overlay</option>
+            <option value="multiply">Multiply</option>
+            <option value="screen">Screen</option>
+            <option value="add">Add</option>
+          </select>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="grd-preview">Preview</button>
+          <button class="btn btn-accent" id="grd-export">Export</button>
+        </div>
+      </div>
+
+      <!-- Slice -->
+      <div class="fx-pane" id="pane-slice">
+        <div class="field"><label>Near</label><input type="range" id="slc-near" min="0" max="1" value="0.3" step="0.01"/><span class="range-val" id="slc-near-val">0.30</span></div>
+        <div class="field"><label>Far</label><input type="range" id="slc-far" min="0" max="1" value="0.7" step="0.01"/><span class="range-val" id="slc-far-val">0.70</span></div>
+        <div class="field"><label>Feather</label><input type="range" id="slc-feather" min="0" max="0.2" value="0.05" step="0.01"/><span class="range-val" id="slc-feather-val">0.05</span></div>
+        <div class="field"><label>BG alpha</label><input type="range" id="slc-bg-alpha" min="0" max="255" value="0" step="1"/><span class="range-val" id="slc-bg-alpha-val">0</span></div>
+        <div style="display:flex;gap:8px;margin:6px 0">
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="slc-invert"/> Invert mask</label>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="slc-preview">Preview</button>
+          <button class="btn btn-accent" id="slc-export">Export</button>
+        </div>
+      </div>
+
       <!-- Elevation -->
       <div class="fx-pane" id="pane-elevation">
         <div class="field"><label>Elevation</label><input type="range" id="elv-height" min="-1" max="1" value="0.3" step="0.01"/><span class="range-val" id="elv-height-val">0.30</span></div>
@@ -442,6 +480,16 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
             <option value="blade">Blade Runner</option>
             <option value="nerv">NERV</option>
             <option value="tron">Tron</option>
+            <option value="robocop">Robocop</option>
+            <option value="predator">Predator</option>
+            <option value="ironman">Iron Man</option>
+            <option value="matrix">Matrix</option>
+            <option value="terminator">Terminator</option>
+            <option value="alien">Alien</option>
+            <option value="minority">Minority Report</option>
+            <option value="cyberpunk">Cyberpunk</option>
+            <option value="westworld">Westworld</option>
+            <option value="prometheus">Prometheus</option>
           </select>
         </div>
         <div class="field"><label>Color 1</label><input type="color" id="hol-color1" value="#00ff88"/></div>
@@ -453,7 +501,10 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
         <div class="field"><label>Bloom</label><input type="range" id="hol-bloom" min="0" max="3" value="1.5" step="0.1"/><span class="range-val" id="hol-bloom-val">1.5</span></div>
         <div class="field"><label>Transparency</label><input type="range" id="hol-transparency" min="0" max="1" value="0.6" step="0.05"/><span class="range-val" id="hol-transparency-val">0.60</span></div>
         <div class="field"><label>Scan density</label><input type="range" id="hol-scan-density" min="2" max="8" value="3" step="1"/><span class="range-val" id="hol-scan-density-val">3px</span></div>
-        <div style="display:flex;gap:8px;margin:6px 0">
+        <div class="field"><label>Scan opacity</label><input type="range" id="hol-scan-opacity" min="0" max="1" value="0.4" step="0.05"/><span class="range-val" id="hol-scan-opacity-val">0.40</span></div>
+        <div class="field"><label>Dither size</label><input type="range" id="hol-dither-size" min="1" max="4" value="2" step="1"/><span class="range-val" id="hol-dither-size-val">2</span></div>
+        <div class="field"><label>Grid density</label><input type="range" id="hol-grid-density" min="10" max="60" value="30" step="1"/><span class="range-val" id="hol-grid-density-val">30</span></div>
+        <div style="display:flex;gap:8px;margin:6px 0;flex-wrap:wrap">
           <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="hol-scanlines" checked/> Scan lines</label>
           <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="hol-dither" checked/> Dither</label>
           <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="hol-grid-overlay" checked/> Grid</label>
@@ -941,6 +992,17 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
   bindRange('hol-bloom');
   bindRange('hol-transparency');
   bindRange('hol-scan-density', 'px');
+  bindRange('hol-scan-opacity');
+  bindRange('hol-dither-size');
+  bindRange('hol-grid-density');
+  // Grade
+  bindRange('grd-opacity');
+  bindRange('grd-gamma');
+  // Slice
+  bindRange('slc-near');
+  bindRange('slc-far');
+  bindRange('slc-feather');
+  bindRange('slc-bg-alpha');
   // Film filter sliders
   bindRange('ws-grain'); bindRange('ws-grain-opacity'); bindRange('ws-bgblur','px'); bindRange('ws-flash');
   bindRange('ws-vignette'); bindRange('ws-leak'); bindRange('ws-halation','px');
@@ -1057,6 +1119,22 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
           far: parseFloat($('fog-far').value),
           noise: parseFloat($('fog-noise').value)
         };
+      case 'grade':
+        return {
+          near_color: $('grd-near').value,
+          far_color: $('grd-far').value,
+          opacity: parseFloat($('grd-opacity').value),
+          gamma: parseFloat($('grd-gamma').value),
+          blend_mode: $('grd-blend').value
+        };
+      case 'slice':
+        return {
+          near: parseFloat($('slc-near').value),
+          far: parseFloat($('slc-far').value),
+          feather: parseFloat($('slc-feather').value),
+          bg_alpha: parseInt($('slc-bg-alpha').value, 10),
+          invert_mask: $('slc-invert')?.checked || false
+        };
       case 'elevation':
         return {
           elevation: parseFloat($('elv-height').value),
@@ -1086,8 +1164,11 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
           transparency: parseFloat($('hol-transparency').value),
           scan_lines: $('hol-scanlines').checked,
           scan_density: parseInt($('hol-scan-density').value, 10),
+          scan_opacity: parseFloat($('hol-scan-opacity')?.value || '0.4'),
           dither: $('hol-dither').checked,
-          grid_overlay: $('hol-grid-overlay').checked
+          dither_size: parseInt($('hol-dither-size')?.value || '2', 10),
+          grid_overlay: $('hol-grid-overlay').checked,
+          grid_density: parseInt($('hol-grid-density')?.value || '30', 10)
         };
       default:
         return {};
@@ -1270,6 +1351,12 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
 
   on('fog-preview', 'click', function(){ runEffect('fog', true); });
   on('fog-export', 'click', function(){ runEffect('fog', false); });
+
+  on('grd-preview', 'click', function(){ runEffect('grade', true); });
+  on('grd-export', 'click', function(){ runEffect('grade', false); });
+
+  on('slc-preview', 'click', function(){ runEffect('slice', true); });
+  on('slc-export', 'click', function(){ runEffect('slice', false); });
 
   // Elevation
   async function runElevation(preview) {
