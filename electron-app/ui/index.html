@@ -1645,6 +1645,11 @@ async function processImage() {
     const imgTime = ((Date.now() - imgStart) / 1000).toFixed(1);
     log(`Depth map ready (${imgTime}s)`, "success");
 
+    // Auto-export on completion
+    if ($("auto-export").checked) {
+      await saveResult();
+    }
+
   } catch (e) {
     if (typeof _inferTimer !== "undefined") clearInterval(_inferTimer);
     _logProgressEl = null;
@@ -1799,15 +1804,10 @@ async function processBatch() {
       f.depthBlob = result;
       f.status = "done";
 
-      // Auto-download each result
+      // Auto-save each result
       const ext = format === "exr" ? "exr" : "png";
       const outName = f.name.replace(/\.[^.]+$/, "") + `_depth.${ext}`;
-      const url = URL.createObjectURL(result);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = outName;
-      a.click();
-      URL.revokeObjectURL(url);
+      await saveBlobDirect(result, outName);
 
       log(`[${i + 1}/${total}] ${outName}`, "success");
     } catch (e) {
