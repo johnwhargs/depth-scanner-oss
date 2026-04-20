@@ -9,4 +9,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Write binary data to file at path
   writeFile: (filePath, arrayBuffer) => ipcRenderer.invoke('fs:writeFile', filePath, arrayBuffer),
+
+  // Restart backend server
+  restartBackend: () => ipcRenderer.invoke('backend:restart'),
+
+  // Listen for port conflict from main process
+  onPortConflict: (callback) => ipcRenderer.on('backend:port-conflict', (_, port) => callback(port)),
 });

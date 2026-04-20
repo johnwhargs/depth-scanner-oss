@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, FileResponse
+from fastapi.responses import Response, FileResponse, JSONResponse
 from PIL import Image
 
 from depth_engine import engine, COLORMAPS, MODEL_MAP
@@ -61,16 +61,41 @@ async def _infer_frame(file, model):
 
 
 def _coerce_params(params):
-    for k in ("invert_mask", "near_blur", "far_blur", "colorize"):
+    for k in ("invert_mask", "near_blur", "far_blur", "colorize", "scan_lines", "dither", "grid_overlay"):
         if k in params and isinstance(params[k], str):
             params[k] = params[k].lower() in ("true", "1", "yes")
-    for k in ("bg_alpha", "levels", "num_views"):
+    for k in ("bg_alpha", "levels", "num_views", "smoothing", "scan_density", "dither_size", "grid_density"):
         if k in params and isinstance(params[k], str):
             params[k] = int(params[k])
     return params
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
+
+@app.post("/session/create")
+async def create_session(
+    source: UploadFile = File(...),
+    depth: UploadFile = File(...),
+):
+    """Create a session from user-supplied source + depth map (no inference)."""
+    src_raw = await source.read()
+    dep_raw = await depth.read()
+    try:
+        src_img = Image.open(io.BytesIO(src_raw)).convert("RGB")
+    except Exception as e:
+        raise HTTPException(400, f"Could not decode source image: {e}")
+    try:
+        dep_img = Image.open(io.BytesIO(dep_raw)).convert("L")
+    except Exception as e:
+        raise HTTPException(400, f"Could not decode depth map: {e}")
+    # Resize depth to match source if needed
+    if dep_img.size != src_img.size:
+        dep_img = dep_img.resize(src_img.size, Image.LANCZOS)
+    depth_arr = np.array(dep_img, dtype=np.float32) / 255.0
+    sid = str(uuid.uuid4())[:8]
+    cache.put(sid, src_img, depth_arr)
+    return JSONResponse({"session_id": sid}, headers={"X-Session-Id": sid})
+
 
 @app.get("/health")
 def health():
@@ -639,7 +664,7 @@ async def run_effect(
     model: str = Form("small"),
     params_json: str = Form("{}"),
 ):
-    if effect_name not in {"slice", "grade", "dof", "fog", "parallax", "posterize"}:
+    if effect_name not in {"slice", "grade", "dof", "fog", "parallax", "posterize", "hologram"}:
         raise HTTPException(404, "Unknown effect.")
     params = _coerce_params(json.loads(params_json))
 
@@ -675,7 +700,7 @@ async def effect_preview(
     colormap: str = Form("inferno"),
     params_json: str = Form("{}"),
 ):
-    if effect_name not in {"slice", "grade", "dof", "fog", "parallax", "posterize"}:
+    if effect_name not in {"slice", "grade", "dof", "fog", "parallax", "posterize", "hologram"}:
         raise HTTPException(404, "Unknown effect.")
     params = _coerce_params(json.loads(params_json))
 
@@ -715,6 +740,111 @@ async def effect_preview(
 
 # ── Wigglegram endpoint ──────────────────────────────────────────────────────
 
+@app.post("/elevation")
+async def elevation(
+    file: Optional[UploadFile] = File(None),
+    session_id: Optional[str] = Form(None),
+    model: str = Form("small"),
+    elevation: float = Form(0.3),
+    rotate_x: float = Form(-35),
+    rotate_y: float = Form(15),
+    zoom: float = Form(1.2),
+    show_grid: str = Form("true"),
+    show_image: str = Form("false"),
+    grid_glow: float = Form(0.8),
+    grid_color: str = Form("#00ff88"),
+    bg_color: str = Form("#0a0a14"),
+    grid_density: int = Form(40),
+    line_width: int = Form(1),
+    scan_lines: str = Form("false"),
+    scan_line_opacity: float = Form(0.3),
+):
+    """Render depth as cyberpunk wireframe terrain."""
+    from effects import render_elevation
+    if session_id and cache.get(session_id):
+        img, depth = cache.get(session_id)
+    elif file:
+        img, depth, _ = await _infer_frame(file, model)
+    else:
+        raise HTTPException(400, "Provide 'file' or valid 'session_id'.")
+
+    result = render_elevation(img, depth,
+        elevation=elevation, rotate_x=rotate_x, rotate_y=rotate_y, zoom=zoom,
+        show_grid=show_grid.lower() in ("true","1","yes"),
+        show_image=show_image.lower() in ("true","1","yes"),
+        grid_glow=grid_glow, grid_color=grid_color, bg_color=bg_color,
+        grid_density=grid_density, line_width=line_width,
+        scan_lines=scan_lines.lower() in ("true","1","yes"),
+        scan_line_opacity=scan_line_opacity,
+    )
+    buf = io.BytesIO()
+    result.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@app.post("/animate/export")
+async def animate_export(
+    frames: list[UploadFile] = File(...),
+    fps: int = Form(24),
+    format: str = Form("gif"),
+    loop: bool = Form(True),
+):
+    """Stitch uploaded PNG frames into a looping GIF or MP4."""
+    import subprocess
+
+    pil_frames = []
+    for f in frames:
+        data = await f.read()
+        img = Image.open(io.BytesIO(data)).convert("RGB")
+        pil_frames.append(img)
+
+    if not pil_frames:
+        raise HTTPException(400, "No frames provided")
+
+    if format == "gif":
+        buf = io.BytesIO()
+        # Bounce loop for smoother GIF
+        if len(pil_frames) > 2:
+            bounce = pil_frames + pil_frames[-2:0:-1]
+        else:
+            bounce = pil_frames
+        duration_ms = int(1000 / fps)
+        bounce[0].save(buf, format="GIF", save_all=True,
+                       append_images=bounce[1:], duration=duration_ms,
+                       loop=0 if loop else 1)
+        return Response(content=buf.getvalue(), media_type="image/gif",
+                        headers={"Content-Disposition": "attachment; filename=animation.gif"})
+    else:
+        # MP4 via ffmpeg
+        tmp_dir = tempfile.mkdtemp(prefix="ds_anim_")
+        for i, img in enumerate(pil_frames):
+            img.save(os.path.join(tmp_dir, f"frame_{i:04d}.png"))
+
+        out_path = os.path.join(tmp_dir, "output.mp4")
+        cmd = [
+            "ffmpeg", "-y", "-framerate", str(fps),
+            "-i", os.path.join(tmp_dir, "frame_%04d.png"),
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-crf", "18", "-preset", "fast",
+        ]
+        if loop:
+            # Loop by concatenating forward + reverse
+            cmd += ["-vf", "split[a][b];[b]reverse[r];[a][r]concat=n=2:v=1"]
+        cmd.append(out_path)
+
+        result = subprocess.run(cmd, capture_output=True, timeout=120)
+        if result.returncode != 0:
+            raise HTTPException(500, f"ffmpeg error: {result.stderr.decode()[:500]}")
+
+        return FileResponse(out_path, media_type="video/mp4", filename="animation.mp4")
+
+
+@app.get("/film-presets")
+def list_film_presets():
+    from effects import FILM_PRESETS
+    return {"presets": FILM_PRESETS}
+
+
 @app.post("/wigglegram")
 async def wigglegram(
     file: Optional[UploadFile] = File(None),
@@ -726,6 +856,9 @@ async def wigglegram(
     path: str = Form("linear"),
     fps: int = Form(12),
     format: str = Form("gif"),
+    film_filter_json: str = Form("{}"),
+    pivot_x: float = Form(0.5),
+    pivot_y: float = Form(0.5),
 ):
     """Generate a wigglegram GIF or MP4 from an image and its depth map."""
     if session_id and cache.get(session_id):
@@ -735,8 +868,26 @@ async def wigglegram(
     else:
         raise HTTPException(400, "Provide 'file' or valid 'session_id'.")
 
+    # Parse film filter params
+    film_filter = None
+    try:
+        ff = json.loads(film_filter_json)
+        valid_keys = {"blur_strength", "flash_intensity", "vignette_strength", "light_leak_opacity",
+                      "light_leak_style", "grain_amount", "grain_opacity", "halation_radius",
+                      "contrast", "saturation", "fade", "tint_color", "tint_strength", "gradient_map"}
+        string_keys = {"tint_color", "gradient_map", "light_leak_style"}
+        film_filter = {}
+        for k, v in ff.items():
+            if k in valid_keys:
+                film_filter[k] = v if k in string_keys else float(v)
+        if not any(v for v in film_filter.values() if v and v != "none" and v != ""):
+            film_filter = None
+    except (json.JSONDecodeError, ValueError):
+        film_filter = None
+
     views = create_wigglegram(img, depth, num_views=num_views,
-                              separation=separation, path=path, blur_depth=blur_depth)
+                              separation=separation, path=path, blur_depth=blur_depth,
+                              film_filter=film_filter, pivot_x=pivot_x, pivot_y=pivot_y)
 
     if format == "mp4":
         # Bounce loop: forward + reverse (minus endpoints to avoid double)
@@ -765,6 +916,87 @@ async def wigglegram(
                        append_images=bounce[1:], duration=duration, loop=0)
         return Response(content=buf.getvalue(), media_type="image/gif",
                         headers={"Content-Disposition": "attachment; filename=wigglegram.gif"})
+
+
+# ── Video comb (3D wigglegram for video) ────────────────────────────────────
+
+@app.post("/wigglegram/comb")
+async def wigglegram_comb(
+    file: UploadFile = File(...),
+    model: str = Form("small"),
+    separation: float = Form(15),
+    interval: int = Form(3),
+    blur_depth: float = Form(5),
+    pivot_x: float = Form(0.5),
+    pivot_y: float = Form(0.5),
+):
+    """
+    Video comb method: alternates L/R parallax views every N frames.
+    Pattern: L L L R R R L L L R R R ...
+    Creates a flickering 3D effect without glasses.
+    """
+    from effects import create_comb_frame
+
+    raw = await file.read()
+    tmp_in = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    tmp_in.write(raw)
+    tmp_in.close()
+
+    cap = cv2.VideoCapture(tmp_in.name)
+    if not cap.isOpened():
+        os.unlink(tmp_in.name)
+        raise HTTPException(400, "Could not open video file")
+
+    fps_orig = cap.get(cv2.CAP_PROP_FPS) or 30
+    w_orig = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h_orig = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    tmp_out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    tmp_out.close()
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(tmp_out.name, fourcc, float(fps_orig), (w_orig, h_orig))
+
+    engine.load_model(model)
+
+    frame_idx = 0
+    prev_depth = None
+    while True:
+        ret, bgr = cap.read()
+        if not ret:
+            break
+
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(rgb)
+
+        # Depth inference with temporal alignment
+        depth = engine.process_frame(img)
+        if prev_depth is not None:
+            depth = engine._align_depth(prev_depth, depth)
+        prev_depth = depth
+
+        # Generate comb frame (L or R based on frame_idx and interval)
+        comb = create_comb_frame(
+            img, depth,
+            frame_idx=frame_idx, interval=interval,
+            separation=separation, blur_depth=blur_depth,
+            pivot_x=pivot_x, pivot_y=pivot_y,
+        )
+
+        out_bgr = cv2.cvtColor(np.array(comb), cv2.COLOR_RGB2BGR)
+        writer.write(out_bgr)
+        frame_idx += 1
+
+    cap.release()
+    writer.release()
+    os.unlink(tmp_in.name)
+
+    with open(tmp_out.name, "rb") as f:
+        data = f.read()
+    os.unlink(tmp_out.name)
+
+    return Response(content=data, media_type="video/mp4",
+                    headers={"Content-Disposition": "attachment; filename=comb_3d.mp4"})
 
 
 # ── Spatial photo endpoint ───────────────────────────────────────────────────

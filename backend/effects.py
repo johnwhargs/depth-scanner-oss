@@ -414,6 +414,313 @@ def depth_parallax(
 
 # ── Effect 6: Wigglegram ────────────────────────────────────────────────────
 
+## ── Film Filter Presets ──────────────────────────────────────────────────────
+
+FILM_PRESETS = {
+    "none":        {"blur_strength": 0, "flash_intensity": 0, "vignette_strength": 0, "light_leak_opacity": 0, "grain_amount": 0, "halation_radius": 0, "contrast": 0, "saturation": 0, "fade": 0, "tint_color": "", "tint_strength": 0, "gradient_map": "none"},
+    "disposable":  {"blur_strength": 12, "flash_intensity": 0.8, "vignette_strength": 0.6, "light_leak_opacity": 0.3, "grain_amount": 0.25, "halation_radius": 8, "contrast": 0.1, "saturation": -0.1, "fade": 0.05, "tint_color": "#ffe0a0", "tint_strength": 0.1, "gradient_map": "none"},
+    "flash":       {"blur_strength": 0, "flash_intensity": 1.5, "vignette_strength": 0.3, "light_leak_opacity": 0, "grain_amount": 0.15, "halation_radius": 12, "contrast": 0.15, "saturation": 0, "fade": 0, "tint_color": "", "tint_strength": 0, "gradient_map": "none"},
+    "dreamy":      {"blur_strength": 15, "flash_intensity": 0, "vignette_strength": 0.4, "light_leak_opacity": 0.5, "grain_amount": 0.1, "halation_radius": 20, "contrast": -0.1, "saturation": -0.15, "fade": 0.1, "tint_color": "#c8a0ff", "tint_strength": 0.15, "gradient_map": "none"},
+    "lo-fi":       {"blur_strength": 5, "flash_intensity": 0.3, "vignette_strength": 0.8, "light_leak_opacity": 0.6, "grain_amount": 0.4, "halation_radius": 5, "contrast": 0.2, "saturation": 0.1, "fade": 0.08, "tint_color": "#ff8040", "tint_strength": 0.08, "gradient_map": "none"},
+    "cinematic":   {"blur_strength": 18, "flash_intensity": 0, "vignette_strength": 0.5, "light_leak_opacity": 0, "grain_amount": 0.08, "halation_radius": 0, "contrast": 0.15, "saturation": -0.05, "fade": 0, "tint_color": "#4080c0", "tint_strength": 0.06, "gradient_map": "none"},
+    "noir":        {"blur_strength": 8, "flash_intensity": 0, "vignette_strength": 0.7, "light_leak_opacity": 0, "grain_amount": 0.3, "halation_radius": 0, "contrast": 0.3, "saturation": -0.8, "fade": 0, "tint_color": "", "tint_strength": 0, "gradient_map": "none"},
+    "warm-fade":   {"blur_strength": 0, "flash_intensity": 0, "vignette_strength": 0.3, "light_leak_opacity": 0.2, "grain_amount": 0.15, "halation_radius": 0, "contrast": -0.05, "saturation": -0.2, "fade": 0.15, "tint_color": "#ffa060", "tint_strength": 0.12, "gradient_map": "warm"},
+    "cool-tone":   {"blur_strength": 0, "flash_intensity": 0, "vignette_strength": 0.2, "light_leak_opacity": 0, "grain_amount": 0.1, "halation_radius": 0, "contrast": 0.1, "saturation": -0.1, "fade": 0, "tint_color": "#6090c0", "tint_strength": 0.1, "gradient_map": "cool"},
+}
+
+# Gradient map LUTs: shadow_color → highlight_color
+GRADIENT_MAPS = {
+    "none": None,
+    "warm":    [(30, 20, 60), (255, 200, 120)],    # deep blue shadows → warm highlights
+    "cool":    [(20, 30, 60), (140, 190, 255)],     # dark blue → cool sky
+    "vintage": [(50, 30, 20), (240, 220, 180)],     # sepia-like
+    "neon":    [(20, 0, 40), (255, 100, 200)],       # dark purple → hot pink
+    "forest":  [(10, 30, 20), (180, 220, 140)],      # dark green → light green
+    "sunset":  [(40, 10, 50), (255, 160, 60)],       # purple → orange
+}
+
+
+def apply_film_filter(
+    image: Image.Image,
+    depth: np.ndarray,
+    blur_strength: float = 0,
+    flash_intensity: float = 0,
+    vignette_strength: float = 0,
+    light_leak_opacity: float = 0,
+    light_leak_style: str = "amber-corner",
+    grain_amount: float = 0,
+    grain_opacity: float = 1.0,
+    halation_radius: float = 0,
+    contrast: float = 0,
+    saturation: float = 0,
+    fade: float = 0,
+    tint_color: str = "",
+    tint_strength: float = 0,
+    gradient_map: str = "none",
+) -> Image.Image:
+    """Apply depth-driven film filter stack to a single image."""
+    import cv2
+
+    img = np.array(image, dtype=np.float32) / 255.0
+    h, w = img.shape[:2]
+    d = depth.copy()
+    if d.shape[:2] != (h, w):
+        d = np.array(Image.fromarray((d * 255).astype(np.uint8)).resize((w, h), Image.BILINEAR), dtype=np.float32) / 255.0
+
+    # 1. Depth-of-field blur (background blur)
+    if blur_strength > 0:
+        ksize = int(blur_strength * 2) | 1  # odd kernel
+        blurred = cv2.GaussianBlur(img, (ksize, ksize), 0)
+        # Blend: near=sharp, far=blurred
+        mask = d[:, :, np.newaxis]  # 0=near(sharp), 1=far(blurred)
+        img = img * (1 - mask) + blurred * mask
+
+    # 2. Flash simulation (bright near, dark far)
+    if flash_intensity > 0:
+        brightness = 1.0 + flash_intensity * (1.0 - d)
+        img = img * brightness[:, :, np.newaxis]
+
+    # 3. Contrast adjustment
+    if contrast != 0:
+        mid = img.mean()
+        img = mid + (img - mid) * (1.0 + contrast)
+
+    # 4. Saturation adjustment
+    if saturation != 0:
+        gray = np.mean(img, axis=2, keepdims=True)
+        img = gray + (img - gray) * (1.0 + saturation)
+
+    # 5. Gradient map
+    gmap = GRADIENT_MAPS.get(gradient_map)
+    if gmap is not None:
+        shadow = np.array(gmap[0], dtype=np.float32) / 255.0
+        highlight = np.array(gmap[1], dtype=np.float32) / 255.0
+        lum = np.mean(img, axis=2)
+        mapped = shadow[np.newaxis, np.newaxis, :] * (1 - lum[:, :, np.newaxis]) + \
+                 highlight[np.newaxis, np.newaxis, :] * lum[:, :, np.newaxis]
+        # Blend mapped at 30% with original (subtle)
+        img = img * 0.7 + mapped * 0.3
+
+    # 6. Color tint
+    if tint_color and tint_strength > 0:
+        try:
+            tc = tint_color.lstrip("#")
+            tr, tg, tb = int(tc[0:2], 16) / 255.0, int(tc[2:4], 16) / 255.0, int(tc[4:6], 16) / 255.0
+            tint = np.array([tr, tg, tb], dtype=np.float32)
+            img = img * (1 - tint_strength) + img * tint * tint_strength
+        except (ValueError, IndexError):
+            pass
+
+    # 7. Vignette (depth-aware)
+    if vignette_strength > 0:
+        cy, cx = h / 2, w / 2
+        Y, X = np.mgrid[0:h, 0:w].astype(np.float32)
+        dist = np.sqrt((X - cx) ** 2 + (Y - cy) ** 2)
+        max_dist = np.sqrt(cx ** 2 + cy ** 2)
+        radial = (dist / max_dist) ** 1.5
+        # Depth-aware: far objects in corners darkened more
+        vig = 1.0 - vignette_strength * radial * (0.5 + 0.5 * d)
+        img = img * vig[:, :, np.newaxis]
+
+    # 8. Light leak (multiple styles)
+    if light_leak_opacity > 0:
+        Y, X = np.mgrid[0:h, 0:w].astype(np.float32)
+        style = light_leak_style or "amber-corner"
+
+        if style == "amber-corner":
+            # Warm leak from top-right
+            leak = np.exp(-((X - w) ** 2 / (w * 0.8) ** 2 + Y ** 2 / (h * 0.8) ** 2))
+            leak_color = np.array([1.0, 0.7, 0.3])
+        elif style == "red-streak":
+            # Horizontal red streak across top
+            leak = np.exp(-(Y ** 2 / (h * 0.3) ** 2)) * np.exp(-((X - w * 0.7) ** 2 / (w * 0.5) ** 2))
+            leak_color = np.array([1.0, 0.2, 0.1])
+        elif style == "rainbow-band":
+            # Diagonal rainbow band
+            diag = (X / w + Y / h) / 2.0
+            leak = np.exp(-((diag - 0.3) ** 2) / 0.02)
+            # Shift hue across the band
+            hue = (X / w * 6.0) % 6.0
+            r = np.clip(np.abs(hue - 3) - 1, 0, 1)
+            g = np.clip(2 - np.abs(hue - 2), 0, 1)
+            b = np.clip(2 - np.abs(hue - 4), 0, 1)
+            leak_rgb = np.stack([r, g, b], axis=2).astype(np.float32)
+            leak = leak[:, :, np.newaxis] * leak_rgb * d[:, :, np.newaxis] * light_leak_opacity
+            img = img + leak
+            leak_color = None  # already applied
+        elif style == "cyan-wash":
+            # Soft cyan from bottom-left
+            leak = np.exp(-((X ** 2) / (w * 0.9) ** 2 + (Y - h) ** 2 / (h * 0.7) ** 2))
+            leak_color = np.array([0.3, 0.8, 1.0])
+        elif style == "golden-hour":
+            # Warm horizontal gradient, stronger on edges
+            leak = np.exp(-((Y - h * 0.3) ** 2 / (h * 0.4) ** 2))
+            edge = (np.abs(X - w / 2) / (w / 2)) ** 0.5
+            leak = leak * (0.3 + 0.7 * edge)
+            leak_color = np.array([1.0, 0.85, 0.4])
+        elif style == "purple-haze":
+            # Radial purple from center-bottom
+            dist = np.sqrt((X - w * 0.5) ** 2 + (Y - h * 1.2) ** 2)
+            leak = np.exp(-(dist ** 2) / (max(w, h) * 0.6) ** 2)
+            leak_color = np.array([0.7, 0.3, 1.0])
+        else:
+            leak = np.exp(-((X - w) ** 2 / (w * 0.8) ** 2 + Y ** 2 / (h * 0.8) ** 2))
+            leak_color = np.array([1.0, 0.7, 0.3])
+
+        if leak_color is not None:
+            leak = leak * d * light_leak_opacity
+            img = img + leak[:, :, np.newaxis] * leak_color.astype(np.float32)
+
+    # 9. Halation (glow around bright near objects)
+    if halation_radius > 0:
+        lum = np.mean(img, axis=2)
+        bright_near = ((lum > 0.8) & (d < 0.4)).astype(np.float32)
+        ksize = int(halation_radius * 2) | 1
+        glow = cv2.GaussianBlur(bright_near, (ksize, ksize), 0)
+        glow_color = np.array([1.0, 0.85, 0.7], dtype=np.float32)
+        img = img + glow[:, :, np.newaxis] * glow_color * 0.4
+
+    # 10. Film grain (amount = size/intensity, opacity = blend strength)
+    if grain_amount > 0:
+        lum = np.mean(img, axis=2)
+        grain_scale = grain_amount * (0.3 + 2.0 * (lum - 0.5) ** 2)
+        noise = np.random.randn(h, w).astype(np.float32)
+        grain = (noise * grain_scale)[:, :, np.newaxis]
+        img = img + grain * max(0, min(1, grain_opacity))
+
+    # 11. Fade to black (lift blacks)
+    if fade > 0:
+        img = img * (1 - fade) + fade * 0.15  # lift blacks to dark gray
+
+    return Image.fromarray(np.clip(img * 255, 0, 255).astype(np.uint8), "RGB")
+
+
+def render_elevation(
+    image: Image.Image,
+    depth: np.ndarray,
+    elevation: float = 0.3,
+    rotate_x: float = -35,
+    rotate_y: float = 15,
+    zoom: float = 1.2,
+    show_grid: bool = True,
+    show_image: bool = False,
+    grid_glow: float = 0.8,
+    grid_color: str = "#00ff88",
+    bg_color: str = "#0a0a14",
+    grid_density: int = 40,
+    line_width: int = 1,
+    scan_lines: bool = False,
+    scan_line_opacity: float = 0.3,
+    smoothing: int = 0,
+) -> Image.Image:
+    """Render depth map as cyberpunk wireframe terrain."""
+    import cv2
+
+    depth = _ensure_same_size(image, depth)
+
+    # Smooth depth to reduce noise in wireframe
+    if smoothing > 0:
+        ksize = smoothing * 2 + 1  # ensure odd kernel
+        depth = cv2.GaussianBlur(depth, (ksize, ksize), 0)
+
+    h, w = depth.shape
+    out_h, out_w = 800, 1200  # output resolution
+
+    # Parse colors
+    def hex_to_rgb(c):
+        c = c.lstrip("#")
+        return tuple(int(c[i:i+2], 16) for i in (0, 2, 4))
+
+    gc = hex_to_rgb(grid_color)
+    bg = hex_to_rgb(bg_color)
+
+    # Create output image
+    canvas = np.full((out_h, out_w, 3), bg, dtype=np.uint8)
+
+    # Downsample depth for grid
+    step_x = max(1, w // grid_density)
+    step_y = max(1, h // grid_density)
+    grid_h = h // step_y
+    grid_w = w // step_x
+
+    # Build 3D points from depth
+    # Rotation matrices
+    rx = np.radians(rotate_x)
+    ry = np.radians(rotate_y)
+    cos_x, sin_x = np.cos(rx), np.sin(rx)
+    cos_y, sin_y = np.cos(ry), np.sin(ry)
+
+    def project(x3, y3, z3):
+        # Rotate around Y
+        x = x3 * cos_y - z3 * sin_y
+        z = x3 * sin_y + z3 * cos_y
+        # Rotate around X
+        y = y3 * cos_x - z * sin_x
+        z = y3 * sin_x + z * cos_x
+        # Orthographic projection with zoom
+        px = int(out_w / 2 + x * zoom * out_w * 0.4)
+        py = int(out_h / 2 + y * zoom * out_h * 0.4)
+        return px, py, z
+
+    # Generate grid points
+    points = np.zeros((grid_h, grid_w, 3), dtype=np.float64)
+    for gy in range(grid_h):
+        for gx in range(grid_w):
+            sy, sx = gy * step_y, gx * step_x
+            d = depth[min(sy, h-1), min(sx, w-1)]
+            x3 = (gx / grid_w - 0.5) * 2
+            y3 = -d * elevation
+            z3 = (gy / grid_h - 0.5) * 2
+            points[gy, gx] = project(x3, y3, z3)
+
+    # Source image for texture
+    src = np.array(image.convert("RGB"))
+
+    # Draw grid lines
+    if show_grid:
+        lw = max(1, line_width)
+        # Glow pass (thicker, dimmer)
+        if grid_glow > 0:
+            glow_color = tuple(int(c * grid_glow * 0.3) for c in gc)
+            for gy in range(grid_h):
+                for gx in range(grid_w):
+                    px, py, _ = int(points[gy,gx,0]), int(points[gy,gx,1]), points[gy,gx,2]
+                    if gx < grid_w - 1:
+                        nx, ny = int(points[gy,gx+1,0]), int(points[gy,gx+1,1])
+                        cv2.line(canvas, (px,py), (nx,ny), glow_color, lw + 3, cv2.LINE_AA)
+                    if gy < grid_h - 1:
+                        nx, ny = int(points[gy+1,gx,0]), int(points[gy+1,gx,1])
+                        cv2.line(canvas, (px,py), (nx,ny), glow_color, lw + 3, cv2.LINE_AA)
+        # Main lines
+        for gy in range(grid_h):
+            for gx in range(grid_w):
+                px, py = int(points[gy,gx,0]), int(points[gy,gx,1])
+                # Color by depth
+                sy, sx = gy * step_y, gx * step_x
+                d = depth[min(sy, h-1), min(sx, w-1)]
+                if show_image:
+                    r, g, b = src[min(sy, h-1), min(sx, w-1)]
+                    color = (int(r), int(g), int(b))
+                else:
+                    # Blend grid color with height
+                    bright = 0.3 + 0.7 * d
+                    color = tuple(int(c * bright) for c in gc)
+                if gx < grid_w - 1:
+                    nx, ny = int(points[gy,gx+1,0]), int(points[gy,gx+1,1])
+                    cv2.line(canvas, (px,py), (nx,ny), color, lw, cv2.LINE_AA)
+                if gy < grid_h - 1:
+                    nx, ny = int(points[gy+1,gx,0]), int(points[gy+1,gx,1])
+                    cv2.line(canvas, (px,py), (nx,ny), color, lw, cv2.LINE_AA)
+
+    # Scan lines overlay
+    if scan_lines:
+        for y in range(0, out_h, 3):
+            cv2.line(canvas, (0, y), (out_w, y), (0, 0, 0), 1)
+        canvas = (canvas * (1 - scan_line_opacity * 0.3)).astype(np.uint8)
+
+    return Image.fromarray(canvas, "RGB")
+
+
 def create_wigglegram(
     image: Image.Image,
     depth: np.ndarray,
@@ -421,6 +728,9 @@ def create_wigglegram(
     separation: float = 15.0,
     path: str = "linear",
     blur_depth: float = 5.0,
+    film_filter: dict = None,
+    pivot_x: float = 0.5,
+    pivot_y: float = 0.5,
 ) -> list:
     """
     Generate N displaced views by shifting pixels using depth.
@@ -446,7 +756,11 @@ def create_wigglegram(
 
     h, w = depth.shape
     src = np.array(image.convert("RGB"), dtype=np.float32)
-    disp = 1.0 - depth  # near=1 (moves most), far=0
+    # Sample depth at pivot point — objects at this depth stay still
+    px = max(0, min(w - 1, int(pivot_x * w)))
+    py = max(0, min(h - 1, int(pivot_y * h)))
+    pivot_depth = depth[py, px]
+    disp = (1.0 - depth) - (1.0 - pivot_depth)  # relative to pivot
 
     ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
 
@@ -471,9 +785,73 @@ def create_wigglegram(
             interpolation=cv2.INTER_LINEAR,
             borderMode=cv2.BORDER_REFLECT,
         )
-        views.append(Image.fromarray(result.clip(0, 255).astype(np.uint8), "RGB"))
+        view_img = Image.fromarray(result.clip(0, 255).astype(np.uint8), "RGB")
+        if film_filter and any(v for v in film_filter.values() if v and v != "none" and v != ""):
+            view_img = apply_film_filter(view_img, depth, **film_filter)
+        views.append(view_img)
 
     return views
+
+
+def create_comb_frame(
+    image: Image.Image,
+    depth: np.ndarray,
+    frame_idx: int,
+    interval: int = 3,
+    separation: float = 15.0,
+    blur_depth: float = 5.0,
+    pivot_x: float = 0.5,
+    pivot_y: float = 0.5,
+) -> Image.Image:
+    """
+    Comb method for video wigglegrams.
+
+    For each video frame, generates a left or right eye view based on
+    the frame index and interval. The pattern alternates every `interval`
+    frames: L L L R R R L L L R R R ...
+
+    This creates a flickering 3D effect when played back at normal speed,
+    similar to the technique described by stereoscopic filmmakers using
+    beam splitters.
+
+    frame_idx   — which frame number (determines L or R)
+    interval    — how many consecutive frames per eye (default 3)
+    separation  — max horizontal shift in pixels
+    """
+    import cv2
+    from PIL import ImageFilter
+
+    depth = _ensure_same_size(image, depth)
+
+    if blur_depth > 0:
+        depth_img = Image.fromarray((depth * 255).astype(np.uint8), mode="L")
+        depth_img = depth_img.filter(ImageFilter.GaussianBlur(radius=blur_depth))
+        depth = np.array(depth_img, dtype=np.float32) / 255.0
+
+    h, w = depth.shape
+    src = np.array(image.convert("RGB"), dtype=np.float32)
+
+    px = max(0, min(w - 1, int(pivot_x * w)))
+    py = max(0, min(h - 1, int(pivot_y * h)))
+    pivot_depth = depth[py, px]
+    disp = (1.0 - depth) - (1.0 - pivot_depth)
+
+    # Determine eye: cycle through interval frames per eye
+    cycle = (frame_idx // interval) % 2
+    t = -1.0 if cycle == 0 else 1.0  # left or right
+    shift_x = t * separation
+
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    dx = disp * shift_x
+    map_x = np.clip(xs - dx, 0, w - 1).astype(np.float32)
+    map_y = ys
+
+    result = cv2.remap(
+        src, map_x, map_y,
+        interpolation=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_REFLECT,
+    )
+    return Image.fromarray(result.clip(0, 255).astype(np.uint8), "RGB")
 
 
 # ── Effect 7: Spatial Photo (stereo pair) ───────────────────────────────────
@@ -610,6 +988,175 @@ def posterize_depth_array(depth: np.ndarray, levels: int = 4) -> np.ndarray:
     return np.clip(posterized, 0, 1).astype(np.float32)
 
 
+# ── Hologram effect ──────────────────────────────────────────────────────────
+
+def depth_hologram(
+    image: Image.Image,
+    depth: np.ndarray,
+    color: str = "#00ff88",
+    color2: str = "#004422",
+    style: str = "gits",
+    edge_strength: float = 0.8,
+    scan_lines: bool = True,
+    scan_density: int = 3,
+    scan_opacity: float = 0.4,
+    dither: bool = True,
+    dither_size: int = 2,
+    grid_overlay: bool = True,
+    grid_density: int = 30,
+    chromatic: float = 0.3,
+    noise: float = 0.15,
+    bloom: float = 1.5,
+    transparency: float = 0.6,
+    bg_color: str = "#000000",
+) -> Image.Image:
+    """80s/90s anime hologram effect — Ghost in the Shell / Akira / Evangelion style."""
+    import cv2
+
+    depth = _ensure_same_size(image, depth)
+    h, w = depth.shape
+    src = np.array(image.convert("RGB"), dtype=np.float32) / 255.0
+
+    # Style presets
+    styles = {
+        "gits":   {"color": "#00ff88", "color2": "#003322", "bg": "#000505"},
+        "akira":  {"color": "#ff6600", "color2": "#441100", "bg": "#050000"},
+        "eva":    {"color": "#9933ff", "color2": "#220066", "bg": "#050008"},
+        "blade":  {"color": "#00ccff", "color2": "#003366", "bg": "#000510"},
+        "nerv":   {"color": "#ff0066", "color2": "#330015", "bg": "#050005"},
+        "tron":   {"color": "#00dfff", "color2": "#004466", "bg": "#000008"},
+    }
+    if style in styles and style != "custom":
+        s = styles[style]
+        color, color2, bg_color = s["color"], s["color2"], s["bg"]
+
+    def hex_rgb(c):
+        c = c.lstrip("#")
+        return np.array([int(c[i:i+2], 16) for i in (0, 2, 4)], dtype=np.float32) / 255.0
+
+    c1 = hex_rgb(color)
+    c2 = hex_rgb(color2)
+    bg = hex_rgb(bg_color)
+
+    # Convert to luminance
+    luma = src[:, :, 0] * 0.299 + src[:, :, 1] * 0.587 + src[:, :, 2] * 0.114
+
+    # Edge detection from depth (Sobel)
+    depth_u8 = (depth * 255).astype(np.uint8)
+    edges_x = cv2.Sobel(depth_u8, cv2.CV_64F, 1, 0, ksize=3)
+    edges_y = cv2.Sobel(depth_u8, cv2.CV_64F, 0, 1, ksize=3)
+    edges = np.sqrt(edges_x**2 + edges_y**2)
+    edges = np.clip(edges / edges.max() if edges.max() > 0 else edges, 0, 1).astype(np.float32)
+
+    # Also get image edges for detail
+    luma_u8 = (luma * 255).astype(np.uint8)
+    img_edges_x = cv2.Sobel(luma_u8, cv2.CV_64F, 1, 0, ksize=3)
+    img_edges_y = cv2.Sobel(luma_u8, cv2.CV_64F, 0, 1, ksize=3)
+    img_edges = np.sqrt(img_edges_x**2 + img_edges_y**2)
+    img_edges = np.clip(img_edges / (img_edges.max() + 1e-6), 0, 1).astype(np.float32)
+
+    # Combine edges
+    combined_edges = np.clip(edges * edge_strength + img_edges * 0.5, 0, 1)
+
+    # Color mapping: luminance → hologram color gradient
+    # Near depth = bright c1, far = dimmer c2
+    depth_color = depth[:, :, None] * c1[None, None, :] + (1 - depth[:, :, None]) * c2[None, None, :]
+
+    # Modulate by luminance
+    holo = depth_color * (0.3 + 0.7 * luma[:, :, None])
+
+    # Add bright edges
+    edge_glow = combined_edges[:, :, None] * c1[None, None, :] * 1.5
+    holo = holo + edge_glow
+
+    # Dither layer (ordered dithering pattern)
+    if dither:
+        # Bayer matrix 4x4
+        bayer = np.array([
+            [ 0,  8,  2, 10],
+            [12,  4, 14,  6],
+            [ 3, 11,  1,  9],
+            [15,  7, 13,  5]
+        ], dtype=np.float32) / 16.0
+
+        ds = max(1, dither_size)
+        # Tile bayer pattern across image
+        bayer_tiled = np.tile(bayer, (h // 4 + 1, w // 4 + 1))[:h, :w]
+        if ds > 1:
+            bayer_tiled = cv2.resize(
+                np.tile(bayer, ((h // (4*ds)) + 2, (w // (4*ds)) + 2))[:h//ds+1, :w//ds+1],
+                (w, h), interpolation=cv2.INTER_NEAREST
+            )
+
+        # Apply dither: threshold luminance against bayer
+        dither_mask = (luma > bayer_tiled).astype(np.float32)
+        # Blend dithered version
+        holo_dithered = holo * dither_mask[:, :, None]
+        holo = holo * 0.4 + holo_dithered * 0.6
+
+    # Grid overlay (elevation contour lines)
+    if grid_overlay:
+        grid = np.zeros((h, w), dtype=np.float32)
+        step = max(2, w // grid_density)
+        # Vertical lines
+        for x in range(0, w, step):
+            grid[:, x] = 0.3
+        # Horizontal lines
+        for y in range(0, h, step):
+            grid[y, :] = 0.3
+        # Depth contour lines (iso-depth)
+        num_contours = 12
+        for i in range(num_contours):
+            level = i / num_contours
+            contour_mask = np.abs(depth - level) < 0.015
+            grid[contour_mask] = 0.6
+        holo = holo + grid[:, :, None] * c1[None, None, :] * 0.4
+
+    # Scan lines
+    if scan_lines:
+        scan = np.ones((h, w), dtype=np.float32)
+        for y in range(0, h, max(2, scan_density)):
+            scan[y, :] = 1.0 - scan_opacity
+        holo = holo * scan[:, :, None]
+
+    # Chromatic aberration (RGB channel offset based on depth)
+    if chromatic > 0:
+        shift = int(chromatic * 8)
+        if shift > 0:
+            # Shift red channel right, blue channel left
+            r_ch = holo[:, :, 0].copy()
+            b_ch = holo[:, :, 2].copy()
+            r_shifted = np.zeros_like(r_ch)
+            b_shifted = np.zeros_like(b_ch)
+            r_shifted[:, shift:] = r_ch[:, :-shift]
+            b_shifted[:, :-shift] = b_ch[:, shift:]
+            # Blend by depth
+            holo[:, :, 0] = r_ch * (1 - depth * 0.5) + r_shifted * depth * 0.5
+            holo[:, :, 2] = b_ch * (1 - depth * 0.5) + b_shifted * depth * 0.5
+
+    # Noise / grain
+    if noise > 0:
+        rng = np.random.RandomState(42)
+        grain = rng.randn(h, w).astype(np.float32) * noise * 0.1
+        holo = holo + grain[:, :, None] * c1[None, None, :]
+
+    # Depth-based transparency (far areas more transparent)
+    if transparency > 0:
+        alpha = np.clip(depth * (1.0 / max(0.1, 1.0 - transparency)) , 0, 1)
+        holo = holo * alpha[:, :, None] + bg[None, None, :] * (1 - alpha[:, :, None])
+
+    # Bloom / glow
+    if bloom > 0:
+        holo_u8 = np.clip(holo * 255, 0, 255).astype(np.uint8)
+        ksize = int(bloom * 15) | 1  # ensure odd
+        blurred = cv2.GaussianBlur(holo_u8, (ksize, ksize), 0).astype(np.float32) / 255.0
+        holo = holo + blurred * bloom * 0.3
+
+    # Clamp and convert
+    result = np.clip(holo * 255, 0, 255).astype(np.uint8)
+    return Image.fromarray(result, "RGB")
+
+
 # ── Convenience dispatcher ────────────────────────────────────────────────────
 
 def apply_effect(
@@ -634,5 +1181,7 @@ def apply_effect(
         return depth_parallax(image, depth, **params)
     elif effect == "posterize":
         return posterize_depth(image, depth, **params)
+    elif effect == "hologram":
+        return depth_hologram(image, depth, **params)
     else:
-        raise ValueError(f"Unknown effect: {effect!r}. Choose: slice, grade, dof, fog, parallax, posterize")
+        raise ValueError(f"Unknown effect: {effect!r}. Choose: slice, grade, dof, fog, parallax, posterize, hologram")

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Depth Scanner OSS</title>
+<title>Depth Scanner Lab</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -30,21 +30,57 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .dot-wait{background:var(--warn);animation:pulse 1.2s ease infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
+/* ── Global scrollbar ─────────────────────────────────── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+::-webkit-scrollbar-corner{background:var(--bg)}
+
 /* ── Layout ───────────────────────────────────────────── */
 .main{flex:1;display:flex;overflow:hidden}
-.sidebar{width:300px;min-width:280px;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+.sidebar{width:320px;min-width:300px;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
 .canvas{flex:1;display:flex;flex-direction:column;overflow:hidden}
 
 /* ── Sidebar sections ─────────────────────────────────── */
-.sb-section{padding:14px 16px;border-bottom:1px solid var(--border)}
+.sb-section{padding:14px 20px;border-bottom:1px solid var(--border)}
 .sb-title{font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
 .field{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .field label{width:80px;flex-shrink:0;color:var(--muted);font-size:11px}
-select,input[type="number"]{flex:1;background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:12px;padding:5px 8px;outline:none}
-select:focus,input:focus{border-color:var(--accent)}
-input[type="range"]{flex:1;padding:0;height:4px;accent-color:var(--accent);cursor:pointer}
-input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;border:1px solid var(--border);border-radius:var(--radius);background:var(--raised)}
+
+/* ── Custom select ───────────────────────────────────── */
+select,input[type="number"]{flex:1;background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:12px;padding:5px 8px;outline:none;-webkit-appearance:none;appearance:none}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236e6e80'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px;cursor:pointer}
+select:hover{border-color:var(--accent)}
+select:focus,input:focus{border-color:var(--accent);box-shadow:0 0 0 1px rgba(91,143,255,.15)}
+
+/* ── Custom range slider ─────────────────────────────── */
+input[type="range"]{flex:1;padding:0;height:20px;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
+input[type="range"]::-webkit-slider-runnable-track{height:4px;background:var(--border);border-radius:2px}
+input[type="range"]:hover::-webkit-slider-runnable-track{background:#4a4a52}
+input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid var(--surface);margin-top:-5px;box-shadow:0 1px 4px rgba(0,0,0,.4);transition:transform .1s,box-shadow .1s}
+input[type="range"]::-webkit-slider-thumb:hover{transform:scale(1.15);box-shadow:0 0 0 3px rgba(91,143,255,.2),0 1px 4px rgba(0,0,0,.4)}
+input[type="range"]:active::-webkit-slider-thumb{transform:scale(1.1);background:#4070e0}
+
+/* ── Custom checkbox ─────────────────────────────────── */
+input[type="checkbox"]{-webkit-appearance:none;appearance:none;width:16px;height:16px;border:1.5px solid var(--border);border-radius:3px;background:var(--raised);cursor:pointer;position:relative;flex-shrink:0;transition:all .15s}
+input[type="checkbox"]:checked{background:var(--accent);border-color:var(--accent)}
+input[type="checkbox"]:checked::after{content:"";position:absolute;left:4px;top:1px;width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+input[type="checkbox"]:hover{border-color:var(--accent)}
+
+/* ── Custom color input ──────────────────────────────── */
+input[type="color"]{-webkit-appearance:none;appearance:none;padding:2px;height:28px;cursor:pointer;width:44px;flex:none;border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);transition:border-color .15s}
+input[type="color"]:hover{border-color:var(--accent)}
+input[type="color"]::-webkit-color-swatch-wrapper{padding:2px}
+input[type="color"]::-webkit-color-swatch{border:none;border-radius:3px}
+
+/* ── Hidden file inputs ──────────────────────────────── */
+input[type="file"]{display:none}
+
 .range-val{font-family:var(--mono);font-size:11px;color:var(--text);min-width:32px;text-align:right}
+.fx-select{flex:1;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;font-family:var(--mono)}
+.pm-btn{width:22px;height:22px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:3px;cursor:pointer;font-size:14px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center}
+.pm-btn:hover{background:var(--border)}
 
 /* ── Buttons ──────────────────────────────────────────── */
 .btn{display:block;width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);color:var(--text);font-family:var(--sans);font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s;margin-bottom:6px}
@@ -171,7 +207,7 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
 <!-- ═══ HEADER ══════════════════════════════════════════════════════ -->
 <div class="header">
   <div class="header-left">
-    <div class="logo"><span>DEPTH</span> SCANNER OSS</div>
+    <div class="logo"><span>DEPTH</span> SCANNER LAB</div>
     <div style="display:flex;gap:4px;margin-left:12px">
       <button class="nav-btn active" id="nav-render">Render</button>
       <button class="nav-btn" id="nav-3d">Effects</button>
@@ -181,6 +217,7 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
     <span id="device-info"></span>
     <div id="status-dot" class="dot dot-wait"></div>
     <span id="status-text">connecting…</span>
+    <button id="btn-restart-server" title="Restart server" style="display:none;background:none;border:1px solid var(--border);color:var(--muted);font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer;margin-left:4px">Restart</button>
   </div>
 </div>
 
@@ -318,6 +355,8 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
         <button class="fx-tab" data-fx="wiggle">Wiggle</button>
         <button class="fx-tab" data-fx="spatial">Spatial</button>
         <button class="fx-tab" data-fx="transition">Transition</button>
+        <button class="fx-tab" data-fx="elevation">Elevation</button>
+        <button class="fx-tab" data-fx="hologram">Hologram</button>
       </div>
 
       <!-- DoF -->
@@ -539,6 +578,75 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
             oninput="document.getElementById('wig-loops-v').textContent=this.value; updateWigEstimate()"/>
           <span class="range-val" id="wig-loops-v">3</span>
         </div>
+        <!-- Pivot Point -->
+        <div style="margin-top:8px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-family:var(--mono);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)">Pivot Point</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px">
+                <input type="checkbox" id="wig-pivot-dot"/> <span style="color:var(--err)">dot</span>
+              </label>
+              <button class="btn btn-sm" id="wig-pivot-reset" style="width:auto;margin:0;padding:2px 8px;font-size:9px">Reset</button>
+            </div>
+          </div>
+          <div class="field"><label>Pivot X</label><input type="range" id="wig-pivot-x" min="0" max="1" step="0.01" value="0.5" oninput="$('wig-pivot-x-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-pivot-x-v">0.50</span></div>
+          <div class="field"><label>Pivot Y</label><input type="range" id="wig-pivot-y" min="0" max="1" step="0.01" value="0.5" oninput="$('wig-pivot-y-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-pivot-y-v">0.50</span></div>
+        </div>
+        <!-- Film Filter -->
+        <div style="margin-top:8px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)">
+          <div class="field">
+            <label>Film filter</label>
+            <select id="wig-film-preset" onchange="applyFilmPreset(this.value)">
+              <option value="none">None</option>
+              <option value="disposable">Disposable</option>
+              <option value="flash">Flash</option>
+              <option value="dreamy">Dreamy</option>
+              <option value="lo-fi">Lo-fi</option>
+              <option value="cinematic">Cinematic</option>
+              <option value="noir">Noir</option>
+              <option value="warm-fade">Warm Fade</option>
+              <option value="cool-tone">Cool Tone</option>
+            </select>
+          </div>
+          <div id="wig-film-sliders" style="display:none">
+            <div class="field"><label>Grain</label><input type="range" id="wig-grain" min="0" max="0.5" step="0.01" value="0" oninput="$('wig-grain-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-grain-v">0.00</span></div>
+            <div class="field"><label>Grain opacity</label><input type="range" id="wig-grain-opacity" min="0" max="1" step="0.05" value="1" oninput="$('wig-grain-opacity-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-grain-opacity-v">1.00</span></div>
+            <div class="field"><label>BG blur</label><input type="range" id="wig-bgblur" min="0" max="20" step="1" value="0" oninput="$('wig-bgblur-v').textContent=this.value+'px'"/><span class="range-val" id="wig-bgblur-v">0px</span></div>
+            <div class="field"><label>Flash</label><input type="range" id="wig-flash" min="0" max="2" step="0.05" value="0" oninput="$('wig-flash-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-flash-v">0.00</span></div>
+            <div class="field"><label>Vignette</label><input type="range" id="wig-vignette" min="0" max="1" step="0.05" value="0" oninput="$('wig-vignette-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-vignette-v">0.00</span></div>
+            <div class="field"><label>Light leak</label><input type="range" id="wig-leak" min="0" max="1" step="0.05" value="0" oninput="$('wig-leak-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-leak-v">0.00</span></div>
+            <div class="field"><label>Leak style</label>
+              <select id="wig-leak-style">
+                <option value="amber-corner">Amber Corner</option>
+                <option value="red-streak">Red Streak</option>
+                <option value="rainbow-band">Rainbow Band</option>
+                <option value="cyan-wash">Cyan Wash</option>
+                <option value="golden-hour">Golden Hour</option>
+                <option value="purple-haze">Purple Haze</option>
+              </select>
+            </div>
+            <div class="field"><label>Halation</label><input type="range" id="wig-halation" min="0" max="30" step="1" value="0" oninput="$('wig-halation-v').textContent=this.value+'px'"/><span class="range-val" id="wig-halation-v">0px</span></div>
+            <div class="field"><label>Contrast</label><input type="range" id="wig-contrast" min="-0.5" max="0.5" step="0.05" value="0" oninput="$('wig-contrast-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-contrast-v">0.00</span></div>
+            <div class="field"><label>Saturation</label><input type="range" id="wig-saturation" min="-1" max="1" step="0.05" value="0" oninput="$('wig-saturation-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-saturation-v">0.00</span></div>
+            <div class="field"><label>Fade</label><input type="range" id="wig-fade" min="0" max="0.3" step="0.01" value="0" oninput="$('wig-fade-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-fade-v">0.00</span></div>
+            <div class="field"><label>Tint color</label><input type="color" id="wig-tint-color" value="#ffe0a0"/></div>
+            <div class="field"><label>Tint amount</label><input type="range" id="wig-tint-strength" min="0" max="0.5" step="0.01" value="0" oninput="$('wig-tint-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="wig-tint-v">0.00</span></div>
+            <div class="field"><label>Grad. map</label>
+              <select id="wig-gradient-map" onchange="drawGradMapPreview('wig-gradmap-preview',this.value)">
+                <option value="none">None</option>
+                <option value="warm">Warm</option>
+                <option value="cool">Cool</option>
+                <option value="vintage">Vintage</option>
+                <option value="neon">Neon</option>
+                <option value="forest">Forest</option>
+                <option value="sunset">Sunset</option>
+              </select>
+            </div>
+            <div style="padding-left:88px;margin-top:-4px;margin-bottom:8px">
+              <canvas id="wig-gradmap-preview" width="180" height="14" style="width:100%;height:14px;border-radius:3px;border:1px solid var(--border);display:none"></canvas>
+            </div>
+          </div>
+        </div>
         <div id="wig-estimate" style="display:none;font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:4px;padding:4px 6px;background:var(--bg);border-radius:var(--radius)"></div>
       </div>
 
@@ -597,6 +705,169 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
         </div>
       </div>
 
+      <!-- Elevation -->
+      <div class="fx-pane" id="fx-elevation">
+        <div class="field"><label>Glow style</label><select id="elev-glow-preset" class="fx-select">
+          <option value="">Custom</option>
+          <option value="cyber" selected>Cyberpunk</option>
+          <option value="neon-pink">Neon Pink</option>
+          <option value="vaporwave">Vaporwave</option>
+          <option value="matrix">Matrix</option>
+          <option value="fire">Inferno</option>
+          <option value="ice">Frozen</option>
+          <option value="gold">Gold Rush</option>
+          <option value="sunset">Sunset</option>
+          <option value="ocean">Deep Ocean</option>
+          <option value="toxic">Toxic</option>
+          <option value="plasma">Plasma</option>
+          <option value="hologram">Hologram</option>
+          <option value="midnight">Midnight</option>
+          <option value="lava">Lava</option>
+          <option value="aurora">Aurora</option>
+        </select></div>
+        <div class="field"><label>Camera</label><select id="elev-cam-preset" class="fx-select">
+          <option value="">—</option>
+          <option value="default">Default</option>
+          <option value="iso">Isometric</option>
+          <option value="top">Top</option>
+          <option value="front">Front</option>
+          <option value="side">Side</option>
+          <option value="close">Close</option>
+          <option value="rear">Rear</option>
+          <option value="wide">Wide</option>
+        </select></div>
+        <div class="field"><label>Elevation</label><div style="display:flex;align-items:center;gap:4px;flex:1"><button class="pm-btn" data-target="elev-height" data-step="-0.05">−</button><input type="range" id="elev-height" min="-1" max="1" step="0.01" value="0.3" style="flex:1" oninput="$('elev-height-v').textContent=parseFloat(this.value).toFixed(2)"/><button class="pm-btn" data-target="elev-height" data-step="0.05">+</button></div><span class="range-val" id="elev-height-v">0.30</span></div>
+        <div class="field"><label>Rotate X</label><input type="range" id="elev-rx" min="-90" max="90" step="1" value="-35" oninput="$('elev-rx-v').textContent=this.value+'°'"/><span class="range-val" id="elev-rx-v">-35°</span></div>
+        <div class="field"><label>Rotate Y</label><input type="range" id="elev-ry" min="-180" max="180" step="1" value="15" oninput="$('elev-ry-v').textContent=this.value+'°'"/><span class="range-val" id="elev-ry-v">15°</span></div>
+        <div class="field"><label>Rotate Z</label><input type="range" id="elev-rz" min="-180" max="180" step="1" value="0" oninput="$('elev-rz-v').textContent=this.value+'°'"/><span class="range-val" id="elev-rz-v">0°</span></div>
+        <div class="field"><label>Zoom</label><input type="range" id="elev-zoom" min="0.5" max="3" step="0.05" value="1.2" oninput="$('elev-zoom-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="elev-zoom-v">1.20</span></div>
+        <div style="font-size:10px;color:var(--muted);margin:8px 0 3px">Animation</div>
+        <div class="field"><label>Type</label><select id="elev-anim-select" class="fx-select">
+          <option value="">Off</option>
+          <option value="orbit-y">Orbit Y</option>
+          <option value="orbit-x">Orbit X</option>
+          <option value="orbit-y">Orbit</option>
+          <option value="wiggle">Wiggle</option>
+          <option value="handheld">Handheld</option>
+          <option value="dolly">Dolly Zoom</option>
+          <option value="breathe">Breathe</option>
+          <option value="orbit-x">Orbit X</option>
+          <option value="orbit-z">Orbit Z</option>
+          <option value="spin">Spin</option>
+          <option value="tilt">Tilt</option>
+          <option value="flyover">Flyover</option>
+        </select></div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <div class="field" style="flex:1;margin:0"><label>Speed</label><input type="range" id="elev-anim-speed" min="0.1" max="3" step="0.1" value="1.0" style="flex:1" oninput="$('elev-anim-speed-v').textContent=parseFloat(this.value).toFixed(1)+'×'"/><span class="range-val" id="elev-anim-speed-v">1.0×</span></div>
+          <div class="field" style="flex-shrink:0;margin:0"><label>Dir</label><select id="elev-anim-dir" class="fx-select" style="width:50px">
+            <option value="1">→</option>
+            <option value="-1">←</option>
+          </select></div>
+        </div>
+        <div class="field"><label>Density</label><input type="range" id="elev-density" min="10" max="80" step="5" value="40" oninput="$('elev-density-v').textContent=this.value"/><span class="range-val" id="elev-density-v">40</span></div>
+        <div class="field"><label>Line width</label><input type="range" id="elev-linewidth" min="1" max="4" step="1" value="1" oninput="$('elev-linewidth-v').textContent=this.value+'px'"/><span class="range-val" id="elev-linewidth-v">1px</span></div>
+        <div class="field"><label>Glow</label><input type="range" id="elev-glow" min="0" max="1" step="0.05" value="0.8" oninput="$('elev-glow-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="elev-glow-v">0.80</span></div>
+        <div class="field"><label>Bloom</label><input type="range" id="elev-bloom" min="0" max="3" step="0.1" value="1.5" oninput="$('elev-bloom-v').textContent=parseFloat(this.value).toFixed(1)"/><span class="range-val" id="elev-bloom-v">1.5</span></div>
+        <div class="field"><label>Smoothing</label><input type="range" id="elev-smooth" min="0" max="20" step="1" value="3" oninput="$('elev-smooth-v').textContent=this.value"/><span class="range-val" id="elev-smooth-v">3</span></div>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <div class="field" style="flex:1;margin:0"><label>Near</label><input type="color" id="elev-grid-color" value="#00ff88"/></div>
+          <div class="field" style="flex:1;margin:0"><label>Far</label><input type="color" id="elev-grid-color2" value="#0044ff"/></div>
+          <div class="field" style="flex:1;margin:0"><label>BG</label><input type="color" id="elev-bg-color" value="#0a0a14"/></div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:4px;flex-wrap:wrap">
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="elev-grid" checked/> Grid</label>
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="elev-image"/> Image</label>
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="elev-scanlines"/> Scan lines</label>
+        </div>
+        <div class="field"><label>Scan opacity</label><input type="range" id="elev-scan-opacity" min="0" max="1" step="0.05" value="0.3" oninput="$('elev-scan-opacity-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="elev-scan-opacity-v">0.30</span></div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn" id="elev-export-gif" style="font-size:10px;padding:3px 8px;flex:1">Export GIF</button>
+          <button class="btn" id="elev-export-mp4" style="font-size:10px;padding:3px 8px;flex:1">Export MP4</button>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">Drag preview to orbit · Scroll to zoom</div>
+      </div>
+
+      <!-- Hologram -->
+      <div class="fx-pane" id="fx-hologram">
+        <div class="field"><label>Style</label><select id="holo-style" class="fx-select">
+          <option value="gits">Ghost in the Shell</option>
+          <option value="akira">Akira</option>
+          <option value="eva">Evangelion</option>
+          <option value="blade">Blade Runner</option>
+          <option value="nerv">NERV</option>
+          <option value="tron">Tron</option>
+          <option value="custom">Custom</option>
+        </select></div>
+        <div class="field"><label>Camera</label><select id="holo-cam-preset" class="fx-select">
+          <option value="">—</option>
+          <option value="default">Default</option>
+          <option value="iso">Isometric</option>
+          <option value="top">Top</option>
+          <option value="front">Front</option>
+          <option value="side">Side</option>
+          <option value="close">Close</option>
+          <option value="rear">Rear</option>
+          <option value="wide">Wide</option>
+        </select></div>
+        <div class="field"><label>Dither</label><select id="holo-dither-style" class="fx-select">
+          <option value="none">None</option>
+          <option value="bayer4" selected>Bayer 4×4</option>
+          <option value="bayer8">Bayer 8×8</option>
+          <option value="halftone">Halftone</option>
+          <option value="crosshatch">Crosshatch</option>
+          <option value="noise">Noise</option>
+        </select></div>
+        <div class="field"><label>Elevation</label><div style="display:flex;align-items:center;gap:4px;flex:1"><button class="pm-btn" data-target="holo-elev-height" data-step="-0.05">−</button><input type="range" id="holo-elev-height" min="-1" max="1" step="0.01" value="0.3" style="flex:1" oninput="$('elev-height').value=this.value;$('elev-height-v').textContent=parseFloat(this.value).toFixed(2);$('holo-elev-v').textContent=parseFloat(this.value).toFixed(2)"/><button class="pm-btn" data-target="holo-elev-height" data-step="0.05">+</button></div><span class="range-val" id="holo-elev-v">0.30</span></div>
+        <div class="field"><label>Rotate X</label><input type="range" id="holo-rx" min="-90" max="90" step="1" value="-35" oninput="$('elev-rx').value=this.value;$('elev-rx-v').textContent=this.value+'°';$('holo-rx-v').textContent=this.value+'°'"/><span class="range-val" id="holo-rx-v">-35°</span></div>
+        <div class="field"><label>Rotate Y</label><input type="range" id="holo-ry" min="-180" max="180" step="1" value="15" oninput="$('elev-ry').value=this.value;$('elev-ry-v').textContent=this.value+'°';$('holo-ry-v').textContent=this.value+'°'"/><span class="range-val" id="holo-ry-v">15°</span></div>
+        <div class="field"><label>Rotate Z</label><input type="range" id="holo-rz" min="-180" max="180" step="1" value="0" oninput="$('elev-rz').value=this.value;$('elev-rz-v').textContent=this.value+'°';$('holo-rz-v').textContent=this.value+'°'"/><span class="range-val" id="holo-rz-v">0°</span></div>
+        <div class="field"><label>Zoom</label><input type="range" id="holo-zoom" min="0.5" max="3" step="0.05" value="1.2" oninput="$('elev-zoom').value=this.value;$('elev-zoom-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="holo-zoom-v">1.20</span></div>
+        <div class="field"><label>Density</label><input type="range" id="holo-density" min="10" max="80" step="5" value="40" oninput="$('elev-density').value=this.value;$('elev-density-v').textContent=this.value;$('holo-density-v').textContent=this.value"/><span class="range-val" id="holo-density-v">40</span></div>
+        <div class="field"><label>Line width</label><input type="range" id="holo-linewidth" min="1" max="4" step="1" value="1" oninput="$('elev-linewidth').value=this.value;$('elev-linewidth-v').textContent=this.value+'px'"/><span class="range-val" id="holo-linewidth-v">1px</span></div>
+        <div class="field"><label>Glow</label><input type="range" id="holo-glow" min="0" max="1" step="0.05" value="0.8" oninput="$('elev-glow').value=this.value;$('elev-glow-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="holo-glow-v">0.80</span></div>
+        <div class="field"><label>Bloom</label><input type="range" id="holo-bloom2" min="0" max="3" step="0.1" value="1.5" oninput="$('elev-bloom').value=this.value;$('elev-bloom-v').textContent=parseFloat(this.value).toFixed(1)"/><span class="range-val" id="holo-bloom2-v">1.5</span></div>
+        <div class="field"><label>Smoothing</label><input type="range" id="holo-smooth" min="0" max="20" step="1" value="3" oninput="$('elev-smooth').value=this.value;$('elev-smooth-v').textContent=this.value"/><span class="range-val" id="holo-smooth-v">3</span></div>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <div class="field" style="flex:1;margin:0"><label>Near</label><input type="color" id="holo-color1" value="#00ff88"/></div>
+          <div class="field" style="flex:1;margin:0"><label>Far</label><input type="color" id="holo-color2" value="#003322"/></div>
+          <div class="field" style="flex:1;margin:0"><label>BG</label><input type="color" id="holo-bg" value="#000505"/></div>
+        </div>
+        <div style="display:flex;gap:12px;margin:4px 0;flex-wrap:wrap">
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="holo-scanlines" checked/> Scan lines</label>
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="holo-dither" checked/> Dither</label>
+          <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="holo-grid" checked/> Grid</label>
+        </div>
+        <div class="field"><label>Scan density</label><input type="range" id="holo-scan-density" min="2" max="8" step="1" value="3" oninput="$('holo-scan-density-v').textContent=this.value+'px'"/><span class="range-val" id="holo-scan-density-v">3px</span></div>
+        <div style="font-size:10px;color:var(--muted);margin:8px 0 3px">Animation</div>
+        <div class="field"><label>Type</label><select id="holo-anim-select" class="fx-select">
+          <option value="">Off</option>
+          <option value="orbit-y">Orbit Y</option>
+          <option value="orbit-x">Orbit X</option>
+          <option value="orbit-y">Orbit</option>
+          <option value="wiggle">Wiggle</option>
+          <option value="handheld">Handheld</option>
+          <option value="dolly">Dolly Zoom</option>
+          <option value="breathe">Breathe</option>
+          <option value="orbit-x">Orbit X</option>
+          <option value="orbit-z">Orbit Z</option>
+          <option value="spin">Spin</option>
+          <option value="tilt">Tilt</option>
+          <option value="flyover">Flyover</option>
+        </select></div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <div class="field" style="flex:1;margin:0"><label>Speed</label><input type="range" id="holo-anim-speed" min="0.1" max="3" step="0.1" value="1.0" style="flex:1" oninput="$('holo-anim-speed-v').textContent=parseFloat(this.value).toFixed(1)+'×'"/><span class="range-val" id="holo-anim-speed-v">1.0×</span></div>
+          <div class="field" style="flex-shrink:0;margin:0"><label>Dir</label><select id="holo-anim-dir" class="fx-select" style="width:50px">
+            <option value="1">→</option>
+            <option value="-1">←</option>
+          </select></div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn" id="holo-export-gif" style="font-size:10px;padding:3px 8px;flex:1">Export GIF</button>
+          <button class="btn" id="holo-export-mp4" style="font-size:10px;padding:3px 8px;flex:1">Export MP4</button>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">Drag preview to orbit · Scroll to zoom</div>
+      </div>
+
       <div style="margin-top:10px">
         <div class="btn-row">
           <button class="btn btn-primary" id="btn-fx-preview" disabled>Preview</button>
@@ -627,6 +898,7 @@ input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;
         <div class="drop-sub">PNG · JPG · TIFF · BMP · WebP · MP4 · MOV · AVI</div>
       </div>
       <img id="preview-img" style="display:none" alt="Preview"/>
+      <canvas id="elev-canvas" style="display:none;max-width:100%;max-height:100%;object-fit:contain;cursor:grab"></canvas>
       <canvas id="compare-canvas" width="1920" height="1080" style="display:none;max-width:100%;max-height:100%;object-fit:contain;cursor:col-resize"></canvas>
       <div id="frame-counter" style="display:none;position:absolute;top:10px;right:10px;background:rgba(0,0,0,.7);color:var(--ok);font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:4px"></div>
       <!-- Wipe labels -->
@@ -739,6 +1011,7 @@ function logProgress(current, total, label, extra) {
 function setStatus(ok) {
   $("status-dot").className = "dot " + (ok ? "dot-on" : "dot-off");
   $("status-text").textContent = ok ? "Server ready" : "Server offline";
+  $("btn-restart-server").style.display = ok ? "none" : "inline-block";
 }
 
 function setProgress(pct, show = true) {
@@ -1090,6 +1363,10 @@ async function loadFile(file) {
   $("btn-save").disabled = true;
   $("btn-fx-preview").disabled = true;
   $("btn-fx-apply").disabled = true;
+  // Reset effects toggle and live preview
+  state.fxEnabled = false;
+  $("fx-toggle").classList.remove("on");
+  $("fx-controls").classList.add("fx-disabled");
   // effects section always visible;
   $("viewport-bar").style.display = "none";
   $("depth-info").textContent = "";
@@ -1725,6 +2002,72 @@ function getActiveFx() {
   return document.querySelector(".fx-tab.active")?.dataset.fx || "dof";
 }
 
+// ── Film filter presets ──────────────────────────────────────────
+let _filmPresets = null;
+async function applyFilmPreset(name) {
+  // Fetch presets from server (cache after first call)
+  if (!_filmPresets) {
+    try {
+      const r = await fetch(`${SERVER}/film-presets`);
+      if (r.ok) _filmPresets = (await r.json()).presets;
+    } catch(e) {}
+  }
+  // Fallback hardcoded presets
+  if (!_filmPresets) {
+    _filmPresets = {
+      none: {blur_strength:0,flash_intensity:0,vignette_strength:0,light_leak_opacity:0,grain_amount:0,halation_radius:0,contrast:0,saturation:0,fade:0,tint_color:"",tint_strength:0,gradient_map:"none"},
+      disposable: {blur_strength:12,flash_intensity:0.8,vignette_strength:0.6,light_leak_opacity:0.3,grain_amount:0.25,halation_radius:8,contrast:0.1,saturation:-0.1,fade:0.05,tint_color:"#ffe0a0",tint_strength:0.1,gradient_map:"none"},
+    };
+  }
+  const p = _filmPresets[name] || _filmPresets.none;
+  const sliders = $("wig-film-sliders");
+  if (name === "none") {
+    if (sliders) sliders.style.display = "none";
+  } else {
+    if (sliders) sliders.style.display = "block";
+  }
+  // Set slider values
+  const map = {
+    "wig-grain": p.grain_amount, "wig-bgblur": p.blur_strength,
+    "wig-flash": p.flash_intensity, "wig-vignette": p.vignette_strength,
+    "wig-leak": p.light_leak_opacity, "wig-halation": p.halation_radius,
+    "wig-contrast": p.contrast, "wig-saturation": p.saturation,
+    "wig-fade": p.fade, "wig-tint-strength": p.tint_strength,
+  };
+  for (const [id, val] of Object.entries(map)) {
+    const el = $(id);
+    if (el) { el.value = val; el.dispatchEvent(new Event("input")); }
+  }
+  if (p.tint_color && $("wig-tint-color")) $("wig-tint-color").value = p.tint_color;
+  if (p.gradient_map && $("wig-gradient-map")) $("wig-gradient-map").value = p.gradient_map;
+}
+
+// Gradient map LUT colors (shadow → highlight)
+const GRADIENT_MAP_COLORS = {
+  none: null,
+  warm:    [[30,20,60], [255,200,120]],
+  cool:    [[20,30,60], [140,190,255]],
+  vintage: [[50,30,20], [240,220,180]],
+  neon:    [[20,0,40], [255,100,200]],
+  forest:  [[10,30,20], [180,220,140]],
+  sunset:  [[40,10,50], [255,160,60]],
+};
+
+function drawGradMapPreview(canvasId, mapName) {
+  const cv = $(canvasId);
+  if (!cv) return;
+  const colors = GRADIENT_MAP_COLORS[mapName];
+  if (!colors) { cv.style.display = "none"; return; }
+  cv.style.display = "block";
+  const ctx = cv.getContext("2d");
+  const w = cv.width, h = cv.height;
+  const grad = ctx.createLinearGradient(0, 0, w, 0);
+  grad.addColorStop(0, `rgb(${colors[0].join(",")})`);
+  grad.addColorStop(1, `rgb(${colors[1].join(",")})`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+}
+
 function updateWigEstimate() {
   const est = $("wig-estimate");
   if (!est) return;
@@ -1788,6 +2131,24 @@ function getEffectParams(fx) {
     format: $("wig-format").value,
     path: $("wig-path").value,
     loops: parseInt($("wig-loops").value) || 3,
+    pivot_x: parseFloat($("wig-pivot-x")?.value || "0.5"),
+    pivot_y: parseFloat($("wig-pivot-y")?.value || "0.5"),
+    film_filter: {
+      grain_amount: parseFloat($("wig-grain")?.value || "0"),
+      grain_opacity: parseFloat($("wig-grain-opacity")?.value || "1"),
+      blur_strength: parseFloat($("wig-bgblur")?.value || "0"),
+      flash_intensity: parseFloat($("wig-flash")?.value || "0"),
+      vignette_strength: parseFloat($("wig-vignette")?.value || "0"),
+      light_leak_opacity: parseFloat($("wig-leak")?.value || "0"),
+      light_leak_style: $("wig-leak-style")?.value || "amber-corner",
+      halation_radius: parseFloat($("wig-halation")?.value || "0"),
+      contrast: parseFloat($("wig-contrast")?.value || "0"),
+      saturation: parseFloat($("wig-saturation")?.value || "0"),
+      fade: parseFloat($("wig-fade")?.value || "0"),
+      tint_color: $("wig-tint-color")?.value || "",
+      tint_strength: parseFloat($("wig-tint-strength")?.value || "0"),
+      gradient_map: $("wig-gradient-map")?.value || "none",
+    },
   };
   if (fx === "spatial") return {
     eye_separation: parseFloat($("sp-sep").value),
@@ -1798,9 +2159,35 @@ function getEffectParams(fx) {
     transition_val: parseFloat($("tr-val").value),
     softness: parseFloat($("tr-soft").value),
   };
+  if (fx === "elevation") return {
+    elevation: parseFloat($("elev-height")?.value || "0.3"),
+    rotate_x: parseFloat($("elev-rx")?.value || "-35"),
+    rotate_y: parseFloat($("elev-ry")?.value || "15"),
+    zoom: parseFloat($("elev-zoom")?.value || "1.2"),
+    show_grid: $("elev-grid")?.checked ?? true,
+    show_image: $("elev-image")?.checked ?? false,
+    grid_glow: parseFloat($("elev-glow")?.value || "0.8"),
+    grid_color: $("elev-grid-color")?.value || "#00ff88",
+    bg_color: $("elev-bg-color")?.value || "#0a0a14",
+    grid_density: parseInt($("elev-density")?.value || "40"),
+    line_width: parseInt($("elev-linewidth")?.value || "1"),
+    scan_lines: $("elev-scanlines")?.checked ?? false,
+    scan_line_opacity: parseFloat($("elev-scan-opacity")?.value || "0.3"),
+    smoothing: parseInt($("elev-smooth")?.value || "3"),
+  };
   if (fx === "posterize") return {
     levels: parseInt($("posterize-levels").value),
     colorize: false,
+  };
+  if (fx === "hologram") return {
+    style: $("holo-style")?.value || "gits",
+    color: $("holo-color1")?.value || "#00ff88",
+    color2: $("holo-color2")?.value || "#003322",
+    bg_color: $("holo-bg")?.value || "#000505",
+    scan_lines: $("holo-scanlines")?.checked ?? true,
+    scan_density: parseInt($("holo-scan-density")?.value || "3"),
+    dither: $("holo-dither")?.checked ?? true,
+    grid_overlay: $("holo-grid")?.checked ?? true,
   };
 }
 
@@ -1813,6 +2200,44 @@ async function runEffect(preview) {
   setIndeterminate(true);
 
   try {
+    // Elevation / Hologram — client-side preview, server for export
+    if (fx === "elevation" || fx === "hologram") {
+      if (preview) {
+        if (window._elevRenderer) {
+          window._elevRenderer.show(fx === "hologram");
+          log(fx === "hologram" ? "Hologram preview" : "Elevation preview", "success");
+        }
+        setIndeterminate(false);
+        return;
+      }
+      // Apply & Save — use server for high-quality export
+      const fd = new FormData();
+      fd.append("session_id", state.sessionId);
+      fd.append("elevation", params.elevation.toString());
+      fd.append("rotate_x", params.rotate_x.toString());
+      fd.append("rotate_y", params.rotate_y.toString());
+      fd.append("zoom", params.zoom.toString());
+      fd.append("show_grid", params.show_grid.toString());
+      fd.append("show_image", params.show_image.toString());
+      fd.append("grid_glow", params.grid_glow.toString());
+      fd.append("grid_color", params.grid_color);
+      fd.append("bg_color", params.bg_color);
+      fd.append("grid_density", params.grid_density.toString());
+      fd.append("line_width", params.line_width.toString());
+      fd.append("scan_lines", params.scan_lines.toString());
+      fd.append("scan_line_opacity", params.scan_line_opacity.toString());
+      fd.append("smoothing", params.smoothing.toString());
+
+      const r = await fetch(`${SERVER}/elevation`, { method: "POST", body: fd });
+      if (!r.ok) throw new Error("Elevation failed");
+      const result = await r.blob();
+      const name = (state.currentFile?.name || "image").replace(/\.[^.]+$/, "") + "_elevation.png";
+      await saveBlob(result, name);
+      log("Elevation saved", "success");
+      setIndeterminate(false);
+      return;
+    }
+
     // Wigglegram — preview shows parallax (full color PNG), export generates GIF/MP4
     if (fx === "wiggle") {
       {
@@ -1824,6 +2249,9 @@ async function runEffect(preview) {
         fd.append("format", preview ? "gif" : params.format);
         fd.append("path", params.path);
         fd.append("blur_depth", "5");
+        if (params.film_filter) fd.append("film_filter_json", JSON.stringify(params.film_filter));
+        fd.append("pivot_x", (params.pivot_x || 0.5).toString());
+        fd.append("pivot_y", (params.pivot_y || 0.5).toString());
 
         const r = await fetch(`${SERVER}/wigglegram`, { method: "POST", body: fd });
         if (!r.ok) throw new Error("Wigglegram failed");
@@ -1894,8 +2322,9 @@ async function runEffect(preview) {
       return;
     }
 
-    // Standard effects (dof, grade, slice, fog, parallax, posterize)
-    const endpoint = preview
+    // Standard effects (dof, grade, slice, fog, parallax, posterize, hologram)
+    // Hologram always uses non-preview endpoint (side-by-side not useful for it)
+    const endpoint = (preview && fx !== "hologram")
       ? `${SERVER}/effect/${fx}/preview`
       : `${SERVER}/effect/${fx}`;
 
@@ -2102,7 +2531,52 @@ async function init() {
   if (attempts >= 30) {
     setStatus(false);
     log("Server failed to start", "error");
+    $("btn-restart-server").style.display = "inline-block";
   }
+
+  // Port conflict listener
+  if (window.electronAPI && window.electronAPI.onPortConflict) {
+    window.electronAPI.onPortConflict((port) => {
+      setStatus(false);
+      log(`Port ${port} already in use — another instance running?`, "error");
+      $("btn-restart-server").style.display = "inline-block";
+    });
+  }
+
+  // Restart server button
+  $("btn-restart-server").addEventListener("click", async () => {
+    $("btn-restart-server").disabled = true;
+    $("btn-restart-server").textContent = "Restarting…";
+    setStatus(false);
+    $("status-text").textContent = "restarting…";
+    $("status-dot").className = "dot dot-wait";
+    log("Restarting server…");
+
+    if (window.electronAPI && window.electronAPI.restartBackend) {
+      await window.electronAPI.restartBackend();
+    }
+
+    // Wait for server to come back
+    let ok = false;
+    for (let i = 0; i < 20; i++) {
+      const data = await ping();
+      if (data) {
+        setStatus(true);
+        $("device-info").textContent = data.device;
+        log(`Server restarted (${data.device})`, "success");
+        ok = true;
+        break;
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    if (!ok) {
+      setStatus(false);
+      log("Server restart failed", "error");
+    }
+    $("btn-restart-server").disabled = false;
+    $("btn-restart-server").textContent = "Restart";
+    $("btn-restart-server").style.display = ok ? "none" : "inline-block";
+  });
 
   // Event listeners
   $("btn-open-file").addEventListener("click", () => $("file-input").click());
@@ -2169,6 +2643,11 @@ async function init() {
   $("btn-3d").addEventListener("click", goTo3D);
   $("nav-3d").addEventListener("click", goTo3D);
 
+  // Wiggle pivot reset
+  if ($("wig-pivot-reset")) $("wig-pivot-reset").addEventListener("click", () => {
+    ["wig-pivot-x","wig-pivot-y"].forEach(id => { const e=$(id); if(e){e.value=0.5;e.dispatchEvent(new Event("input"));} });
+  });
+
   // Save location picker — uses Tauri dialog.open() for folder selection
   if ($("btn-save-location")) {
     $("btn-save-location").addEventListener("click", async () => {
@@ -2188,14 +2667,7 @@ async function init() {
     });
   }
 
-  async function goTo3D() {
-    if (state.processing) {
-      var ok = await showConfirm("Processing", "Depth map is still rendering. Switching will cancel it.", "Switch Anyway");
-      if (!ok) return;
-    } else if (hasUnsavedRender()) {
-      var ok = await showConfirm("Unsaved Render", "You have an unsaved depth map. It will be available in Effects Workspace via session.", "Continue");
-      if (!ok) return;
-    }
+  function goTo3D() {
     var url = `workspace.html?server=${encodeURIComponent(SERVER)}`;
     if (state.sessionId) url += `&session=${state.sessionId}`;
     window.location.href = url;
@@ -2220,6 +2692,992 @@ async function init() {
     }
   });
 
+  // WebGL elevation renderer
+  (function() {
+    var canvas = $("elev-canvas");
+    var gl = canvas.getContext("webgl", { antialias: true, alpha: false });
+    if (!gl) { console.error("WebGL not available"); return; }
+
+    var depthTex = null, srcTex = null;
+    var depthLoaded = false, srcLoaded = false;
+    var meshVBO = null, meshLineIBO = null, meshTriIBO = null;
+    var meshLineCount = 0, meshTriCount = 0;
+    var lastDensity = 0, lastSmoothing = -1;
+    var animId = null, animType = null, animT = 0;
+    var program = null;
+    var depthW = 0, depthH = 0;
+    var depthDataRaw = null;
+    var holoMode = false; // set by hologram tab
+
+    // --- Shaders ---
+    var vsSource = [
+      "attribute vec2 aGrid;",
+      "uniform sampler2D uDepth;",
+      "uniform float uElevation;",
+      "uniform mat4 uView;",
+      "uniform float uZoom;",
+      "uniform float uAspect;",
+      "uniform float uCamDist;",
+      "varying float vDepth;",
+      "varying vec2 vUV;",
+      "varying vec2 vScreen;",
+      "void main() {",
+      "  vec4 d = texture2D(uDepth, aGrid);",
+      "  float depth = d.r;",
+      "  vDepth = depth;",
+      "  vUV = aGrid;",
+      // Mesh position (fixed in world space)
+      "  float x = (aGrid.x - 0.5) * 2.0;",
+      "  float z = (aGrid.y - 0.5) * 2.0;",
+      "  float y = -depth * uElevation;",
+      // Apply view matrix (camera orbits around mesh)
+      "  vec4 viewPos = uView * vec4(x, y, z, 1.0);",
+      // Perspective projection
+      "  float camZ = viewPos.z + uCamDist;",
+      "  float fov = 1.5;",
+      "  float persp = fov / max(camZ, 0.1);",
+      "  vec4 pos = vec4(viewPos.x * persp * uAspect, viewPos.y * persp, camZ * 0.05, 1.0);",
+      "  gl_Position = pos;",
+      "  vScreen = pos.xy * 0.5 + 0.5;",
+      "}"
+    ].join("\n");
+
+    var fsSource = [
+      "precision mediump float;",
+      "varying float vDepth;",
+      "varying vec2 vUV;",
+      "varying vec2 vScreen;",
+      "uniform vec3 uGridColor;",
+      "uniform vec3 uGridColor2;",
+      "uniform vec3 uBgColor;",
+      "uniform float uGlowPass;",
+      "uniform float uGlow;",
+      "uniform float uRenderMode;",
+      "uniform sampler2D uSrcTex;",
+      "uniform vec3 uHoloColor;",
+      "uniform float uDither;",
+      "uniform float uScanLines;",
+      "uniform float uScanDensity;",
+      "uniform float uScanOpacity;",
+      "uniform float uResY;",
+      "uniform float uTime;",
+      // Pseudo-random
+      "float hash(float n) { return fract(sin(n) * 43758.5453); }",
+      "float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }",
+      "",
+      "void main() {",
+      // Mode 1: plain image texture
+      "  if (uRenderMode > 0.5 && uRenderMode < 1.5) {",
+      "    vec3 c = texture2D(uSrcTex, vUV).rgb;",
+      "    if (uScanLines > 0.5) {",
+      "      float contour = mod(vDepth * 40.0 / uScanDensity, 1.0);",
+      "      float scanLine = smoothstep(0.4, 0.5, contour) * (1.0 - smoothstep(0.5, 0.6, contour));",
+      "      c *= 1.0 - scanLine * uScanOpacity;",
+      "    }",
+      "    gl_FragColor = vec4(c, 1.0);",
+      "    return;",
+      "  }",
+      // Mode 2: hologram body
+      "  if (uRenderMode > 1.5) {",
+      "    vec2 uv = vUV;",
+      // Glitch: random horizontal offset on some lines
+      "    float glitchLine = floor(gl_FragCoord.y / 3.0);",
+      "    float glitchRand = hash(glitchLine + floor(uTime * 8.0));",
+      "    if (glitchRand > 0.97) {",
+      "      uv.x += (hash(glitchLine * 7.0 + uTime) - 0.5) * 0.08;",
+      "    }",
+      "    vec3 img = texture2D(uSrcTex, uv).rgb;",
+      "    float luma = dot(img, vec3(0.299, 0.587, 0.114));",
+      "    vec3 tinted = uHoloColor * (0.2 + 0.8 * luma) * (0.4 + 0.6 * vDepth);",
+      // Chromatic aberration on glitch
+      "    if (glitchRand > 0.97) {",
+      "      float rShift = texture2D(uSrcTex, uv + vec2(0.01, 0.0)).r;",
+      "      float bShift = texture2D(uSrcTex, uv - vec2(0.01, 0.0)).b;",
+      "      tinted.r = uHoloColor.r * (0.2 + 0.8 * rShift) * (0.4 + 0.6 * vDepth);",
+      "      tinted.b = uHoloColor.b * (0.2 + 0.8 * bShift) * (0.4 + 0.6 * vDepth);",
+      "    }",
+      // Bayer 4x4 dither
+      "    if (uDither > 0.5) {",
+      "      float px = floor(mod(gl_FragCoord.x / 2.0, 4.0));",
+      "      float py = floor(mod(gl_FragCoord.y / 2.0, 4.0));",
+      "      float idx = py * 4.0 + px;",
+      "      float threshold = 0.0;",
+      "      if (idx < 0.5) threshold = 0.0/16.0;",
+      "      else if (idx < 1.5) threshold = 8.0/16.0;",
+      "      else if (idx < 2.5) threshold = 2.0/16.0;",
+      "      else if (idx < 3.5) threshold = 10.0/16.0;",
+      "      else if (idx < 4.5) threshold = 12.0/16.0;",
+      "      else if (idx < 5.5) threshold = 4.0/16.0;",
+      "      else if (idx < 6.5) threshold = 14.0/16.0;",
+      "      else if (idx < 7.5) threshold = 6.0/16.0;",
+      "      else if (idx < 8.5) threshold = 3.0/16.0;",
+      "      else if (idx < 9.5) threshold = 11.0/16.0;",
+      "      else if (idx < 10.5) threshold = 1.0/16.0;",
+      "      else if (idx < 11.5) threshold = 9.0/16.0;",
+      "      else if (idx < 12.5) threshold = 15.0/16.0;",
+      "      else if (idx < 13.5) threshold = 7.0/16.0;",
+      "      else if (idx < 14.5) threshold = 13.0/16.0;",
+      "      else threshold = 5.0/16.0;",
+      "      float ditherMask = step(threshold, luma * 0.8 + 0.1);",
+      "      tinted *= 0.3 + 0.7 * ditherMask;",
+      "    }",
+      // Scan lines — contour-following (based on depth) with screen-space fallback
+      "    if (uScanLines > 0.5) {",
+      "      float contour = mod(vDepth * 40.0 / uScanDensity, 1.0);",
+      "      float scanLine = smoothstep(0.4, 0.5, contour) * (1.0 - smoothstep(0.5, 0.6, contour));",
+      "      tinted *= 1.0 - scanLine * uScanOpacity;",
+      "    }",
+      // CRT light sweep (bright band moving down)
+      "    float sweepPos = mod(uTime * 0.3, 1.4) - 0.2;",
+      "    float sweepDist = abs(gl_FragCoord.y / uResY - sweepPos);",
+      "    float sweep = smoothstep(0.15, 0.0, sweepDist) * 0.35;",
+      "    tinted += uHoloColor * sweep;",
+      // Noise grain
+      "    float grain = (hash2(gl_FragCoord.xy + uTime * 100.0) - 0.5) * 0.06;",
+      "    tinted += grain;",
+      "    gl_FragColor = vec4(tinted, 1.0);",
+      "    return;",
+      "  }",
+      // Mode 0: grid wireframe
+      "  vec3 gradColor = mix(uGridColor2, uGridColor, vDepth);",
+      "  float bright = 0.3 + 0.7 * vDepth;",
+      "  if (uScanLines > 0.5) {",
+      "    float contour = mod(vDepth * 40.0 / uScanDensity, 1.0);",
+      "    float scanLine = smoothstep(0.4, 0.5, contour) * (1.0 - smoothstep(0.5, 0.6, contour));",
+      "    bright *= 1.0 - scanLine * uScanOpacity;",
+      "  }",
+      "  if (uGlowPass > 0.5) {",
+      "    gl_FragColor = vec4(gradColor * uGlow * 0.3, 1.0);",
+      "  } else {",
+      "    gl_FragColor = vec4(gradColor * bright, 1.0);",
+      "  }",
+      "}"
+    ].join("\n");
+
+    function compileShader(src, type) {
+      var s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        console.error("Shader error:", gl.getShaderInfoLog(s));
+        return null;
+      }
+      return s;
+    }
+
+    function linkProgram(vs, fs) {
+      var p = gl.createProgram();
+      gl.attachShader(p, vs); gl.attachShader(p, fs);
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+        console.error("Program link error:", gl.getProgramInfoLog(p));
+        return null;
+      }
+      return p;
+    }
+
+    program = linkProgram(
+      compileShader(vsSource, gl.VERTEX_SHADER),
+      compileShader(fsSource, gl.FRAGMENT_SHADER)
+    );
+
+    // --- Build mesh (lines + triangles) ---
+    function buildMesh(density) {
+      if (density === lastDensity) return;
+      lastDensity = density;
+
+      var gridW = density, gridH = density;
+      var verts = new Float32Array(gridW * gridH * 2);
+      for (var y = 0; y < gridH; y++) {
+        for (var x = 0; x < gridW; x++) {
+          var i = (y * gridW + x) * 2;
+          verts[i] = x / (gridW - 1);
+          verts[i + 1] = y / (gridH - 1);
+        }
+      }
+
+      // Line indices
+      var lineIdx = [];
+      for (var y2 = 0; y2 < gridH; y2++) {
+        for (var x2 = 0; x2 < gridW; x2++) {
+          var idx = y2 * gridW + x2;
+          if (x2 < gridW - 1) { lineIdx.push(idx, idx + 1); }
+          if (y2 < gridH - 1) { lineIdx.push(idx, idx + gridW); }
+        }
+      }
+
+      // Triangle indices (for filled mesh)
+      var triIdx = [];
+      for (var y3 = 0; y3 < gridH - 1; y3++) {
+        for (var x3 = 0; x3 < gridW - 1; x3++) {
+          var tl = y3 * gridW + x3;
+          var tr = tl + 1;
+          var bl = tl + gridW;
+          var br = bl + 1;
+          triIdx.push(tl, bl, tr, tr, bl, br);
+        }
+      }
+
+      if (meshVBO) gl.deleteBuffer(meshVBO);
+      if (meshLineIBO) gl.deleteBuffer(meshLineIBO);
+      if (meshTriIBO) gl.deleteBuffer(meshTriIBO);
+
+      meshVBO = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, meshVBO);
+      gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+
+      meshLineIBO = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshLineIBO);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(lineIdx), gl.STATIC_DRAW);
+      meshLineCount = lineIdx.length;
+
+      meshTriIBO = gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshTriIBO);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(triIdx), gl.STATIC_DRAW);
+      meshTriCount = triIdx.length;
+    }
+
+    // --- Texture helpers ---
+    function createTexFromImage(img) {
+      var tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return tex;
+    }
+
+    function createTexFromData(data, w, h) {
+      var rgba = new Uint8Array(w * h * 4);
+      for (var i = 0; i < w * h; i++) {
+        var v = Math.round(data[i] * 255);
+        rgba[i * 4] = v; rgba[i * 4 + 1] = v; rgba[i * 4 + 2] = v; rgba[i * 4 + 3] = 255;
+      }
+      var tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return tex;
+    }
+
+    // Box blur for smoothing
+    function blurDepth(d, w, h, radius) {
+      if (radius <= 0) return d;
+      var tmp = new Float32Array(d.length);
+      var out = new Float32Array(d.length);
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          var sum = 0, count = 0;
+          for (var dx = -radius; dx <= radius; dx++) {
+            var nx = x + dx;
+            if (nx >= 0 && nx < w) { sum += d[y * w + nx]; count++; }
+          }
+          tmp[y * w + x] = sum / count;
+        }
+      }
+      for (var x2 = 0; x2 < w; x2++) {
+        for (var y2 = 0; y2 < h; y2++) {
+          var sum2 = 0, count2 = 0;
+          for (var dy = -radius; dy <= radius; dy++) {
+            var ny = y2 + dy;
+            if (ny >= 0 && ny < h) { sum2 += tmp[ny * w + x2]; count2++; }
+          }
+          out[y2 * w + x2] = sum2 / count2;
+        }
+      }
+      return out;
+    }
+
+    // Upload depth (with smoothing) as texture
+    function uploadDepthTex(smoothing) {
+      if (!depthDataRaw) return;
+      var data = smoothing > 0 ? blurDepth(depthDataRaw, depthW, depthH, smoothing) : depthDataRaw;
+      if (depthTex) gl.deleteTexture(depthTex);
+      depthTex = createTexFromData(data, depthW, depthH);
+      lastSmoothing = smoothing;
+    }
+
+    // --- Load depth ---
+    function loadDepth(callback) {
+      if (!state.depthBlob) return;
+      var img = new Image();
+      img.onload = function() {
+        var tc = document.createElement("canvas");
+        tc.width = img.width; tc.height = img.height;
+        var tctx = tc.getContext("2d");
+        tctx.drawImage(img, 0, 0);
+        var id = tctx.getImageData(0, 0, img.width, img.height);
+        depthW = img.width; depthH = img.height;
+        depthDataRaw = new Float32Array(depthW * depthH);
+        for (var i = 0; i < depthDataRaw.length; i++) {
+          depthDataRaw[i] = id.data[i * 4] / 255.0;
+        }
+        URL.revokeObjectURL(img.src);
+        uploadDepthTex(parseInt($("elev-smooth").value));
+        depthLoaded = true;
+        if (callback) callback();
+      };
+      img.src = URL.createObjectURL(state.depthBlob);
+    }
+
+    function loadSourceImage(callback) {
+      if (!state.currentBlob) {
+        console.warn("[Elev] loadSourceImage: no currentBlob");
+        if (callback) callback();
+        return;
+      }
+      var img = new Image();
+      img.onload = function() {
+        if (srcTex) gl.deleteTexture(srcTex);
+        srcTex = createTexFromImage(img);
+        srcLoaded = true;
+        URL.revokeObjectURL(img.src);
+        console.log("[Elev] Source image loaded for WebGL");
+        if (callback) callback();
+      };
+      img.onerror = function() {
+        console.error("[Elev] Failed to load source image");
+        if (callback) callback();
+      };
+      img.src = URL.createObjectURL(state.currentBlob);
+    }
+
+    function hexToVec3(hex) {
+      hex = hex.replace("#", "");
+      return [parseInt(hex.substring(0,2),16)/255, parseInt(hex.substring(2,4),16)/255, parseInt(hex.substring(4,6),16)/255];
+    }
+
+    // --- Render ---
+    function render() {
+      if (!depthLoaded || !program) return;
+
+      if (!gl._uint32ext) { gl._uint32ext = gl.getExtension("OES_element_index_uint"); }
+
+      var elevation = parseFloat($("elev-height").value);
+      var rx = parseFloat($("elev-rx").value) * Math.PI / 180;
+      var ry = parseFloat($("elev-ry").value) * Math.PI / 180;
+      var zoom = parseFloat($("elev-zoom").value);
+      var density = parseInt($("elev-density").value);
+      var lineWidth = parseInt($("elev-linewidth").value);
+      var glow = parseFloat($("elev-glow").value);
+      var showGrid = $("elev-grid").checked;
+      var showImage = $("elev-image").checked;
+      var smoothing = parseInt($("elev-smooth").value);
+      var gc = hexToVec3($("elev-grid-color").value);
+      var gc2 = hexToVec3($("elev-grid-color2").value);
+      var bg = hexToVec3($("elev-bg-color").value);
+
+      // Hologram mode params
+      var holoColor = gc;
+      var holoDither = false;
+      var holoScan = $("elev-scanlines")?.checked || false;
+      var holoScanDensity = 3.0;
+      if (holoMode) {
+        holoColor = hexToVec3($("holo-color1")?.value || "#00ff88");
+        gc = hexToVec3($("holo-color1")?.value || "#00ff88");
+        gc2 = hexToVec3($("holo-color2")?.value || "#003322");
+        bg = hexToVec3($("holo-bg")?.value || "#000505");
+        holoDither = $("holo-dither")?.checked;
+        holoScan = $("holo-scanlines")?.checked;
+        holoScanDensity = parseFloat($("holo-scan-density")?.value || "3");
+        showGrid = $("holo-grid")?.checked;
+        showImage = true; // always show image in holo mode
+      }
+
+      if (smoothing !== lastSmoothing) uploadDepthTex(smoothing);
+      buildMesh(density);
+
+      var w = canvas.width, h = canvas.height;
+      gl.viewport(0, 0, w, h);
+      gl.clearColor(bg[0], bg[1], bg[2], 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.DEPTH_TEST);
+
+      gl.useProgram(program);
+
+      // Build view matrix from camera angles (camera orbits, mesh stays fixed)
+      var rz = parseFloat($("elev-rz")?.value || "0") * Math.PI / 180;
+      var cx = Math.cos(rx), sx = Math.sin(rx);
+      var cy = Math.cos(ry), sy = Math.sin(ry);
+      var cz = Math.cos(rz), sz = Math.sin(rz);
+      // View = Rz * Rx * Ry (camera rotation order)
+      var viewMat = new Float32Array([
+        cy*cz + sy*sx*sz,   cx*sz,   -sy*cz + cy*sx*sz,  0,
+        -cy*sz + sy*sx*cz,  cx*cz,   sy*sz + cy*sx*cz,   0,
+        sy*cx,              -sx,     cy*cx,               0,
+        0,                  0,       0,                   1
+      ]);
+
+      // Common uniforms
+      gl.uniform1f(gl.getUniformLocation(program, "uElevation"), elevation);
+      gl.uniformMatrix4fv(gl.getUniformLocation(program, "uView"), false, viewMat);
+      gl.uniform1f(gl.getUniformLocation(program, "uZoom"), zoom);
+      gl.uniform1f(gl.getUniformLocation(program, "uCamDist"), 4.0 / zoom);
+      gl.uniform1f(gl.getUniformLocation(program, "uAspect"), h / w);
+      gl.uniform3fv(gl.getUniformLocation(program, "uGridColor"), gc);
+      gl.uniform3fv(gl.getUniformLocation(program, "uGridColor2"), gc2);
+      gl.uniform3fv(gl.getUniformLocation(program, "uBgColor"), bg);
+      gl.uniform1f(gl.getUniformLocation(program, "uGlow"), glow);
+      gl.uniform3fv(gl.getUniformLocation(program, "uHoloColor"), holoColor);
+      gl.uniform1f(gl.getUniformLocation(program, "uDither"), holoDither ? 1.0 : 0.0);
+      var scanOpacity = holoMode
+        ? parseFloat($("holo-scan-opacity")?.value || "0.5")
+        : parseFloat($("elev-scan-opacity")?.value || "0.3");
+      gl.uniform1f(gl.getUniformLocation(program, "uScanLines"), holoScan ? 1.0 : 0.0);
+      gl.uniform1f(gl.getUniformLocation(program, "uScanDensity"), holoScanDensity);
+      gl.uniform1f(gl.getUniformLocation(program, "uScanOpacity"), scanOpacity);
+      gl.uniform1f(gl.getUniformLocation(program, "uResY"), h);
+      gl.uniform1f(gl.getUniformLocation(program, "uTime"), performance.now() / 1000.0);
+
+      // Depth texture
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, depthTex);
+      gl.uniform1i(gl.getUniformLocation(program, "uDepth"), 0);
+
+      // Source texture
+      if (srcTex) {
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, srcTex);
+        gl.uniform1i(gl.getUniformLocation(program, "uSrcTex"), 1);
+      }
+
+      // Vertex attrib
+      var aGrid = gl.getAttribLocation(program, "aGrid");
+      gl.bindBuffer(gl.ARRAY_BUFFER, meshVBO);
+      gl.enableVertexAttribArray(aGrid);
+      gl.vertexAttribPointer(aGrid, 2, gl.FLOAT, false, 0, 0);
+
+      gl.lineWidth(lineWidth);
+
+      // PASS 1: Hologram body (filled triangles with tinted/dithered image)
+      if (holoMode && srcLoaded) {
+        gl.uniform1f(gl.getUniformLocation(program, "uRenderMode"), 2.0);
+        gl.uniform1f(gl.getUniformLocation(program, "uGlowPass"), 0.0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshTriIBO);
+        gl.drawElements(gl.TRIANGLES, meshTriCount, gl.UNSIGNED_INT, 0);
+      }
+      // Plain image texture (filled triangles, no tint)
+      else if (showImage && srcLoaded && !showGrid) {
+        gl.uniform1f(gl.getUniformLocation(program, "uRenderMode"), 1.0);
+        gl.uniform1f(gl.getUniformLocation(program, "uGlowPass"), 0.0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshTriIBO);
+        gl.drawElements(gl.TRIANGLES, meshTriCount, gl.UNSIGNED_INT, 0);
+      }
+
+      // PASS 2: Wireframe grid on top (additive blend in holo mode)
+      if (showGrid) {
+        if (holoMode) {
+          gl.enable(gl.BLEND);
+          gl.blendFunc(gl.ONE, gl.ONE); // additive
+          gl.depthMask(false);
+        }
+
+        gl.uniform1f(gl.getUniformLocation(program, "uRenderMode"), 0.0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshLineIBO);
+
+        // Glow pass
+        if (glow > 0) {
+          gl.uniform1f(gl.getUniformLocation(program, "uGlowPass"), 1.0);
+          gl.drawElements(gl.LINES, meshLineCount, gl.UNSIGNED_INT, 0);
+        }
+
+        // Main lines
+        gl.uniform1f(gl.getUniformLocation(program, "uGlowPass"), 0.0);
+        gl.drawElements(gl.LINES, meshLineCount, gl.UNSIGNED_INT, 0);
+
+        if (holoMode) {
+          gl.disable(gl.BLEND);
+          gl.depthMask(true);
+        }
+      }
+
+      gl.disableVertexAttribArray(aGrid);
+    }
+
+    // CRT continuous render loop (for scan sweep + glitch animation)
+    var crtLoopId = null;
+    function startCrtLoop() {
+      if (crtLoopId) return;
+      function crtTick() {
+        if (holoMode && canvas.style.display !== "none" && !animId) {
+          render();
+        }
+        crtLoopId = requestAnimationFrame(crtTick);
+      }
+      crtLoopId = requestAnimationFrame(crtTick);
+    }
+    function stopCrtLoop() {
+      if (crtLoopId) { cancelAnimationFrame(crtLoopId); crtLoopId = null; }
+    }
+
+    // --- Show/hide ---
+    function showElevCanvas() {
+      console.log("[Elev] showElevCanvas holoMode=" + holoMode + " depthLoaded=" + depthLoaded + " srcLoaded=" + srcLoaded);
+      if (!depthLoaded) {
+        console.log("[Elev] Loading depth...");
+        loadDepth(function() {
+          loadSourceImage(function() { showElevCanvas(); });
+        });
+        return;
+      }
+      // Hologram needs source texture — load if missing
+      if (holoMode && !srcLoaded) {
+        console.log("[Elev] Loading source image for hologram...");
+        loadSourceImage(function() { showElevCanvas(); });
+        return;
+      }
+      canvas.width = 1200; canvas.height = 800;
+      $("preview-img").style.display = "none";
+      if ($("compare-canvas")) $("compare-canvas").style.display = "none";
+      canvas.style.display = "block";
+      $("drop-zone").classList.add("hidden");
+      render();
+      if (holoMode) startCrtLoop();
+    }
+
+    function hideElevCanvas() {
+      stopCrtLoop();
+      canvas.style.display = "none";
+      stopAnimation();
+    }
+
+    window._elevRenderer = {
+      show: function(asHolo) { holoMode = !!asHolo; showElevCanvas(); },
+      hide: function() { holoMode = false; hideElevCanvas(); },
+      render: render,
+      reload: function(cb) { depthLoaded = false; srcLoaded = false; lastSmoothing = -1; loadDepth(function() { loadSourceImage(cb); }); },
+      getCanvas: function() { return canvas; },
+      setHoloMode: function(v) { holoMode = v; }
+    };
+
+    // --- Drag orbit ---
+    var orbiting = false, startX = 0, startY = 0, startRX = 0, startRY = 0;
+
+    canvas.addEventListener("mousedown", function(e) {
+      orbiting = true;
+      startX = e.clientX; startY = e.clientY;
+      startRY = parseFloat($("elev-ry").value);
+      startRX = parseFloat($("elev-rx").value);
+      canvas.style.cursor = "grabbing";
+      e.preventDefault();
+    });
+
+    window.addEventListener("mousemove", function(e) {
+      if (!orbiting) return;
+      var dx = e.clientX - startX, dy = e.clientY - startY;
+      var newRY = Math.max(-180, Math.min(180, startRY + dx * 0.5));
+      var newRX = Math.max(-90, Math.min(90, startRX + dy * 0.3));
+      $("elev-ry").value = newRY;
+      $("elev-rx").value = newRX;
+      $("elev-ry-v").textContent = Math.round(newRY) + "\u00B0";
+      $("elev-rx-v").textContent = Math.round(newRX) + "\u00B0";
+      render();
+    });
+
+    window.addEventListener("mouseup", function() {
+      if (orbiting) { orbiting = false; canvas.style.cursor = "grab"; }
+    });
+
+    canvas.addEventListener("wheel", function(e) {
+      e.preventDefault();
+      var z = $("elev-zoom");
+      var cur = parseFloat(z.value);
+      var delta = e.deltaY > 0 ? -0.1 : 0.1;
+      var newZ = Math.max(0.5, Math.min(3, cur + delta));
+      z.value = newZ;
+      $("elev-zoom-v").textContent = newZ.toFixed(2);
+      render();
+    }, { passive: false });
+
+    // --- Slider listeners ---
+    ["elev-height","elev-density","elev-linewidth","elev-glow","elev-grid-color","elev-grid-color2","elev-bg-color","elev-scan-opacity","elev-bloom","elev-smooth","elev-rz"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("input", function() { if (canvas.style.display !== "none") render(); });
+    });
+    ["elev-grid","elev-image","elev-scanlines"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("change", function() { if (canvas.style.display !== "none") render(); });
+    });
+    // Hologram slider listeners
+    ["holo-color1","holo-color2","holo-bg","holo-edges","holo-chromatic","holo-noise","holo-bloom","holo-transparency","holo-scan-density","holo-scan-opacity","holo-dither-size","holo-grid-density"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("input", function() { if (canvas.style.display !== "none" && holoMode) render(); });
+    });
+    ["holo-scanlines","holo-dither","holo-grid"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("change", function() { if (canvas.style.display !== "none" && holoMode) render(); });
+    });
+
+    // --- Animations ---
+    function stopAnimation() {
+      if (animId) { cancelAnimationFrame(animId); animId = null; }
+      animType = null;
+      if ($("elev-anim-select")) $("elev-anim-select").value = "";
+      if ($("holo-anim-select")) $("holo-anim-select").value = "";
+    }
+
+    // All animations use period = 2π for consistent looping
+    var TWO_PI = Math.PI * 2;
+
+    function getAnimPeriod() {
+      return TWO_PI;
+    }
+
+    function getAnimSpeed() {
+      return parseFloat($("elev-anim-speed")?.value || $("holo-anim-speed")?.value || "1");
+    }
+    function getAnimDir() {
+      return parseInt($("elev-anim-dir")?.value || $("holo-anim-dir")?.value || "1");
+    }
+
+    // All animations: t goes 0→2π, must produce same output at t=0 and t=2π
+    // Using sin/cos ensures perfect loops. Linear orbits use t/(2π)*360 for full rotation.
+    function applyAnimFrame(type, t, baseRX, baseRY, baseRZ, baseZoom) {
+      var frac = t / TWO_PI; // 0→1 over one loop
+
+      if (type === "orbit-y" || type === "orbit") {
+        // Full 360° Y rotation
+        var ry = baseRY + frac * 360;
+        while (ry > 180) ry -= 360;
+        setCamera(baseRX, ry, baseRZ, baseZoom);
+      } else if (type === "orbit-x") {
+        // Full 360° X rotation
+        var rx = baseRX + frac * 360;
+        while (rx > 180) rx -= 360;
+        setCamera(rx, baseRY, baseRZ, baseZoom);
+      } else if (type === "orbit-z") {
+        // Full 360° Z rotation
+        var rz = baseRZ + frac * 360;
+        while (rz > 180) rz -= 360;
+        setCamera(baseRX, baseRY, rz, baseZoom);
+      } else if (type === "wiggle") {
+        // left→right→left ±15°
+        var wry = baseRY - Math.cos(t) * 15;
+        setCamera(baseRX, wry, baseRZ, baseZoom);
+      } else if (type === "spin") {
+        // All 3 axes — Y+Z full rotation, X sine wave
+        var sry = baseRY + frac * 360;
+        var srx = baseRX + Math.sin(t) * 25;
+        var srz = baseRZ + frac * 180;
+        while (sry > 180) sry -= 360;
+        while (srz > 180) srz -= 360;
+        setCamera(srx, sry, srz, baseZoom);
+      } else if (type === "handheld") {
+        // Shake using integer multiples of base freq for perfect loop
+        var hx = baseRX + Math.sin(t * 2) * 2.5 + Math.sin(t * 5) * 1.2;
+        var hy = baseRY + Math.sin(t * 3) * 3.0 + Math.sin(t * 7) * 1.0;
+        var hz = baseRZ + Math.sin(t * 4) * 1.0;
+        setCamera(hx, hy, hz, baseZoom);
+      } else if (type === "dolly") {
+        // Zoom in/out + slight Y sway (both sine = perfect loop)
+        var dz = baseZoom + Math.sin(t) * 0.8;
+        var dry = baseRY + Math.sin(t * 2) * 8;
+        $("elev-zoom").value = dz;
+        $("elev-zoom-v").textContent = dz.toFixed(2);
+        if ($("holo-zoom")) $("holo-zoom").value = dz;
+        setCamera(baseRX, dry, baseRZ, dz);
+      } else if (type === "breathe") {
+        // Gentle Y sway + elevation pulse (all sine)
+        var bry = baseRY + Math.sin(t) * 15;
+        var baseElev = parseFloat($("elev-height").value);
+        var pulseElev = baseElev + Math.sin(t * 2) * 0.05;
+        $("elev-height").value = pulseElev;
+        $("elev-height-v").textContent = pulseElev.toFixed(2);
+        if ($("holo-elev-height")) $("holo-elev-height").value = pulseElev;
+        setCamera(baseRX, bry, baseRZ, baseZoom);
+      } else if (type === "tilt") {
+        // X sine + Y sine (different rates, both integer multiples)
+        var trx = baseRX + Math.sin(t) * 30;
+        var trY = baseRY + Math.sin(t * 2) * 20;
+        setCamera(trx, trY, baseRZ, baseZoom);
+      } else if (type === "flyover") {
+        // Dramatic: X sine + Y full rotation + zoom pulse
+        var frx = baseRX + Math.sin(t) * 25 - 40;
+        var fry = baseRY + frac * 360;
+        var fzm = baseZoom + Math.sin(t * 2) * 0.3;
+        while (fry > 180) fry -= 360;
+        setCamera(frx, fry, baseRZ, fzm);
+        $("elev-zoom").value = fzm;
+        $("elev-zoom-v").textContent = fzm.toFixed(2);
+        if ($("holo-zoom")) $("holo-zoom").value = fzm;
+      }
+    }
+
+    function startAnimation(type) {
+      stopAnimation();
+      animType = type;
+      animT = 0;
+      var baseRX = parseFloat($("elev-rx").value);
+      var baseRY = parseFloat($("elev-ry").value);
+      var baseRZ = parseFloat($("elev-rz")?.value || "0");
+      var baseZoom = parseFloat($("elev-zoom").value);
+
+      // Auto-show canvas if not visible
+      if (canvas.style.display === "none") {
+        var isHolo = document.querySelector(".fx-tab.active")?.dataset.fx === "hologram";
+        showElevCanvas();
+        if (isHolo) holoMode = true;
+      }
+
+      function tick() {
+        var speed = getAnimSpeed();
+        var dir = getAnimDir();
+        animT += 0.01 * speed * dir;
+        // Loop: wrap animT to period
+        var period = getAnimPeriod();
+        if (animT >= period) animT -= period;
+        if (animT < 0) animT += period;
+        applyAnimFrame(animType, animT, baseRX, baseRY, baseRZ, baseZoom);
+        render();
+        animId = requestAnimationFrame(tick);
+      }
+      animId = requestAnimationFrame(tick);
+    }
+
+    // --- Export animation as GIF ---
+    function exportAnimation(format) {
+      if (!animType && !$("elev-anim-select").value && !$("holo-anim-select").value) {
+        log("Select an animation first", "warn");
+        return;
+      }
+      var type = animType || $("elev-anim-select").value || $("holo-anim-select").value;
+      if (!type) { log("Select an animation first", "warn"); return; }
+
+      stopAnimation();
+      setIndeterminate(true);
+      log("Capturing animation frames...", "info");
+
+      var fps = 24;
+      var duration = 3; // seconds per loop
+      var totalFrames = fps * duration;
+      var period = getAnimPeriod();
+      var baseRX = parseFloat($("elev-rx").value);
+      var baseRY = parseFloat($("elev-ry").value);
+      var baseRZ = parseFloat($("elev-rz")?.value || "0");
+      var baseZoom = parseFloat($("elev-zoom").value);
+      var frames = [];
+      var frameIdx = 0;
+
+      function captureNext() {
+        if (frameIdx >= totalFrames) {
+          // All frames captured, send to server
+          sendFramesForExport(frames, fps, format);
+          return;
+        }
+        var t = (frameIdx / totalFrames) * period;
+        applyAnimFrame(type, t, baseRX, baseRY, baseRZ, baseZoom);
+        render();
+
+        canvas.toBlob(function(blob) {
+          frames.push(blob);
+          frameIdx++;
+          // Use setTimeout to not block UI
+          setTimeout(captureNext, 0);
+        }, "image/png");
+      }
+      captureNext();
+    }
+
+    async function sendFramesForExport(frames, fps, format) {
+      try {
+        log("Encoding " + frames.length + " frames as " + format + "...", "info");
+        var fd = new FormData();
+        for (var i = 0; i < frames.length; i++) {
+          fd.append("frames", frames[i], "frame_" + String(i).padStart(4, "0") + ".png");
+        }
+        fd.append("fps", fps.toString());
+        fd.append("format", format);
+        fd.append("loop", "true");
+
+        var r = await fetch(SERVER + "/animate/export", { method: "POST", body: fd });
+        if (!r.ok) throw new Error("Export failed: " + r.status);
+        var blob = await r.blob();
+        var ext = format === "gif" ? ".gif" : ".mp4";
+        var name = (state.currentFile?.name || "animation").replace(/\.[^.]+$/, "") + "_3d" + ext;
+        await saveBlob(blob, name);
+        log("Animation saved: " + name, "success");
+      } catch(e) {
+        log("Export error: " + e.message, "error");
+      }
+      setIndeterminate(false);
+    }
+
+    // Expose export function
+    window._elevExport = exportAnimation;
+
+    // Glow style presets
+    var glowPresets = {
+      "cyber":      { near: "#00ff88", far: "#0044ff", bg: "#0a0a14", glow: 0.8,  bloom: 1.5 },
+      "neon-pink":  { near: "#ff00ff", far: "#ff6ec7", bg: "#0d0015", glow: 0.9,  bloom: 2.0 },
+      "vaporwave":  { near: "#ff71ce", far: "#01cdfe", bg: "#120025", glow: 0.7,  bloom: 1.8 },
+      "matrix":     { near: "#00ff41", far: "#008f11", bg: "#000000", glow: 0.6,  bloom: 1.2 },
+      "fire":       { near: "#ffff00", far: "#ff2200", bg: "#0a0000", glow: 0.8,  bloom: 2.2 },
+      "ice":        { near: "#ffffff", far: "#00b4d8", bg: "#001220", glow: 0.7,  bloom: 1.6 },
+      "gold":       { near: "#ffd700", far: "#b8860b", bg: "#0a0800", glow: 0.9,  bloom: 1.8 },
+      "sunset":     { near: "#ff6b35", far: "#9b2335", bg: "#0a0510", glow: 0.7,  bloom: 1.5 },
+      "ocean":      { near: "#00ffff", far: "#000080", bg: "#000510", glow: 0.8,  bloom: 1.4 },
+      "toxic":      { near: "#39ff14", far: "#ccff00", bg: "#050a00", glow: 1.0,  bloom: 2.5 },
+      "plasma":     { near: "#ff00ff", far: "#0000ff", bg: "#050005", glow: 0.9,  bloom: 2.0 },
+      "hologram":   { near: "#00ffff", far: "#ff00ff", bg: "#000008", glow: 0.8,  bloom: 2.2 },
+      "midnight":   { near: "#4169e1", far: "#191970", bg: "#000005", glow: 0.5,  bloom: 1.0 },
+      "lava":       { near: "#ff4500", far: "#8b0000", bg: "#0a0000", glow: 1.0,  bloom: 2.8 },
+      "aurora":     { near: "#00ff88", far: "#8b00ff", bg: "#000a10", glow: 0.7,  bloom: 1.6 }
+    };
+
+    $("elev-glow-preset").addEventListener("change", function() {
+      var p = glowPresets[this.value];
+      if (!p) return;
+      $("elev-grid-color").value = p.near;
+      $("elev-grid-color2").value = p.far;
+      $("elev-bg-color").value = p.bg;
+      $("elev-glow").value = p.glow;
+      $("elev-glow-v").textContent = p.glow.toFixed(2);
+      $("elev-bloom").value = p.bloom;
+      $("elev-bloom-v").textContent = p.bloom.toFixed(1);
+      if (canvas.style.display !== "none") render();
+    });
+
+    // Set to "Custom" when manually changing colors
+    ["elev-grid-color","elev-grid-color2","elev-bg-color"].forEach(function(id) {
+      $(id).addEventListener("input", function() { $("elev-glow-preset").value = ""; });
+    });
+
+    // Camera preset data
+    var camPresets = {
+      "default": { rx: -35, ry: 15, zoom: 1.2 },
+      "iso":     { rx: -35, ry: 45, zoom: 1.2 },
+      "top":     { rx: -90, ry: 0, zoom: 1.0 },
+      "front":   { rx: 0, ry: 0, zoom: 1.2 },
+      "side":    { rx: 0, ry: 90, zoom: 1.2 },
+      "close":   { rx: -60, ry: 30, zoom: 1.5 },
+      "rear":    { rx: -20, ry: 160, zoom: 1.0 },
+      "wide":    { rx: -70, ry: -45, zoom: 0.8 }
+    };
+
+    function setCamera(rx, ry, rz, zm) {
+      $("elev-rx").value = rx; $("elev-rx-v").textContent = Math.round(rx) + "\u00B0";
+      $("elev-ry").value = ry; $("elev-ry-v").textContent = Math.round(ry) + "\u00B0";
+      if ($("elev-rz")) { $("elev-rz").value = rz; $("elev-rz-v").textContent = Math.round(rz) + "\u00B0"; }
+      $("elev-zoom").value = zm; $("elev-zoom-v").textContent = zm.toFixed(2);
+      // Sync hologram sliders
+      if ($("holo-rx")) { $("holo-rx").value = rx; $("holo-rx-v").textContent = Math.round(rx) + "\u00B0"; }
+      if ($("holo-ry")) { $("holo-ry").value = ry; $("holo-ry-v").textContent = Math.round(ry) + "\u00B0"; }
+      if ($("holo-rz")) { $("holo-rz").value = rz; $("holo-rz-v").textContent = Math.round(rz) + "\u00B0"; }
+      if ($("holo-zoom")) $("holo-zoom").value = zm;
+    }
+
+    function applyCamPreset(val) {
+      var p = camPresets[val];
+      if (!p) return;
+      stopAnimation();
+      setCamera(p.rx, p.ry, p.rz || 0, p.zoom);
+      // Show canvas if not visible
+      if (canvas.style.display === "none") {
+        var isHolo = document.querySelector(".fx-tab.active")?.dataset.fx === "hologram";
+        if (isHolo) holoMode = true;
+        showElevCanvas();
+      } else {
+        render();
+      }
+    }
+
+    // Camera preset selects (both elevation + hologram)
+    ["elev-cam-preset", "holo-cam-preset"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("change", function() {
+        applyCamPreset(this.value);
+      });
+    });
+
+    // Animate selects (both)
+    ["elev-anim-select", "holo-anim-select"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("change", function() {
+        // Sync both selects
+        if ($("elev-anim-select")) $("elev-anim-select").value = this.value;
+        if ($("holo-anim-select")) $("holo-anim-select").value = this.value;
+        if (this.value) {
+          startAnimation(this.value);
+        } else {
+          stopAnimation();
+        }
+      });
+    });
+    // Sync speed/dir between tabs
+    ["elev-anim-speed","holo-anim-speed"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("input", function() {
+        if ($("elev-anim-speed")) $("elev-anim-speed").value = this.value;
+        if ($("holo-anim-speed")) $("holo-anim-speed").value = this.value;
+        if ($("elev-anim-speed-v")) $("elev-anim-speed-v").textContent = parseFloat(this.value).toFixed(1) + "\u00D7";
+        if ($("holo-anim-speed-v")) $("holo-anim-speed-v").textContent = parseFloat(this.value).toFixed(1) + "\u00D7";
+      });
+    });
+    ["elev-anim-dir","holo-anim-dir"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("change", function() {
+        if ($("elev-anim-dir")) $("elev-anim-dir").value = this.value;
+        if ($("holo-anim-dir")) $("holo-anim-dir").value = this.value;
+      });
+    });
+
+    // Plus/minus buttons
+    document.querySelectorAll(".pm-btn").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        var target = $(btn.dataset.target);
+        if (!target) return;
+        var step = parseFloat(btn.dataset.step);
+        var min = parseFloat(target.min), max = parseFloat(target.max);
+        var val = Math.max(min, Math.min(max, parseFloat(target.value) + step));
+        target.value = val;
+        target.dispatchEvent(new Event("input"));
+        if (canvas.style.display !== "none") render();
+      });
+    });
+
+    // Hologram style presets
+    var holoStyles = {
+      "gits":   { c1: "#00ff88", c2: "#003322", bg: "#000505" },
+      "akira":  { c1: "#ff6600", c2: "#441100", bg: "#050000" },
+      "eva":    { c1: "#9933ff", c2: "#220066", bg: "#050008" },
+      "blade":  { c1: "#00ccff", c2: "#003366", bg: "#000510" },
+      "nerv":   { c1: "#ff0066", c2: "#330015", bg: "#050005" },
+      "tron":   { c1: "#00dfff", c2: "#004466", bg: "#000008" }
+    };
+    $("holo-style").addEventListener("change", function() {
+      var s = holoStyles[this.value];
+      if (!s) return;
+      $("holo-color1").value = s.c1;
+      $("holo-color2").value = s.c2;
+      $("holo-bg").value = s.bg;
+      if (canvas.style.display !== "none") render();
+    });
+    ["holo-color1","holo-color2","holo-bg"].forEach(function(id) {
+      $(id).addEventListener("input", function() { $("holo-style").value = "custom"; });
+    });
+
+    // Hologram sliders sync to shared elevation controls
+    ["holo-density","holo-glow","holo-smooth","holo-elev-height","holo-rx","holo-ry","holo-rz","holo-zoom","holo-linewidth","holo-bloom2"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("input", function() { if (canvas.style.display !== "none") render(); });
+    });
+
+    // Export buttons
+    ["elev-export-gif","holo-export-gif"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("click", function() { exportAnimation("gif"); });
+    });
+    ["elev-export-mp4","holo-export-mp4"].forEach(function(id) {
+      var el = $(id);
+      if (el) el.addEventListener("click", function() { exportAnimation("mp4"); });
+    });
+  })();
+
   // FX tabs
   document.querySelectorAll(".fx-tab").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -2240,6 +3698,10 @@ async function init() {
         $("btn-tr-loop").style.display = "inline-block";
         $("btn-tr-stop").style.display = "none";
         if (state._trAnimId) cancelAnimationFrame(state._trAnimId);
+      }
+      // Hide 3D canvas when switching away from elevation/hologram
+      if (btn.dataset.fx !== "elevation" && btn.dataset.fx !== "hologram" && window._elevRenderer) {
+        window._elevRenderer.hide();
       }
       // Auto-preview on tab switch if enabled (skip transition — needs two images)
       if (state.fxEnabled && btn.dataset.fx !== "transition") runEffect(true);

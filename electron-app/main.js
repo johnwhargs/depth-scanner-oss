@@ -2,36 +2,57 @@ const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { isSetupDone, runSetup, getVenvPython, getBackendDir } = require('./setup');
+
+const net = require('net');
 
 const PORT = 7843;
 let mainWindow = null;
+let setupWindow = null;
 let backendProcess = null;
 
-// ── Find + start Python backend ─────────────────────────
-function findBackendDir() {
-  const candidates = [
-    path.join(__dirname, '..', 'backend'),                          // dev: electron-app/../backend
-    path.join(process.resourcesPath || '', 'backend'),              // packaged: resources/backend
-    path.join(__dirname, 'backend'),                                // alt
-  ];
-  for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, 'server.py'))) return dir;
-  }
-  return null;
+// ── Backend ─────────────────────────────────────────────
+function checkPort(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => { server.close(); resolve(true); });
+    server.listen(port, '127.0.0.1');
+  });
 }
 
-function startBackend() {
-  const dir = findBackendDir();
-  if (!dir) {
-    console.error('[Depth Scanner] Backend not found');
+async function startBackend() {
+  const backendDir = getBackendDir();
+  if (!backendDir) {
+    console.error('[DS Lab] Backend not found');
     return null;
   }
 
-  const venvPython = path.join(dir, '.venv', 'bin', 'python');
-  const python = fs.existsSync(venvPython) ? venvPython : 'python3';
+  // Check for port conflict
+  const portFree = await checkPort(PORT);
+  if (!portFree) {
+    console.warn(`[DS Lab] Port ${PORT} already in use`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('backend:port-conflict', PORT);
+    }
+    return null;
+  }
 
-  console.log(`[Depth Scanner] Backend: ${dir}`);
-  console.log(`[Depth Scanner] Python: ${python}`);
+  // Use setup venv if exists, otherwise try local backend venv
+  let python;
+  const setupPython = getVenvPython();
+  const localVenv = path.join(backendDir, '.venv', 'bin', 'python');
+
+  if (fs.existsSync(localVenv)) {
+    python = localVenv;
+  } else if (fs.existsSync(setupPython)) {
+    python = localVenv;
+  } else {
+    python = 'python3';
+  }
+
+  console.log(`[DS Lab] Backend: ${backendDir}`);
+  console.log(`[DS Lab] Python: ${python}`);
 
   const proc = spawn(python, [
     '-m', 'uvicorn', 'server:app',
@@ -39,38 +60,91 @@ function startBackend() {
     '--port', String(PORT),
     '--log-level', 'warning'
   ], {
-    cwd: dir,
+    cwd: backendDir,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   proc.stdout.on('data', d => process.stdout.write(d));
   proc.stderr.on('data', d => process.stderr.write(d));
   proc.on('error', err => console.error('[Backend] Spawn error:', err.message));
-  proc.on('exit', (code) => {
-    console.log(`[Backend] Exited with code ${code}`);
+  proc.on('exit', code => {
+    console.log(`[Backend] Exited (code ${code})`);
     backendProcess = null;
   });
 
-  console.log(`[Depth Scanner] Backend started (PID ${proc.pid})`);
+  console.log(`[DS Lab] Backend started (PID ${proc.pid})`);
   return proc;
 }
 
 function killBackend() {
   if (backendProcess) {
-    console.log('[Depth Scanner] Stopping backend...');
+    console.log('[DS Lab] Stopping backend...');
     backendProcess.kill();
     backendProcess = null;
   }
 }
 
-// ── Window ──────────────────────────────────────────────
-function createWindow() {
+// ── Setup window ────────────────────────────────────────
+function showSetupWindow() {
+  return new Promise((resolve, reject) => {
+    setupWindow = new BrowserWindow({
+      width: 540,
+      height: 400,
+      resizable: false,
+      titleBarStyle: 'hiddenInset',
+      title: 'Depth Scanner Lab — Setup',
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false,
+      },
+    });
+
+    setupWindow.loadFile(path.join(__dirname, 'ui', 'setup.html'));
+
+    setupWindow.webContents.on('did-finish-load', async () => {
+      const send = (ch, msg) => {
+        if (setupWindow && !setupWindow.isDestroyed()) {
+          setupWindow.webContents.send(ch, msg);
+        }
+      };
+
+      let step = 0;
+      const totalSteps = 4;
+
+      try {
+        await runSetup((status) => {
+          send('setup:status', status);
+          // Rough progress by keywords
+          if (status.includes('Python')) { step = 1; }
+          if (status.includes('virtual environment')) { step = 2; }
+          if (status.includes('Installing') || status.includes('Collecting') || status.includes('Downloading')) { step = 3; }
+          if (status.includes('Verifying') || status.includes('checks passed')) { step = 4; }
+          send('setup:progress', Math.round((step / totalSteps) * 100));
+        });
+
+        send('setup:done');
+        await new Promise(r => setTimeout(r, 1500));
+        if (setupWindow && !setupWindow.isDestroyed()) setupWindow.close();
+        setupWindow = null;
+        resolve();
+      } catch (e) {
+        send('setup:error', e.message);
+        reject(e);
+      }
+    });
+
+    setupWindow.on('closed', () => { setupWindow = null; });
+  });
+}
+
+// ── Main window ─────────────────────────────────────────
+function createMainWindow() {
   mainWindow = new BrowserWindow({
-    width: 1100,
-    height: 760,
+    width: 1200,
+    height: 800,
     minWidth: 900,
     minHeight: 600,
-    title: 'Depth Scanner OSS',
+    title: 'Depth Scanner Lab',
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -80,22 +154,19 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'ui', 'index.html'));
-
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+  mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 // ── IPC handlers ────────────────────────────────────────
 ipcMain.handle('dialog:save', async (event, defaultPath) => {
-  const result = await dialog.showSaveDialog(mainWindow, {
-    defaultPath: defaultPath,
-  });
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  const result = await dialog.showSaveDialog(win, { defaultPath });
   return result.canceled ? null : result.filePath;
 });
 
 ipcMain.handle('dialog:openFolder', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  const result = await dialog.showOpenDialog(win, {
     properties: ['openDirectory'],
     title: 'Choose save folder',
   });
@@ -103,19 +174,38 @@ ipcMain.handle('dialog:openFolder', async () => {
 });
 
 ipcMain.handle('fs:writeFile', async (event, filePath, data) => {
-  // data arrives as ArrayBuffer from renderer
   const buffer = Buffer.from(data);
   fs.writeFileSync(filePath, buffer);
   return { size: buffer.length };
 });
 
+ipcMain.handle('backend:restart', async () => {
+  killBackend();
+  // Brief pause for port to free up
+  await new Promise(r => setTimeout(r, 500));
+  backendProcess = await startBackend();
+  return backendProcess !== null;
+});
+
 // ── App lifecycle ───────────────────────────────────────
-app.whenReady().then(() => {
-  backendProcess = startBackend();
-  createWindow();
+app.whenReady().then(async () => {
+  try {
+    // Run setup if first launch
+    if (!isSetupDone()) {
+      await showSetupWindow();
+    }
+
+    // Start backend + main window
+    backendProcess = await startBackend();
+    createMainWindow();
+
+  } catch (e) {
+    console.error('[DS Lab] Setup failed:', e.message);
+    // Keep setup window open showing error
+  }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
 });
 
