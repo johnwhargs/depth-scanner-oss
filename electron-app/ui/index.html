@@ -1,0 +1,2360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Depth Scanner OSS</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#1a1a1c;--surface:#242428;--raised:#2e2e34;--border:#3a3a42;
+  --accent:#5b8fff;--accent2:#ff6b35;--ok:#3ddc84;--warn:#f0a732;--err:#ff5c5c;
+  --text:#d8d8e0;--muted:#6e6e80;--radius:6px;
+  --mono:'SF Mono','Menlo','Consolas','Courier New',monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.5;display:flex;flex-direction:column}
+
+/* ── Header ───────────────────────────────────────────── */
+.header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px 12px 84px;border-bottom:1px solid var(--border);-webkit-app-region:drag;user-select:none}
+.header-left{display:flex;align-items:center;gap:10px;-webkit-app-region:no-drag}
+.logo{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.logo span{color:var(--accent);font-weight:700}
+.nav-btn{background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:4px 10px;transition:all .15s}
+.nav-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.nav-btn:hover:not(.active){color:var(--text);border-color:var(--text)}
+.status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);-webkit-app-region:no-drag}
+.dot{width:7px;height:7px;border-radius:50%}
+.dot-on{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.dot-off{background:var(--err)}
+.dot-wait{background:var(--warn);animation:pulse 1.2s ease infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Layout ───────────────────────────────────────────── */
+.main{flex:1;display:flex;overflow:hidden}
+.sidebar{width:300px;min-width:280px;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+.canvas{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── Sidebar sections ─────────────────────────────────── */
+.sb-section{padding:14px 16px;border-bottom:1px solid var(--border)}
+.sb-title{font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.field{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.field label{width:80px;flex-shrink:0;color:var(--muted);font-size:11px}
+select,input[type="number"]{flex:1;background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:12px;padding:5px 8px;outline:none}
+select:focus,input:focus{border-color:var(--accent)}
+input[type="range"]{flex:1;padding:0;height:4px;accent-color:var(--accent);cursor:pointer}
+input[type="color"]{padding:2px;height:28px;cursor:pointer;width:44px;flex:none;border:1px solid var(--border);border-radius:var(--radius);background:var(--raised)}
+.range-val{font-family:var(--mono);font-size:11px;color:var(--text);min-width:32px;text-align:right}
+
+/* ── Buttons ──────────────────────────────────────────── */
+.btn{display:block;width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--raised);color:var(--text);font-family:var(--sans);font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s;margin-bottom:6px}
+.btn:hover:not(:disabled){background:var(--border)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn-primary:hover:not(:disabled){background:#4070e0}
+.btn-accent2{background:var(--accent2);border-color:var(--accent2);color:#fff}
+.btn-accent2:hover:not(:disabled){background:#e05020}
+.btn-row{display:flex;gap:6px;margin-bottom:6px}
+.btn-row .btn{margin-bottom:0}
+.btn-sm{padding:5px 10px;font-size:11px}
+
+/* ── Mode tabs ────────────────────────────────────────── */
+.mode-tabs{display:flex;gap:2px;padding:0 16px;background:var(--surface);border-bottom:1px solid var(--border)}
+.mode-tab{flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;padding:10px 4px;transition:all .15s;text-align:center}
+.mode-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.mode-tab:hover:not(.active){color:var(--text)}
+.mode-pane{display:none}
+.mode-pane.active{display:block}
+
+/* ── Effect sub-tabs ──────────────────────────────────── */
+.fx-tabs{display:flex;gap:4px;margin-bottom:10px}
+.fx-tab{flex:1;background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer;font-size:10px;padding:6px;text-align:center;transition:all .15s}
+.fx-tab.active{border-color:var(--accent);color:var(--accent)}
+.fx-pane{display:none}
+.fx-pane.active{display:block}
+
+/* ── Canvas / preview ─────────────────────────────────── */
+.preview-area{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;background:#111113}
+.preview-area img{max-width:100%;max-height:100%;object-fit:contain}
+.drop-zone{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:12px;pointer-events:none}
+.drop-zone.hidden{display:none}
+.drop-icon{font-size:48px;opacity:.3}
+.drop-text{font-size:13px}
+.drop-sub{font-size:11px;color:var(--border)}
+.drop-active .drop-zone{background:rgba(91,143,255,.08);border:2px dashed var(--accent);pointer-events:none}
+/* Viewport bar */
+.viewport-bar{display:flex;gap:2px;padding:4px 8px;background:var(--surface);border-bottom:1px solid var(--border)}
+.vp-btn{background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;transition:all .15s}
+.vp-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.vp-btn:hover:not(.active){color:var(--text);border-color:var(--text)}
+.wipe-label{position:absolute;bottom:12px;background:rgba(0,0,0,.6);color:var(--muted);font-family:var(--mono);font-size:9px;letter-spacing:.15em;padding:3px 8px;border-radius:3px;z-index:4;pointer-events:none}
+
+/* ── Info bar ─────────────────────────────────────────── */
+.info-bar{display:flex;align-items:center;gap:12px;padding:6px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);background:var(--surface);flex-shrink:0}
+.info-bar .spacer{flex:1}
+
+/* ── Progress ─────────────────────────────────────────── */
+.progress-track{background:var(--raised);border-radius:2px;height:3px;overflow:hidden;margin-bottom:8px}
+.progress-bar{height:100%;background:var(--accent);transition:width .3s}
+.progress-wrap{display:none}
+.progress-wrap.show{display:block}
+.progress-indeterminate .progress-bar{animation:indeterminate 1.5s linear infinite}
+@keyframes indeterminate{0%{transform:translateX(-100%);width:60%}100%{transform:translateX(260%);width:60%}}
+
+/* ── Log ──────────────────────────────────────────────── */
+.log-area{height:100px;overflow-y:auto;border-top:1px solid var(--border);padding:6px 16px;font-family:var(--mono);font-size:10px;background:#111113;flex-shrink:0}
+.log-area::-webkit-scrollbar{width:4px}
+.log-area::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.log-line{padding:1px 0}
+.log-info{color:var(--muted)}.log-success{color:var(--ok)}.log-warn{color:var(--warn)}.log-error{color:var(--err)}
+
+/* ── Batch file list ──────────────────────────────────── */
+.file-list{max-height:120px;overflow-y:auto;margin-bottom:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)}
+.file-list:empty{display:none}
+.file-item{padding:4px 8px;font-size:10px;font-family:var(--mono);color:var(--muted);border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+.file-item:last-child{border-bottom:none}
+.file-item .status-icon{font-size:10px}
+.file-done{color:var(--ok)}
+.file-processing{color:var(--warn)}
+
+/* ── Toggle switch ───────────────────────────────────── */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.toggle-label{font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.toggle{position:relative;width:36px;height:20px;background:var(--border);border-radius:10px;cursor:pointer;transition:background .2s;flex-shrink:0}
+.toggle.on{background:var(--accent)}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .2s}
+.toggle.on::after{transform:translateX(16px)}
+.fx-disabled{opacity:.4;pointer-events:none}
+
+/* ── Timeline ────────────────────────────────────────── */
+.timeline{display:none;padding:0 16px 8px;background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
+.timeline.show{display:block}
+.tl-header{display:flex;align-items:center;justify-content:space-between;padding:6px 0 4px;font-family:var(--mono);font-size:10px;color:var(--muted)}
+.tl-time{color:var(--text);font-size:11px}
+.tl-track{position:relative;height:40px;background:var(--bg);border-radius:3px;margin-bottom:4px;cursor:pointer;overflow:visible;user-select:none}
+.tl-fill{position:absolute;top:0;height:100%;background:var(--raised);border-radius:3px}
+.tl-trim{position:absolute;top:0;height:100%;background:rgba(91,143,255,.15);border:1px solid var(--accent);border-radius:3px;pointer-events:none}
+.tl-handle{position:absolute;top:-4px;width:14px;height:48px;background:var(--accent);border-radius:3px;cursor:col-resize;z-index:3;transition:background .1s}
+.tl-handle:hover,.tl-handle:active{background:#4070e0;width:16px}
+.tl-handle-left{left:-7px;border-radius:3px 0 0 3px}
+.tl-handle-right{right:-7px;border-radius:0 3px 3px 0}
+.tl-playhead{position:absolute;top:-6px;width:2px;height:52px;background:var(--ok);z-index:4;pointer-events:none}
+.tl-playhead::before{content:"";position:absolute;top:0;left:-5px;width:12px;height:8px;background:var(--ok);border-radius:3px 3px 0 0}
+.tl-thumbs{position:absolute;top:0;left:0;right:0;height:100%;display:flex;overflow:hidden;border-radius:3px;pointer-events:none}
+.tl-thumbs img{height:100%;flex-shrink:0;object-fit:cover;opacity:.6}
+.tl-ruler{display:flex;justify-content:space-between;font-family:var(--mono);font-size:8px;color:var(--border);padding:0 2px}
+
+/* ── Confirm modal ───────────────────────────────────── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;max-width:360px;width:90%;text-align:center}
+.modal-title{font-family:var(--mono);font-size:12px;color:var(--text);margin-bottom:8px;font-weight:600}
+.modal-msg{font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.6}
+.modal-btns{display:flex;gap:8px;justify-content:center}
+.modal-btns .btn{width:auto;padding:7px 20px;margin:0}
+</style>
+</head>
+<body>
+
+<!-- ═══ CONFIRM MODAL ══════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title" id="modal-title">Unsaved Render</div>
+    <div class="modal-msg" id="modal-msg">You have an unsaved depth map. Opening a new file will discard it.</div>
+    <div class="modal-btns">
+      <button class="btn btn-accent2" id="modal-ok">Discard</button>
+      <button class="btn" id="modal-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ HEADER ══════════════════════════════════════════════════════ -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo"><span>DEPTH</span> SCANNER OSS</div>
+    <div style="display:flex;gap:4px;margin-left:12px">
+      <button class="nav-btn active" id="nav-render">Render</button>
+      <button class="nav-btn" id="nav-3d">Effects</button>
+    </div>
+  </div>
+  <div class="status">
+    <span id="device-info"></span>
+    <div id="status-dot" class="dot dot-wait"></div>
+    <span id="status-text">connecting…</span>
+  </div>
+</div>
+
+<!-- ═══ MAIN ═══════════════════════════════════════════════════════ -->
+<div class="main">
+
+  <!-- ─── Sidebar ─────────────────────────────────────────────── -->
+  <div class="sidebar">
+
+    <!-- ── Open / File info ──── -->
+    <div class="sb-section">
+      <button class="btn btn-primary" id="btn-open-file">Open File</button>
+      <input type="file" id="file-input" accept="image/*,video/*,.mp4,.mov,.avi,.mkv,.webm" multiple style="display:none"/>
+      <!-- Batch file list -->
+      <div class="file-list" id="batch-files"></div>
+      <div id="batch-controls" hidden>
+        <button class="btn btn-accent2 btn-sm" id="btn-process-batch">Process All</button>
+        <button class="btn btn-sm" id="btn-clear-batch">Clear Batch</button>
+      </div>
+      <div id="file-type-badge" style="display:none;margin-bottom:8px">
+        <span id="file-badge" style="display:inline-block;background:var(--accent);color:#fff;font-family:var(--mono);font-size:9px;letter-spacing:.1em;padding:2px 8px;border-radius:3px;text-transform:uppercase"></span>
+      </div>
+      <div id="video-info-box" style="display:none">
+        <div style="font-size:10px;color:var(--muted);font-family:var(--mono);line-height:1.8" id="video-meta"></div>
+      </div>
+    </div>
+
+    <!-- ── Model & Output ──── -->
+    <div class="sb-section">
+      <div class="sb-title">Model & Output</div>
+      <div class="field">
+        <label>Model</label>
+        <select id="model">
+          <option value="small">Small — fastest</option>
+          <option value="base">Base — balanced</option>
+          <option value="large">Large — best quality</option>
+        </select>
+      </div>
+      <div id="model-hint" style="display:none;font-size:9px;color:var(--ok);padding-left:88px;margin-top:-4px;margin-bottom:8px"></div>
+      <div class="field">
+        <label>Format</label>
+        <select id="output-format">
+          <option value="png_gray">PNG Grayscale</option>
+          <option value="png_color">PNG Colorized</option>
+          <option value="exr">EXR 32-bit</option>
+        </select>
+      </div>
+      <div id="format-hint" style="display:none;font-size:9px;padding-left:88px;margin-top:-4px;margin-bottom:8px"></div>
+      <div class="field" id="colormap-row" style="display:none">
+        <label>Colormap</label>
+        <select id="colormap"></select>
+      </div>
+      <div id="colormap-preview" style="display:none;padding-left:88px;margin-top:-4px;margin-bottom:8px">
+        <canvas id="colormap-gradient" width="180" height="12" style="width:100%;height:12px;border-radius:3px;border:1px solid var(--border)"></canvas>
+      </div>
+    </div>
+
+    <!-- ── Video options (shown only for video) ──── -->
+    <div class="sb-section" id="video-options" style="display:none">
+      <div class="sb-title">Video Options</div>
+      <div class="field">
+        <label>Every N</label>
+        <input type="number" id="vid-every" value="1" min="1" max="60" step="1" style="width:60px"/>
+      </div>
+      <div class="field">
+        <label>Scale align</label>
+        <select id="vid-align">
+          <option value="true" selected>On</option>
+          <option value="false">Off</option>
+        </select>
+      </div>
+      <div class="field">
+        <label title="Temporal smoothing between frames. 0=none (may flicker), 0.4=recommended, 0.7+=heavy (may ghost/drift)">Smooth</label>
+        <input type="range" id="vid-smooth" min="0" max="0.7" step="0.05" value="0.4" title="0.3-0.4 recommended. Higher = more stable but can cause ghosting."
+          oninput="document.getElementById('vid-smooth-val').textContent=parseFloat(this.value).toFixed(2); document.getElementById('smooth-warn').style.display=parseFloat(this.value)>0.5?'block':'none'"/>
+        <span class="range-val" id="vid-smooth-val">0.40</span>
+      </div>
+      <div id="smooth-warn" style="display:none;font-size:9px;color:var(--warn);padding-left:88px;margin-top:-4px;margin-bottom:4px">⚠ High values may cause depth ghosting between frames</div>
+      <div class="field">
+        <label>Output</label>
+        <select id="vid-output">
+          <option value="video">MP4 Video</option>
+          <option value="sequence">Image Sequence (ZIP)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ── Save Options ──── -->
+    <div class="sb-section">
+      <div class="sb-title">Save Options</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <input type="checkbox" id="auto-export"/>
+        <label for="auto-export" style="font-size:11px;color:var(--muted);cursor:pointer">Export on completion</label>
+      </div>
+      <div class="field">
+        <label>Save to</label>
+        <button class="btn btn-sm" id="btn-save-location" style="flex:1;margin:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;padding:5px 8px">Downloads (default)</button>
+      </div>
+    </div>
+
+    <!-- ── Actions ──── -->
+    <div class="sb-section">
+      <div id="estimate-box" style="display:none;margin-bottom:8px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-size:10px;font-family:var(--mono);color:var(--muted);line-height:1.6">
+        <div id="estimate-text"></div>
+      </div>
+      <div id="sidebar-progress" hidden style="position:relative;height:18px;background:var(--bg);border:1px solid var(--border);border-radius:3px;overflow:hidden;margin-bottom:8px">
+        <div id="sidebar-progress-fill" style="height:100%;background:linear-gradient(90deg,var(--accent),#4070e0);width:0%;transition:width .3s"></div>
+        <div id="sidebar-progress-text" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;color:var(--text);text-shadow:0 1px 2px rgba(0,0,0,.5)"></div>
+      </div>
+      <button class="btn btn-accent2" id="btn-process" disabled>Process Depth Map</button>
+      <button class="btn" id="btn-save" disabled>Save Result</button>
+    </div>
+
+    <!-- ── Effects (shown after processing) ──── -->
+    <div class="sb-section" id="effects-section">
+      <div class="toggle-row">
+        <span class="toggle-label">Effects</span>
+        <div class="toggle" id="fx-toggle" title="Enable live effect preview"></div>
+      </div>
+      <div id="fx-controls" class="fx-disabled">
+      <!-- Posterize modifier (global) -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:6px 8px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border)">
+        <input type="checkbox" id="posterize-on" style="accent-color:var(--accent);cursor:pointer"/>
+        <label for="posterize-on" style="font-size:10px;color:var(--muted);cursor:pointer;flex-shrink:0">Posterize</label>
+        <input type="range" id="posterize-levels" min="2" max="10" step="1" value="4" style="flex:1"
+          oninput="document.getElementById('posterize-levels-v').textContent=this.value"/>
+        <span class="range-val" id="posterize-levels-v">4</span>
+      </div>
+      <div class="fx-tabs" style="flex-wrap:wrap">
+        <button class="fx-tab active" data-fx="dof">DoF</button>
+        <button class="fx-tab" data-fx="grade">Grade</button>
+        <button class="fx-tab" data-fx="slice">Slice</button>
+        <button class="fx-tab" data-fx="fog">Fog</button>
+        <button class="fx-tab" data-fx="parallax">Parallax</button>
+        <button class="fx-tab" data-fx="wiggle">Wiggle</button>
+        <button class="fx-tab" data-fx="spatial">Spatial</button>
+        <button class="fx-tab" data-fx="transition">Transition</button>
+      </div>
+
+      <!-- DoF -->
+      <div class="fx-pane active" id="fx-dof">
+        <div class="field">
+          <label>Focal depth</label>
+          <input type="range" id="dof-focal" min="0" max="1" step="0.01" value="0.3"
+            oninput="document.getElementById('dof-focal-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="dof-focal-v">0.30</span>
+        </div>
+        <div class="field">
+          <label>Focal range</label>
+          <input type="range" id="dof-range" min="0.01" max="0.5" step="0.01" value="0.1"
+            oninput="document.getElementById('dof-range-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="dof-range-v">0.10</span>
+        </div>
+        <div class="field">
+          <label>Max blur</label>
+          <input type="range" id="dof-blur" min="1" max="40" step="1" value="14"
+            oninput="document.getElementById('dof-blur-v').textContent=this.value+'px'"/>
+          <span class="range-val" id="dof-blur-v">14px</span>
+        </div>
+        <div class="field">
+          <label>Bokeh</label>
+          <select id="dof-bokeh">
+            <option value="gaussian">Gaussian</option>
+            <option value="disc">Disc</option>
+            <option value="hexagon">Hexagon</option>
+            <option value="ring">Soap Bubble</option>
+            <option value="donut">Donut</option>
+            <option value="onion_ring">Onion Ring</option>
+            <option value="cat_eye">Cat Eye</option>
+            <option value="anamorphic">Anamorphic</option>
+            <option value="petzval">Petzval Swirl</option>
+          </select>
+        </div>
+        <!-- Per-shape style sliders -->
+        <div id="bokeh-style-params">
+          <div class="field bokeh-param" data-shapes="hexagon">
+            <label title="Number of aperture blades (3-8)">Blades</label>
+            <input type="range" id="dof-blades" min="3" max="8" step="1" value="6" title="Aperture blade count"
+              oninput="document.getElementById('dof-blades-v').textContent=this.value"/>
+            <span class="range-val" id="dof-blades-v">6</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="hexagon,disc,gaussian">
+            <label title="How round the aperture shape is (0=sharp polygon, 100=circle)">Roundness</label>
+            <input type="range" id="dof-roundness" min="0" max="100" step="5" value="0" title="Iris roundness"
+              oninput="document.getElementById('dof-roundness-v').textContent=this.value+'%'"/>
+            <span class="range-val" id="dof-roundness-v">0%</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="hexagon,disc,ring,donut">
+            <label title="Rotation angle of the aperture shape">Rotation</label>
+            <input type="range" id="dof-rotation" min="0" max="360" step="5" value="0" title="Iris rotation in degrees"
+              oninput="document.getElementById('dof-rotation-v').textContent=this.value+'°'"/>
+            <span class="range-val" id="dof-rotation-v">0°</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="ring,donut,onion_ring">
+            <label title="Width of the bright ring relative to the disc">Ring width</label>
+            <input type="range" id="dof-ring" min="10" max="90" step="5" value="30" title="Ring thickness"
+              oninput="document.getElementById('dof-ring-v').textContent=this.value+'%'"/>
+            <span class="range-val" id="dof-ring-v">30%</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="anamorphic">
+            <label title="Horizontal squeeze ratio (lower = more oval)">Squeeze</label>
+            <input type="range" id="dof-squeeze" min="20" max="100" step="5" value="50" title="Anamorphic squeeze"
+              oninput="document.getElementById('dof-squeeze-v').textContent=this.value+'%'"/>
+            <span class="range-val" id="dof-squeeze-v">50%</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="petzval">
+            <label title="Intensity of the swirl vortex effect">Swirl</label>
+            <input type="range" id="dof-swirl" min="0" max="100" step="5" value="60" title="Swirl intensity"
+              oninput="document.getElementById('dof-swirl-v').textContent=this.value+'%'"/>
+            <span class="range-val" id="dof-swirl-v">60%</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="cat_eye">
+            <label title="How strong the cat-eye vignetting is at frame edges">Vignette</label>
+            <input type="range" id="dof-vignette" min="0" max="100" step="5" value="60" title="Cat-eye vignette strength"
+              oninput="document.getElementById('dof-vignette-v').textContent=this.value+'%'"/>
+            <span class="range-val" id="dof-vignette-v">60%</span>
+          </div>
+          <div class="field bokeh-param" data-shapes="all">
+            <label title="Brightness boost for specular highlights in bokeh">Highlights</label>
+            <input type="range" id="dof-highlights" min="0" max="300" step="10" value="100" title="Highlight brightness boost"
+              oninput="document.getElementById('dof-highlights-v').textContent=this.value+'%'"/>
+            <span class="range-val" id="dof-highlights-v">100%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grade -->
+      <div class="fx-pane" id="fx-grade">
+        <div class="field"><label>Near color</label><input type="color" id="grade-near" value="#ff4400"/></div>
+        <div class="field"><label>Far color</label><input type="color" id="grade-far" value="#0044ff"/></div>
+        <div class="field">
+          <label>Opacity</label>
+          <input type="range" id="grade-opacity" min="0" max="1" step="0.05" value="0.5"
+            oninput="document.getElementById('grade-opacity-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="grade-opacity-v">0.50</span>
+        </div>
+        <div class="field">
+          <label>Blend</label>
+          <select id="grade-blend">
+            <option value="overlay">Overlay</option><option value="multiply">Multiply</option>
+            <option value="screen">Screen</option><option value="add">Add</option><option value="normal">Normal</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Slice -->
+      <div class="fx-pane" id="fx-slice">
+        <div class="field">
+          <label>Near cut</label>
+          <input type="range" id="slice-near" min="0" max="1" step="0.01" value="0.0"
+            oninput="document.getElementById('slice-near-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="slice-near-v">0.00</span>
+        </div>
+        <div class="field">
+          <label>Far cut</label>
+          <input type="range" id="slice-far" min="0" max="1" step="0.01" value="0.5"
+            oninput="document.getElementById('slice-far-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="slice-far-v">0.50</span>
+        </div>
+        <div class="field">
+          <label>Feather</label>
+          <input type="range" id="slice-feather" min="0" max="0.2" step="0.005" value="0.02"
+            oninput="document.getElementById('slice-feather-v').textContent=parseFloat(this.value).toFixed(3)"/>
+          <span class="range-val" id="slice-feather-v">0.020</span>
+        </div>
+      </div>
+
+      <!-- Fog -->
+      <div class="fx-pane" id="fx-fog">
+        <div class="field"><label>Fog color</label><input type="color" id="fog-color" value="#c8c8d0"/></div>
+        <div class="field">
+          <label>Density</label>
+          <input type="range" id="fog-density" min="0" max="1" step="0.05" value="0.7"
+            oninput="document.getElementById('fog-density-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="fog-density-v">0.70</span>
+        </div>
+        <div class="field">
+          <label>Near start</label>
+          <input type="range" id="fog-near" min="0" max="1" step="0.01" value="0.3"
+            oninput="document.getElementById('fog-near-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="fog-near-v">0.30</span>
+        </div>
+        <div class="field">
+          <label>Far end</label>
+          <input type="range" id="fog-far" min="0" max="1" step="0.01" value="1.0"
+            oninput="document.getElementById('fog-far-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="fog-far-v">1.00</span>
+        </div>
+        <div class="field">
+          <label>Noise</label>
+          <input type="range" id="fog-noise" min="0" max="0.5" step="0.01" value="0.1"
+            oninput="document.getElementById('fog-noise-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="fog-noise-v">0.10</span>
+        </div>
+      </div>
+
+      <!-- Parallax -->
+      <div class="fx-pane" id="fx-parallax">
+        <div class="field">
+          <label>Shift X</label>
+          <input type="range" id="par-x" min="-60" max="60" step="1" value="20"
+            oninput="document.getElementById('par-x-v').textContent=this.value+'px'"/>
+          <span class="range-val" id="par-x-v">20px</span>
+        </div>
+        <div class="field">
+          <label>Shift Y</label>
+          <input type="range" id="par-y" min="-60" max="60" step="1" value="0"
+            oninput="document.getElementById('par-y-v').textContent=this.value+'px'"/>
+          <span class="range-val" id="par-y-v">0px</span>
+        </div>
+        <div class="field">
+          <label>Zoom</label>
+          <input type="range" id="par-zoom" min="-50" max="50" step="1" value="0"
+            oninput="document.getElementById('par-zoom-v').textContent=this.value"/>
+          <span class="range-val" id="par-zoom-v">0</span>
+        </div>
+        <div class="field">
+          <label>Smooth</label>
+          <input type="range" id="par-blur" min="0" max="20" step="0.5" value="5"
+            oninput="document.getElementById('par-blur-v').textContent=parseFloat(this.value).toFixed(1)"/>
+          <span class="range-val" id="par-blur-v">5.0</span>
+        </div>
+      </div>
+
+      <!-- Wiggle -->
+      <div class="fx-pane" id="fx-wiggle">
+        <div class="field">
+          <label>Views</label>
+          <input type="range" id="wig-views" min="3" max="7" step="1" value="5"
+            oninput="document.getElementById('wig-views-v').textContent=this.value; updateWigEstimate()"/>
+          <span class="range-val" id="wig-views-v">5</span>
+        </div>
+        <div class="field">
+          <label>Separation</label>
+          <input type="range" id="wig-sep" min="1" max="40" step="1" value="15"
+            oninput="document.getElementById('wig-sep-v').textContent=this.value+'px'"/>
+          <span class="range-val" id="wig-sep-v">15px</span>
+        </div>
+        <div class="field">
+          <label>Speed</label>
+          <input type="range" id="wig-fps" min="5" max="30" step="1" value="12"
+            oninput="document.getElementById('wig-fps-v').textContent=this.value+'fps'; updateWigEstimate()"/>
+          <span class="range-val" id="wig-fps-v">12fps</span>
+        </div>
+        <div class="field">
+          <label>Format</label>
+          <select id="wig-format" onchange="updateWigEstimate()"><option value="gif">GIF</option><option value="mp4">MP4</option></select>
+        </div>
+        <div class="field">
+          <label>Path</label>
+          <select id="wig-path"><option value="linear">Linear</option><option value="arc">Arc</option></select>
+        </div>
+        <div class="field">
+          <label>Loops</label>
+          <input type="range" id="wig-loops" min="1" max="10" step="1" value="3"
+            oninput="document.getElementById('wig-loops-v').textContent=this.value; updateWigEstimate()"/>
+          <span class="range-val" id="wig-loops-v">3</span>
+        </div>
+        <div id="wig-estimate" style="display:none;font-size:9px;color:var(--muted);font-family:var(--mono);margin-top:4px;padding:4px 6px;background:var(--bg);border-radius:var(--radius)"></div>
+      </div>
+
+      <!-- Spatial -->
+      <div class="fx-pane" id="fx-spatial">
+        <div class="field">
+          <label>Eye sep.</label>
+          <input type="range" id="sp-sep" min="5" max="60" step="1" value="30"
+            oninput="document.getElementById('sp-sep-v').textContent=this.value+'px'"/>
+          <span class="range-val" id="sp-sep-v">30px</span>
+        </div>
+        <div class="field">
+          <label>Convergence</label>
+          <input type="range" id="sp-conv" min="0" max="1" step="0.01" value="0.5"
+            oninput="document.getElementById('sp-conv-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="sp-conv-v">0.50</span>
+        </div>
+        <div class="field">
+          <label>Output</label>
+          <select id="sp-output"><option value="sbs">SBS PNG</option><option value="zip">Separate ZIP</option></select>
+        </div>
+      </div>
+
+      <!-- Transition -->
+      <div class="fx-pane" id="fx-transition">
+        <div id="transition-note" style="font-size:10px;color:var(--warn);margin-bottom:8px;display:none">
+          Transition works with single images only, not video.
+        </div>
+        <div style="margin-bottom:8px">
+          <button class="btn btn-sm" id="btn-load-file-b" style="display:inline-block;width:auto;padding:5px 12px">Load Second Image</button>
+          <input type="file" id="file-b-input" accept="image/*" style="display:none"/>
+          <span id="file-b-name" style="font-size:10px;color:var(--muted);margin-left:6px"></span>
+        </div>
+        <div class="field">
+          <label>Transition</label>
+          <input type="range" id="tr-val" min="0" max="1" step="0.01" value="0.5"
+            oninput="document.getElementById('tr-val-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="tr-val-v">0.50</span>
+        </div>
+        <div class="field">
+          <label>Softness</label>
+          <input type="range" id="tr-soft" min="0" max="0.5" step="0.01" value="0.1"
+            oninput="document.getElementById('tr-soft-v').textContent=parseFloat(this.value).toFixed(2)"/>
+          <span class="range-val" id="tr-soft-v">0.10</span>
+        </div>
+        <div class="field">
+          <label>Speed</label>
+          <input type="range" id="tr-speed" min="0.2" max="3.0" step="0.1" value="1.0"
+            oninput="document.getElementById('tr-speed-v').textContent=parseFloat(this.value).toFixed(1)+'x'"/>
+          <span class="range-val" id="tr-speed-v">1.0x</span>
+        </div>
+        <div class="field">
+          <label>Animate</label>
+          <button class="btn btn-sm" id="btn-tr-loop" style="width:auto;padding:4px 12px;margin:0">▶ Loop</button>
+          <button class="btn btn-sm" id="btn-tr-stop" style="width:auto;padding:4px 12px;margin:0;display:none">■ Stop</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px">
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-fx-preview" disabled>Preview</button>
+          <button class="btn" id="btn-fx-apply" disabled>Apply & Save</button>
+        </div>
+      </div>
+      </div><!-- /fx-controls -->
+      <button class="btn" id="btn-3d" disabled style="margin-top:8px;border-color:var(--accent);color:var(--accent);font-size:10px">Open in Effects Workspace →</button>
+    </div>
+
+  </div>
+
+  <!-- ─── Canvas ──────────────────────────────────────────────── -->
+  <div class="canvas">
+    <!-- Viewport controls -->
+    <div class="viewport-bar" id="viewport-bar" style="display:none">
+      <button class="vp-btn active" data-view="depth" title="Depth only">Depth</button>
+      <button class="vp-btn" data-view="source" title="Original">Source</button>
+      <button class="vp-btn" data-view="side" title="Side by side">Side by Side</button>
+      <button class="vp-btn" data-view="wipe" title="Split wipe">Wipe</button>
+      <button class="vp-btn" data-view="overlay" title="Overlay blend">Overlay</button>
+    </div>
+
+    <div class="preview-area" id="preview-area">
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-icon">⬇</div>
+        <div class="drop-text">Drop image or video here</div>
+        <div class="drop-sub">PNG · JPG · TIFF · BMP · WebP · MP4 · MOV · AVI</div>
+      </div>
+      <img id="preview-img" style="display:none" alt="Preview"/>
+      <canvas id="compare-canvas" width="1920" height="1080" style="display:none;max-width:100%;max-height:100%;object-fit:contain;cursor:col-resize"></canvas>
+      <div id="frame-counter" style="display:none;position:absolute;top:10px;right:10px;background:rgba(0,0,0,.7);color:var(--ok);font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:4px"></div>
+      <!-- Wipe labels -->
+      <div id="wipe-label-left" class="wipe-label" style="display:none;left:8px">SOURCE</div>
+      <div id="wipe-label-right" class="wipe-label" style="display:none;right:8px">DEPTH</div>
+      <!-- Wipe handle line -->
+      <div id="wipe-handle" style="display:none;position:absolute;top:0;bottom:0;width:3px;background:var(--accent);pointer-events:none;z-index:5">
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:24px;height:24px;background:var(--accent);border-radius:50%;border:2px solid #fff;cursor:col-resize;pointer-events:auto"></div>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="timeline" id="timeline">
+      <div class="tl-header">
+        <span><span class="tl-time" id="tl-in">0:00</span> — <span class="tl-time" id="tl-out">0:00</span></span>
+        <span id="tl-range-info"></span>
+      </div>
+      <div class="tl-track" id="tl-track">
+        <div class="tl-thumbs" id="tl-thumbs"></div>
+        <div class="tl-trim" id="tl-trim" style="left:0%;right:0%">
+          <div class="tl-handle tl-handle-left" id="tl-handle-in"></div>
+          <div class="tl-handle tl-handle-right" id="tl-handle-out"></div>
+        </div>
+        <div class="tl-playhead" id="tl-playhead" style="left:0%"></div>
+      </div>
+      <div class="tl-ruler" id="tl-ruler"></div>
+    </div>
+
+    <div class="progress-wrap" id="progress">
+      <div class="progress-track"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
+    </div>
+
+    <div class="info-bar">
+      <span id="file-info">No file loaded</span>
+      <span class="spacer"></span>
+      <span id="depth-info"></span>
+    </div>
+
+    <div class="log-area" id="log"></div>
+  </div>
+
+</div>
+
+<script>
+const SERVER = "http://127.0.0.1:7843";
+const $ = id => document.getElementById(id);
+
+const state = {
+  currentFile: null,
+  currentBlob: null,
+  depthBlob: null,
+  sessionId: null,
+  batchFiles: [],
+  processing: false,
+  videoBlob: null,
+  videoInfo: null,
+  trimIn: 0,      // 0–1 normalized
+  trimOut: 1,     // 0–1 normalized
+  playheadPos: 0, // 0–1 normalized
+  fileB: null,       // second image for transition
+  fileBName: null,
+};
+
+const VIDEO_EXTS = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"];
+
+// ── Logging ──────────────────────────────────────────────────────
+function log(msg, type = "info") {
+  const el = $("log");
+  const line = document.createElement("div");
+  line.className = `log-line log-${type}`;
+  line.textContent = `› ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  while (el.children.length > 100) el.removeChild(el.firstChild);
+}
+
+// Progress bar in log — terminal style
+// Sidebar progress bar
+function setSidebarProgress(pct, text, show) {
+  const el = $("sidebar-progress");
+  if (!el) return;
+  if (!show || pct <= 0) { el.hidden = true; return; }
+  el.hidden = false;
+  $("sidebar-progress-fill").style.width = pct + "%";
+  $("sidebar-progress-text").textContent = text || pct + "%";
+}
+
+let _logProgressEl = null;
+function logProgress(current, total, label, extra) {
+  const pct = Math.round((current / total) * 100);
+  const barWidth = 20;
+  const filled = Math.round((current / total) * barWidth);
+  const empty = barWidth - filled;
+  const bar = "█".repeat(filled) + "░".repeat(empty);
+  let text = `${label || "Progress"}: ${pct}%|${bar}| ${current}/${total}`;
+  if (extra) text += ` — ${extra}`;
+
+  if (!_logProgressEl || !_logProgressEl.parentNode) {
+    _logProgressEl = document.createElement("div");
+    _logProgressEl.className = "log-line log-info";
+    _logProgressEl.style.fontFamily = "var(--mono)";
+    $("log").appendChild(_logProgressEl);
+  }
+  _logProgressEl.textContent = `› ${text}`;
+  $("log").scrollTop = $("log").scrollHeight;
+
+  if (current >= total) _logProgressEl = null; // next call creates new line
+}
+
+function setStatus(ok) {
+  $("status-dot").className = "dot " + (ok ? "dot-on" : "dot-off");
+  $("status-text").textContent = ok ? "Server ready" : "Server offline";
+}
+
+function setProgress(pct, show = true) {
+  const wrap = $("progress");
+  const bar = $("progress-bar");
+  if (show) {
+    wrap.classList.add("show");
+    wrap.classList.remove("progress-indeterminate");
+    bar.style.width = pct + "%";
+  } else {
+    wrap.classList.remove("show");
+  }
+}
+
+function setIndeterminate(show) {
+  const wrap = $("progress");
+  if (show) {
+    wrap.classList.add("show", "progress-indeterminate");
+    $("progress-bar").style.width = "";
+  } else {
+    wrap.classList.remove("show", "progress-indeterminate");
+  }
+}
+
+// ── Server ───────────────────────────────────────────────────────
+let _lastEngineStatus = "";
+
+async function ping() {
+  try {
+    const r = await fetch(`${SERVER}/health`, { signal: AbortSignal.timeout(2000) });
+    if (!r.ok) return null;
+    const data = await r.json();
+    // Log engine status changes (model loading feedback)
+    if (data.engine_status && data.engine_status !== _lastEngineStatus) {
+      _lastEngineStatus = data.engine_status;
+      if (data.engine_status === "ready") {
+        log(`Model ready (${data.model_loaded})`, "success");
+      } else if (data.engine_status !== "idle") {
+        log(data.engine_status, "info");
+      }
+    }
+    return data;
+  } catch { return null; }
+}
+
+function suggestModel(device) {
+  // cuda = dedicated GPU, can handle large
+  // mps = Apple Silicon, base is sweet spot
+  // cpu = slow, stick with small
+  if (device === "cuda") return "large";
+  if (device === "mps") return "base";
+  return "small";
+}
+
+// Colormap gradient data — approximate stops for each map
+const COLORMAP_COLORS = {
+  grayscale: [[0,0,0],[128,128,128],[255,255,255]],
+  grayscale_inv: [[255,255,255],[128,128,128],[0,0,0]],
+  inferno: [[0,0,4],[40,11,84],[136,33,75],[229,92,48],[252,255,164]],
+  viridis: [[68,1,84],[58,82,139],[32,144,140],[94,201,97],[253,231,36]],
+  rainbow: [[255,0,0],[255,255,0],[0,255,0],[0,255,255],[0,0,255],[255,0,255]],
+  turbo: [[0,128,255],[0,255,128],[128,255,0],[255,255,0],[255,128,0],[255,0,0]],
+  cool: [[0,0,255],[0,128,255],[0,255,255],[0,255,128]],
+  warm: [[255,0,0],[255,128,0],[255,255,0]],
+  depth_blue_orange: [[0,0,128],[128,64,0],[255,128,0]],
+  terrain_green: [[0,64,0],[128,192,0],[255,255,0]],
+  plasma_purple: [[20,0,50],[128,40,100],[255,200,50]],
+  ocean: [[0,32,64],[0,128,128],[255,64,32]],
+  copper: [[64,0,0],[180,100,50],[255,220,180]],
+  arctic: [[10,10,40],[20,100,180],[40,200,255]],
+  red_glow: [[0,0,0],[128,0,0],[255,0,64]],
+  green_glow: [[0,0,0],[0,128,0],[0,255,128]],
+  blue_glow: [[0,0,0],[0,0,128],[0,128,255]],
+  twilight: [[32,0,64],[128,64,128],[255,255,200]],
+  seafoam: [[0,10,20],[60,128,120],[180,255,220]],
+  ember: [[20,0,0],[128,60,0],[255,180,60]],
+};
+
+function drawColormapGradient(name) {
+  const canvas = $("colormap-gradient");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  const stops = COLORMAP_COLORS[name];
+  if (!stops) {
+    ctx.fillStyle = "#333";
+    ctx.fillRect(0, 0, w, h);
+    return;
+  }
+  const grad = ctx.createLinearGradient(0, 0, w, 0);
+  for (var i = 0; i < stops.length; i++) {
+    var t = i / (stops.length - 1);
+    grad.addColorStop(t, "rgb(" + stops[i][0] + "," + stops[i][1] + "," + stops[i][2] + ")");
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+}
+
+async function loadColormaps() {
+  try {
+    const { colormaps } = await (await fetch(`${SERVER}/colormaps`)).json();
+    $("colormap").innerHTML = colormaps.map(c =>
+      `<option value="${c}"${c === "inferno" ? " selected" : ""}>${c}</option>`
+    ).join("");
+    // Draw initial gradient
+    drawColormapGradient("inferno");
+    // Update gradient on change
+    $("colormap").addEventListener("change", function() {
+      drawColormapGradient(this.value);
+    });
+  } catch {}
+}
+
+// ── File handling ────────────────────────────────────────────────
+function hideAllPreviews() {
+  $("preview-img").style.display = "none";
+  $("compare-canvas").style.display = "none";
+  $("frame-counter").style.display = "none";
+  $("wipe-handle").style.display = "none";
+  $("wipe-label-left").style.display = "none";
+  $("wipe-label-right").style.display = "none";
+}
+
+function showImage(blob, label) {
+  hideAllPreviews();
+  if (state._lastImgUrl) URL.revokeObjectURL(state._lastImgUrl);
+  const url = URL.createObjectURL(blob);
+  state._lastImgUrl = url;
+  const img = $("preview-img");
+  img.onload = () => {
+    $("file-info").textContent = label || state.currentFile?.name || "Image";
+  };
+  img.src = url;
+  img.style.display = "block";
+  $("drop-zone").classList.add("hidden");
+}
+
+function showDepthFrame(blob, frameIdx, total) {
+  // Store frames for compare views
+  state._latestDepthBlob = blob;
+  const view = state.viewMode || "depth";
+
+  if (view === "depth") {
+    hideAllPreviews();
+    const img = $("preview-img");
+    img.src = URL.createObjectURL(blob);
+    img.style.display = "block";
+  } else {
+    drawCompareView(view, frameIdx);
+  }
+
+  $("drop-zone").classList.add("hidden");
+  $("frame-counter").style.display = "block";
+  $("frame-counter").textContent = `${frameIdx + 1} / ${total}`;
+}
+
+// ── Viewport compare system ──────────────────────────────────────
+const compare = {
+  sourceImg: new Image(),
+  depthImg: new Image(),
+  wipePos: 0.5,   // 0–1
+  dragging: false,
+  sourceFrames: [],  // blob URLs for original frames
+  depthFrames: [],   // blob URLs for depth frames
+};
+
+function drawCompareView(mode, frameIdx) {
+  const canvas = $("compare-canvas");
+  const ctx = canvas.getContext("2d");
+
+  // Load current depth frame
+  if (state._latestDepthBlob) {
+    compare.depthImg.src = URL.createObjectURL(state._latestDepthBlob);
+  }
+
+  const srcW = compare.sourceImg.naturalWidth || 1920;
+  const srcH = compare.sourceImg.naturalHeight || 1080;
+
+  if (mode === "source") {
+    hideAllPreviews();
+    // Show original — grab from stored source frames or video
+    if (compare.sourceFrames[frameIdx]) {
+      $("preview-img").src = compare.sourceFrames[frameIdx];
+      $("preview-img").style.display = "block";
+      $("drop-zone").classList.add("hidden");
+    } else if (state.currentBlob) {
+      showImage(state.currentBlob, "Source");
+    }
+    return;
+  }
+
+  hideAllPreviews();
+  canvas.style.display = "block";
+
+  function render() {
+    const dw = compare.depthImg.naturalWidth;
+    const dh = compare.depthImg.naturalHeight;
+    if (!dw || !dh) return;
+
+    if (mode === "side") {
+      canvas.width = dw * 2 + 4;
+      canvas.height = dh;
+      // Source on left
+      if (compare.sourceImg.naturalWidth) {
+        ctx.drawImage(compare.sourceImg, 0, 0, dw, dh);
+      } else {
+        ctx.fillStyle = "#1a1a1c";
+        ctx.fillRect(0, 0, dw, dh);
+        ctx.fillStyle = "#6e6e80";
+        ctx.font = "14px monospace";
+        ctx.fillText("Source", dw/2 - 24, dh/2);
+      }
+      // Divider
+      ctx.fillStyle = "#3a3a42";
+      ctx.fillRect(dw, 0, 4, dh);
+      // Depth on right
+      ctx.drawImage(compare.depthImg, dw + 4, 0, dw, dh);
+
+    } else if (mode === "wipe") {
+      canvas.width = dw;
+      canvas.height = dh;
+      const splitX = Math.round(compare.wipePos * dw);
+      // Source left
+      if (compare.sourceImg.naturalWidth) {
+        ctx.drawImage(compare.sourceImg, 0, 0, dw, dh);
+      }
+      // Depth right (clipped)
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(splitX, 0, dw - splitX, dh);
+      ctx.clip();
+      ctx.drawImage(compare.depthImg, 0, 0, dw, dh);
+      ctx.restore();
+      // Divider line
+      ctx.strokeStyle = "#5b8fff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(splitX, 0);
+      ctx.lineTo(splitX, dh);
+      ctx.stroke();
+
+      // Position wipe handle
+      const canvasRect = canvas.getBoundingClientRect();
+      const handlePx = compare.wipePos * canvasRect.width;
+      $("wipe-handle").style.display = "block";
+      $("wipe-handle").style.left = (canvas.offsetLeft + handlePx - 1) + "px";
+      $("wipe-label-left").style.display = "block";
+      $("wipe-label-right").style.display = "block";
+
+    } else if (mode === "overlay") {
+      canvas.width = dw;
+      canvas.height = dh;
+      if (compare.sourceImg.naturalWidth) {
+        ctx.drawImage(compare.sourceImg, 0, 0, dw, dh);
+      }
+      ctx.globalAlpha = 0.5;
+      ctx.drawImage(compare.depthImg, 0, 0, dw, dh);
+      ctx.globalAlpha = 1.0;
+    }
+  }
+
+  if (compare.depthImg.complete && compare.depthImg.naturalWidth) {
+    render();
+  } else {
+    compare.depthImg.onload = render;
+  }
+}
+
+function setupWipeDrag() {
+  const canvas = $("compare-canvas");
+  const handle = $("wipe-handle");
+  const area = $("preview-area");
+
+  function updateWipe(clientX) {
+    const rect = canvas.getBoundingClientRect();
+    compare.wipePos = Math.max(0.02, Math.min(0.98, (clientX - rect.left) / rect.width));
+    if (state.viewMode === "wipe") {
+      drawCompareView("wipe", state._lastFrameIdx || 0);
+    }
+  }
+
+  handle.querySelector("div").addEventListener("mousedown", e => {
+    compare.dragging = true;
+    e.preventDefault();
+  });
+
+  canvas.addEventListener("mousedown", e => {
+    if (state.viewMode === "wipe") {
+      compare.dragging = true;
+      updateWipe(e.clientX);
+    }
+  });
+
+  window.addEventListener("mousemove", e => {
+    if (compare.dragging) updateWipe(e.clientX);
+  });
+
+  window.addEventListener("mouseup", () => { compare.dragging = false; });
+}
+
+function setupViewportButtons() {
+  document.querySelectorAll(".vp-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".vp-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      state.viewMode = btn.dataset.view;
+
+      // Redraw current view
+      if (state._latestDepthBlob) {
+        if (state.viewMode === "depth") {
+          hideAllPreviews();
+          $("preview-img").src = URL.createObjectURL(state._latestDepthBlob);
+          $("preview-img").style.display = "block";
+          $("drop-zone").classList.add("hidden");
+        } else if (state.viewMode === "source") {
+          hideAllPreviews();
+          if (state.currentBlob) {
+            showImage(state.currentBlob, "Source");
+          }
+        } else {
+          drawCompareView(state.viewMode, state._lastFrameIdx || 0);
+        }
+        if ($("frame-counter").dataset.text) {
+          $("frame-counter").style.display = "block";
+          $("frame-counter").textContent = $("frame-counter").dataset.text;
+        }
+      }
+    });
+  });
+}
+
+function showViewportBar(show) {
+  $("viewport-bar").style.display = show ? "flex" : "none";
+}
+
+// openFile is now handled by <label for="file-input"> + change event on #file-input
+
+async function loadFile(file) {
+  // Reset state
+  state.currentFile = file;
+  state.currentBlob = file;
+  state.depthBlob = null;
+  state._saved = false;
+  state.sessionId = null;
+  state.videoBlob = null;
+  state.videoResultBlob = null;
+  state.videoInfo = null;
+  $("btn-save").disabled = true;
+  $("btn-fx-preview").disabled = true;
+  $("btn-fx-apply").disabled = true;
+  // effects section always visible;
+  $("viewport-bar").style.display = "none";
+  $("depth-info").textContent = "";
+  hideAllPreviews();
+  $("drop-zone").classList.remove("hidden");
+
+  const isVideo = isVideoFile(file.name) || file.type.startsWith("video/");
+  state._fileType = isVideo ? "video" : "image";
+
+  // Show badge
+  $("file-badge").textContent = isVideo ? "Video" : "Image";
+  $("file-badge").style.background = isVideo ? "var(--accent2)" : "var(--accent)";
+  $("file-type-badge").style.display = "block";
+
+  // Show/hide video options
+  $("video-options").style.display = isVideo ? "block" : "none";
+
+  if (isVideo) {
+    state.videoBlob = file;
+    $("file-info").textContent = file.name;
+    $("btn-process").disabled = true;
+    log(`Video loaded: ${file.name} (${formatSize(file.size)})`);
+
+    // Get video metadata
+    setIndeterminate(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      const r = await fetch(`${SERVER}/process/video/info`, { method: "POST", body: fd });
+      if (r.ok) {
+        state.videoInfo = await r.json();
+        const vi = state.videoInfo;
+        $("video-meta").innerHTML =
+          `${vi.width}×${vi.height} · ${vi.fps.toFixed(2)}fps<br>` +
+          `${vi.frames} frames · ${vi.duration.toFixed(1)}s`;
+        $("video-info-box").style.display = "block";
+        // Show first frame thumbnail
+        if (vi.thumbnail) {
+          hideAllPreviews();
+          $("preview-img").src = vi.thumbnail;
+          $("preview-img").style.display = "block";
+          $("drop-zone").classList.add("hidden");
+        }
+        showTimeline(vi);
+        log(`${vi.width}×${vi.height}, ${vi.fps.toFixed(2)}fps, ${vi.frames} frames`, "success");
+      }
+    } catch (e) {
+      log(`Could not read video info: ${e.message}`, "warn");
+    }
+    setIndeterminate(false);
+  } else {
+    $("video-info-box").style.display = "none";
+    hideTimeline();
+    showImage(file, `${file.name} — ${formatSize(file.size)}`);
+    log(`Image loaded: ${file.name}`);
+  }
+
+  $("btn-process").disabled = false;
+  updateEstimate();
+}
+
+function updateEstimate() {
+  try { _updateEstimateInner(); } catch(e) { console.error("estimate error:", e); }
+}
+function _updateEstimateInner() {
+  const box = $("estimate-box");
+  const text = $("estimate-text");
+  if (!box || !text) return;
+
+  if (state._fileType === "image") {
+    const size = state.currentBlob?.size || 0;
+    const mp = size > 5000000 ? "~3-5s" : "~1-3s";
+    text.innerHTML = `<span style="color:var(--text)">Image</span> · ${formatSize(size)}<br>Est. processing: ${mp} (${$("model").value})`;
+    box.style.display = "block";
+  } else if (state._fileType === "video" && state.videoInfo) {
+    const vi = state.videoInfo;
+    const every = parseInt($("vid-every")?.value || "1");
+    const trimFrames = Math.round((state.trimOut - state.trimIn) * vi.frames);
+    const processFrames = Math.ceil(trimFrames / every);
+
+    // Resolution-aware estimate: scale by megapixels relative to 1080p baseline
+    const model = $("model").value;
+    const baseSec = model === "large" ? 1.5 : model === "base" ? 0.6 : 0.2;
+    const megapix = (vi.width * vi.height) / 1000000;
+    const resFactor = Math.max(0.5, megapix / 2.07); // 2.07MP = 1920x1080
+    // Use measured rate if available from previous run
+    const secPerFrame = state._measuredSecPerFrame || (baseSec * resFactor);
+    const estSec = Math.round(processFrames * secPerFrame);
+    const estMin = Math.floor(estSec / 60);
+    const estRemSec = estSec % 60;
+    const estStr = estMin > 0 ? `~${estMin}m ${estRemSec}s` : `~${estSec}s`;
+
+    // Memory estimate
+    const pixPerFrame = vi.width * vi.height * 3;
+    const uploadMB = Math.round(state.videoBlob?.size / 1048576) || 0;
+
+    let warning = "";
+    if (vi.width >= 3840) {
+      warning = '<br><span style="color:var(--warn)">⚠ 4K video — consider Every N=2+ for faster processing</span>';
+    }
+    if (processFrames > 500) {
+      warning += '<br><span style="color:var(--warn)">⚠ ' + processFrames + ' frames — this will take a while</span>';
+    }
+
+    text.innerHTML =
+      `<span style="color:var(--text)">${vi.width}×${vi.height}</span> · ${processFrames} frames to process` +
+      `<br>Est. time: <span style="color:var(--text)">${estStr}</span> (${model})` +
+      `<br>Upload: ${uploadMB}MB` +
+      warning;
+    box.style.display = "block";
+  } else {
+    box.style.display = "none";
+  }
+} // end _updateEstimateInner
+
+// Re-estimate listeners are added in init()
+
+// ── Confirm modal ────────────────────────────────────────────────
+function showConfirm(title, msg, okLabel) {
+  return new Promise(function(resolve) {
+    $("modal-title").textContent = title;
+    $("modal-msg").textContent = msg;
+    $("modal-ok").textContent = okLabel || "Discard";
+    $("modal-overlay").classList.add("show");
+    $("modal-ok").onclick = function() { $("modal-overlay").classList.remove("show"); resolve(true); };
+    $("modal-cancel").onclick = function() { $("modal-overlay").classList.remove("show"); resolve(false); };
+  });
+}
+
+function hasUnsavedRender() {
+  return state.depthBlob && !state._saved;
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / 1048576).toFixed(1) + " MB";
+}
+
+// ── Status polling during processing ─────────────────────────────
+function startStatusPoll() {
+  state._statusPoll = setInterval(() => ping(), 1500);
+}
+function stopStatusPoll() {
+  if (state._statusPoll) { clearInterval(state._statusPoll); state._statusPoll = null; }
+}
+
+// ── Process depth map (auto-detects image vs video) ──────────────
+async function processDepthMap() {
+  if (state._fileType === "video") return processVideo();
+  return processImage();
+}
+
+async function processImage() {
+  if (state.processing || !state.currentBlob) return;
+  state.processing = true;
+  $("btn-process").disabled = true;
+  $("btn-process").textContent = "Processing…";
+  setIndeterminate(true);
+  startStatusPoll();
+
+  try {
+    const model = $("model").value;
+    const format = $("output-format").value;
+    const colormap = $("colormap").value || "inferno";
+    const imgStart = Date.now();
+
+    log(`Processing image with Depth Anything V2 (${model})…`);
+    setSidebarProgress(50, "Processing…", true);
+
+    // Animated log progress during inference
+    let _inferTick = 0;
+    const _inferTimer = setInterval(() => {
+      _inferTick = (_inferTick + 1) % 20;
+      const bar = "▓".repeat(_inferTick) + "░".repeat(20 - _inferTick);
+      const elapsed = ((Date.now() - imgStart) / 1000).toFixed(1);
+      if (!_logProgressEl || !_logProgressEl.parentNode) {
+        _logProgressEl = document.createElement("div");
+        _logProgressEl.className = "log-line log-info";
+        _logProgressEl.style.fontFamily = "var(--mono)";
+        $("log").appendChild(_logProgressEl);
+      }
+      _logProgressEl.textContent = `› Depth: ${bar} processing… ${elapsed}s`;
+      $("log").scrollTop = $("log").scrollHeight;
+    }, 150);
+
+    // Always request PNG for preview (browser can't display EXR)
+    const previewFormat = format === "exr" ? "png_gray" : format;
+    state._saveFormat = format; // remember for save
+
+    const fd = new FormData();
+    fd.append("file", state.currentBlob, state.currentFile?.name || "image.png");
+    fd.append("model", model);
+    fd.append("format", previewFormat);
+    fd.append("colormap", colormap);
+
+    const r = await fetch(`${SERVER}/process/frame`, { method: "POST", body: fd });
+    clearInterval(_inferTimer); _logProgressEl = null;
+    if (!r.ok) throw new Error((await r.json()).detail || "Server error");
+
+    state.sessionId = r.headers.get("X-Session-Id");
+    const result = await r.blob();
+
+    // If user wants EXR, fetch the EXR separately for save (don't display it)
+    if (format === "exr") {
+      try {
+        const exrFd = new FormData();
+        exrFd.append("file", state.currentBlob, state.currentFile?.name || "image.png");
+        exrFd.append("model", model);
+        exrFd.append("format", "exr");
+        const exrR = await fetch(`${SERVER}/process/frame`, { method: "POST", body: exrFd });
+        if (exrR.ok) state._exrBlob = await exrR.blob();
+      } catch(e) {}
+    }
+    state.depthBlob = result;
+    state._latestDepthBlob = result;
+
+    // Store source image for compare views
+    if (state.currentBlob) {
+      const srcUrl = URL.createObjectURL(state.currentBlob);
+      compare.sourceImg.src = srcUrl;
+      compare.sourceFrames[0] = srcUrl;
+    }
+
+    showImage(result, `Depth — ${state.currentFile?.name || "image"}`);
+    showViewportBar(true);
+    $("depth-info").textContent = `Session: ${state.sessionId}`;
+    $("btn-save").disabled = false;
+    $("btn-fx-preview").disabled = false;
+    $("btn-fx-apply").disabled = false;
+    $("btn-3d").disabled = false;
+    // effects section always visible;
+    const imgTime = ((Date.now() - imgStart) / 1000).toFixed(1);
+    log(`Depth map ready (${imgTime}s)`, "success");
+
+  } catch (e) {
+    if (typeof _inferTimer !== "undefined") clearInterval(_inferTimer);
+    _logProgressEl = null;
+    log(`Error: ${e.message}`, "error");
+  } finally {
+    stopStatusPoll();
+    state.processing = false;
+    $("btn-process").disabled = false;
+    $("btn-process").textContent = "Process Depth Map";
+    setIndeterminate(false);
+    setSidebarProgress(0, "", false);
+  }
+}
+
+// ── Save ─────────────────────────────────────────────────────────
+async function saveBlob(blob, defaultName) {
+  // Electron: native save dialog + fs write
+  if (window.electronAPI) {
+    try {
+      let filePath;
+      if (state.saveDir) {
+        const sep = state.saveDir.includes("\\") ? "\\" : "/";
+        filePath = state.saveDir + sep + defaultName;
+      } else {
+        filePath = await window.electronAPI.saveDialog(defaultName);
+      }
+      if (!filePath) return;
+      const buf = await blob.arrayBuffer();
+      await window.electronAPI.writeFile(filePath, buf);
+      log(`Saved: ${filePath.split(/[/\\]/).pop()} (${formatSize(blob.size)})`, "success");
+      return;
+    } catch (e) {
+      log(`Save error: ${e.message || e}`, "error");
+      return;
+    }
+  }
+  // Last fallback: browser download
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = defaultName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  log(`Downloaded: ${defaultName}`, "success");
+}
+
+async function saveResult() {
+  if (!state.depthBlob) return;
+  const format = state._saveFormat || $("output-format").value;
+  const ext = format === "exr" ? "exr" : "png";
+  const blob = (format === "exr" && state._exrBlob) ? state._exrBlob : state.depthBlob;
+  const defaultName = (state.currentFile?.name || "image").replace(/\.[^.]+$/, "") + `_depth.${ext}`;
+  await saveBlob(blob, defaultName);
+  state._saved = true;
+}
+
+// ── Save video result ────────────────────────────────────────────
+async function saveVideoResult() {
+  if (!state.videoResultBlob) return;
+  const name = state.videoResultName || "depth_output";
+  await saveBlob(state.videoResultBlob, name);
+}
+
+// ── Batch processing ─────────────────────────────────────────────
+async function openBatch() {
+  try {
+    let paths;
+    try {
+      paths = await Promise.reject("use file input");
+    } catch {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.multiple = true;
+      return new Promise(resolve => {
+        input.onchange = (e) => {
+          for (const f of e.target.files) {
+            state.batchFiles.push({ name: f.name, blob: f, status: "pending" });
+          }
+          renderBatchList();
+          resolve();
+        };
+        input.click();
+      });
+    }
+    if (!paths || paths.length === 0) return;
+    for (const p of paths) {
+      const name = p.split(/[/\\]/).pop();
+      try {
+        const r = await fetch(p.startsWith("/") ? `file://${p}` : p);
+        const blob = await r.blob();
+        state.batchFiles.push({ name, path: p, blob, status: "pending" });
+      } catch {
+        state.batchFiles.push({ name, path: p, blob: null, status: "error" });
+      }
+    }
+    renderBatchList();
+  } catch (e) {
+    log(`Error adding files: ${e.message}`, "error");
+  }
+}
+
+function renderBatchList() {
+  const el = $("batch-files");
+  el.innerHTML = state.batchFiles.map((f, i) => {
+    const icon = f.status === "done" ? "✓" : f.status === "processing" ? "⟳" : f.status === "error" ? "✗" : "·";
+    const cls = f.status === "done" ? "file-done" : f.status === "processing" ? "file-processing" : "";
+    return `<div class="file-item"><span>${f.name}</span><span class="status-icon ${cls}">${icon}</span></div>`;
+  }).join("");
+  $("btn-process-batch").disabled = state.batchFiles.length === 0;
+  $("btn-clear-batch").disabled = state.batchFiles.length === 0;
+}
+
+async function processBatch() {
+  if (state.processing || state.batchFiles.length === 0) return;
+  state.processing = true;
+  $("btn-process-batch").disabled = true;
+  $("btn-open-batch").disabled = true;
+
+  const model = $("model").value;
+  const format = $("output-format").value;
+  const colormap = $("colormap").value || "inferno";
+  const total = state.batchFiles.length;
+
+  log(`Batch: ${total} files, model=${model}`);
+
+  for (let i = 0; i < total; i++) {
+    const f = state.batchFiles[i];
+    if (!f.blob) { f.status = "error"; renderBatchList(); continue; }
+
+    f.status = "processing";
+    renderBatchList();
+    setProgress(Math.round((i / total) * 100));
+    logProgress(i + 1, total, "Batch");
+    $("btn-process-batch").textContent = `Processing ${i + 1}/${total}`;
+
+    try {
+      const fd = new FormData();
+      fd.append("file", f.blob, f.name);
+      fd.append("model", model);
+      fd.append("format", format);
+      fd.append("colormap", colormap);
+
+      const r = await fetch(`${SERVER}/process/frame`, { method: "POST", body: fd });
+      if (!r.ok) throw new Error("Failed");
+
+      const result = await r.blob();
+      f.depthBlob = result;
+      f.status = "done";
+
+      // Auto-download each result
+      const ext = format === "exr" ? "exr" : "png";
+      const outName = f.name.replace(/\.[^.]+$/, "") + `_depth.${ext}`;
+      const url = URL.createObjectURL(result);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = outName;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      log(`[${i + 1}/${total}] ${outName}`, "success");
+    } catch (e) {
+      f.status = "error";
+      log(`[${i + 1}/${total}] ${f.name} — failed`, "error");
+    }
+    renderBatchList();
+  }
+
+  setProgress(100);
+  setTimeout(() => setProgress(0, false), 1000);
+  log(`Batch complete: ${state.batchFiles.filter(f => f.status === "done").length}/${total} succeeded`, "success");
+
+  state.processing = false;
+  $("btn-process-batch").disabled = false;
+  $("btn-process-batch").textContent = "Process All";
+  $("btn-open-batch").disabled = false;
+}
+
+function clearBatch() {
+  state.batchFiles = [];
+  renderBatchList();
+}
+
+// ── Video processing ─────────────────────────────────────────────
+function isVideoFile(name) {
+  const ext = "." + name.split(".").pop().toLowerCase();
+  return VIDEO_EXTS.includes(ext);
+}
+
+
+async function processVideo() {
+  if (state.processing || !state.videoBlob) return;
+  state.processing = true;
+  $("btn-process").disabled = true;
+  // file input label doesn't need disabling;
+
+  const model = $("model").value;
+  const format = $("output-format").value;
+  const colormap = $("colormap").value || "inferno";
+  const smooth = parseFloat($("vid-smooth").value) || 0.4;
+  const alignScale = $("vid-align").value === "true";
+  const every = parseInt($("vid-every").value) || 1;
+  const output = $("vid-output").value;
+
+  // Use preview format for live display (always PNG for preview)
+  const previewFormat = format === "exr" ? "png_gray" : format;
+
+  try {
+    // Step 1: Upload video, extract frames, get session
+    const fileSize = formatSize(state.videoBlob.size);
+    $("btn-process").textContent = "Uploading…";
+    $("estimate-box").style.display = "none"; // live ETA takes over
+    setIndeterminate(true);
+    log(`Uploading video (${fileSize})…`, "info");
+    log("This may take a moment for large files. The app is working — please wait.", "info");
+    startStatusPoll();
+
+    // Elapsed time counter during upload
+    const uploadStart = Date.now();
+    const uploadTimer = setInterval(() => {
+      const elapsed = Math.round((Date.now() - uploadStart) / 1000);
+      $("btn-process").textContent = `Uploading… ${elapsed}s`;
+      if (elapsed % 10 === 0 && elapsed > 0) {
+        log(`Still uploading… ${elapsed}s elapsed (${fileSize})`, "info");
+      }
+    }, 1000);
+
+    // Calculate trim frame range
+    const totalVideoFrames = state.videoInfo?.frames || 0;
+    const trimStartFrame = Math.round(state.trimIn * totalVideoFrames);
+    const trimEndFrame = Math.round(state.trimOut * totalVideoFrames);
+
+    const fd = new FormData();
+    fd.append("file", state.videoBlob, state.videoBlob.name);
+    fd.append("model", model);
+    fd.append("every", every.toString());
+    fd.append("start_frame", trimStartFrame.toString());
+    fd.append("end_frame", trimEndFrame.toString());
+
+    const startR = await fetch(`${SERVER}/process/video/start`, { method: "POST", body: fd });
+    clearInterval(uploadTimer);
+    if (!startR.ok) throw new Error((await startR.json()).detail || "Upload failed");
+
+    const session = await startR.json();
+    const total = session.frames;
+    const uploadTime = Math.round((Date.now() - uploadStart) / 1000);
+    setIndeterminate(false);
+    log(`Upload complete (${uploadTime}s). Extracted ${total} frames.`, "success");
+    log(`Starting depth inference — ${total} frames, model: ${model}`, "info");
+
+    // Step 2: Process frame by frame with live preview
+    showViewportBar(true);
+    compare.sourceFrames = [];
+    compare.depthFrames = [];
+
+    const depthBlobs = [];
+    const inferStart = Date.now();
+    for (let i = 0; i < total; i++) {
+      const pct = Math.round(((i + 1) / total) * 100);
+      setProgress(pct);
+
+      // ETA calculation
+      const elapsed = (Date.now() - inferStart) / 1000;
+      const perFrame = i > 0 ? elapsed / i : 0;
+      const remaining = Math.round(perFrame * (total - i));
+      const etaStr = remaining > 60 ? `${Math.floor(remaining/60)}m ${remaining%60}s` : `${remaining}s`;
+      const frameLabel = `Frame ${i + 1}/${total}`;
+      const fullLabel = i > 0 ? `${frameLabel} · ETA ${etaStr}` : frameLabel;
+      $("btn-process").textContent = fullLabel;
+      setSidebarProgress(pct, fullLabel, true);
+      logProgress(i + 1, total, "Depth", fullLabel);
+      state._lastFrameIdx = i;
+
+      // Get source frame only if compare view is active (skip = 2x faster)
+      const needSource = state.viewMode && state.viewMode !== "depth";
+      if (needSource) {
+        const srcR = await fetch(`${SERVER}/process/video/source/${session.session_id}/${i}`);
+        if (srcR.ok) {
+          const srcBlob = await srcR.blob();
+          // Revoke previous to prevent memory leak
+          if (compare.sourceFrames[i]) URL.revokeObjectURL(compare.sourceFrames[i]);
+          const srcUrl = URL.createObjectURL(srcBlob);
+          compare.sourceFrames[i] = srcUrl;
+          compare.sourceImg.src = srcUrl;
+        }
+      }
+
+      // Get depth frame
+      const url = `${SERVER}/process/video/frame/${session.session_id}/${i}?format=${previewFormat}&colormap=${colormap}&smooth=${smooth}&align_scale=${alignScale}`;
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`Frame ${i} failed`);
+
+      const blob = await r.blob();
+      depthBlobs.push(blob);
+      if (compare.depthFrames[i]) URL.revokeObjectURL(compare.depthFrames[i]);
+      compare.depthFrames[i] = URL.createObjectURL(blob);
+
+      // Create effects session from first frame so toggle works during processing
+      if (i === 0 && !state.sessionId) {
+        try {
+          const srcR0 = await fetch(`${SERVER}/process/video/source/${session.session_id}/0`);
+          if (srcR0.ok) {
+            const srcB = await srcR0.blob();
+            const sf = new FormData();
+            sf.append("file", srcB, "frame.png");
+            sf.append("model", model);
+            sf.append("format", "png_gray");
+            const sr = await fetch(`${SERVER}/process/frame`, { method: "POST", body: sf });
+            if (sr.ok) {
+              state.sessionId = sr.headers.get("X-Session-Id");
+              state.depthBlob = blob;
+              state.currentBlob = srcB;
+              $("btn-3d").disabled = false;
+              log(`Effects ready (session ${state.sessionId})`, "info");
+            }
+          }
+        } catch(e) {}
+      }
+
+      // Live preview — show every frame
+      showDepthFrame(blob, i, total);
+
+      // Update timeline playhead
+      state.playheadPos = state.trimIn + (i / total) * (state.trimOut - state.trimIn);
+      updateTimelineDisplay(state.videoInfo);
+    }
+
+    const totalInferTime = Math.round((Date.now() - inferStart) / 1000);
+    const avgPerFrame = (totalInferTime / total).toFixed(1);
+    state._measuredSecPerFrame = totalInferTime / total; // cache for next estimate
+    log(`All ${total} frames processed in ${totalInferTime}s (${avgPerFrame}s/frame)`, "success");
+
+    // Step 3: Render final output (video or sequence)
+    $("btn-process").textContent = "Rendering…";
+    setIndeterminate(true);
+
+    const renderFd = new FormData();
+    renderFd.append("format", format);
+    renderFd.append("colormap", colormap);
+    renderFd.append("smooth", smooth.toString());
+    renderFd.append("align_scale", alignScale.toString());
+    renderFd.append("output", output);
+
+    const renderR = await fetch(`${SERVER}/process/video/render/${session.session_id}`, {
+      method: "POST", body: renderFd,
+    });
+    if (!renderR.ok) throw new Error("Render failed");
+
+    const result = await renderR.blob();
+    const baseName = state.videoBlob.name.replace(/\.[^.]+$/, "");
+
+    // Store result for save button
+    state.videoResultBlob = result;
+    state.videoResultName = output === "video"
+      ? `${baseName}_depth.mp4`
+      : `${baseName}_depth_sequence.zip`;
+    $("btn-save").disabled = false;
+
+    // Show last depth frame as preview
+    if (depthBlobs.length > 0) {
+      showImage(depthBlobs[depthBlobs.length - 1], `${state.videoResultName} — ${total} frames`);
+    }
+
+    // Update session with last frame for effects
+    if (depthBlobs.length > 0) {
+      state.depthBlob = depthBlobs[depthBlobs.length - 1];
+    }
+    $("btn-3d").disabled = false;
+
+    log(`Processing complete — click Save Result to export`, "success");
+
+  } catch (e) {
+    log(`Error: ${e.message}`, "error");
+    if (e.message.includes("Upload failed") || e.message.includes("Failed to fetch")) {
+      log("The server may have run out of memory or crashed.", "error");
+      log("Try: reduce resolution, increase Every N, or use a shorter trim range.", "warn");
+    } else if (e.message.includes("Frame")) {
+      log("A frame failed to process. The depth model may have encountered an issue.", "error");
+      log("Try restarting the app and processing again.", "warn");
+    }
+  } finally {
+    stopStatusPoll();
+    state.processing = false;
+    $("btn-process").disabled = false;
+    $("btn-process").textContent = "Process Depth Map";
+    // file input label doesn't need enabling;
+    $("frame-counter").style.display = "none";
+    setProgress(0, false);
+    setIndeterminate(false);
+    setSidebarProgress(0, "", false);
+  }
+}
+
+// ── Effects ──────────────────────────────────────────────────────
+function getActiveFx() {
+  return document.querySelector(".fx-tab.active")?.dataset.fx || "dof";
+}
+
+function updateWigEstimate() {
+  const est = $("wig-estimate");
+  if (!est) return;
+  const format = $("wig-format")?.value || "gif";
+  if (format !== "mp4") {
+    est.style.display = "none";
+    return;
+  }
+  const views = parseInt($("wig-views")?.value || "5");
+  const loops = parseInt($("wig-loops")?.value || "3");
+  const fps = parseInt($("wig-fps")?.value || "12");
+  const bounce = views * 2 - 2; // frames per cycle (bounce)
+  const totalFrames = bounce * loops;
+  const duration = (totalFrames / fps).toFixed(1);
+  const estRender = (totalFrames * 0.1).toFixed(1); // ~0.1s per frame render
+
+  est.style.display = "block";
+  est.innerHTML =
+    `${totalFrames} frames · ${duration}s duration<br>` +
+    `Est. render: ~${estRender}s`;
+}
+
+function getEffectParams(fx) {
+  if (fx === "dof") return {
+    focal_depth: parseFloat($("dof-focal").value),
+    focal_range: parseFloat($("dof-range").value),
+    max_blur: parseFloat($("dof-blur").value),
+    bokeh_shape: $("dof-bokeh").value,
+    near_blur: true, far_blur: true,
+  };
+  if (fx === "grade") return {
+    near_color: $("grade-near").value,
+    far_color: $("grade-far").value,
+    opacity: parseFloat($("grade-opacity").value),
+    gamma: 1.0,
+    blend_mode: $("grade-blend").value,
+  };
+  if (fx === "slice") return {
+    near: parseFloat($("slice-near").value),
+    far: parseFloat($("slice-far").value),
+    feather: parseFloat($("slice-feather").value),
+    invert_mask: false, bg_alpha: 0, bg_color: "#000000",
+  };
+  if (fx === "fog") return {
+    fog_color: $("fog-color").value,
+    density: parseFloat($("fog-density").value),
+    near_start: parseFloat($("fog-near").value),
+    far_end: parseFloat($("fog-far").value),
+    noise_amount: parseFloat($("fog-noise").value),
+  };
+  if (fx === "parallax") return {
+    shift_x: parseFloat($("par-x").value),
+    shift_y: parseFloat($("par-y").value),
+    zoom: parseFloat($("par-zoom").value),
+    blur_depth: parseFloat($("par-blur").value),
+  };
+  if (fx === "wiggle") return {
+    num_views: parseInt($("wig-views").value),
+    separation: parseFloat($("wig-sep").value),
+    fps: parseInt($("wig-fps").value),
+    format: $("wig-format").value,
+    path: $("wig-path").value,
+    loops: parseInt($("wig-loops").value) || 3,
+  };
+  if (fx === "spatial") return {
+    eye_separation: parseFloat($("sp-sep").value),
+    convergence: parseFloat($("sp-conv").value),
+    output: $("sp-output").value,
+  };
+  if (fx === "transition") return {
+    transition_val: parseFloat($("tr-val").value),
+    softness: parseFloat($("tr-soft").value),
+  };
+  if (fx === "posterize") return {
+    levels: parseInt($("posterize-levels").value),
+    colorize: false,
+  };
+}
+
+async function runEffect(preview) {
+  if (!state.sessionId && getActiveFx() !== "transition") {
+    log("Process an image first.", "warn"); return;
+  }
+  const fx = getActiveFx();
+  const params = getEffectParams(fx);
+  setIndeterminate(true);
+
+  try {
+    // Wigglegram — preview shows parallax (full color PNG), export generates GIF/MP4
+    if (fx === "wiggle") {
+      {
+        const fd = new FormData();
+        fd.append("session_id", state.sessionId);
+        fd.append("num_views", params.num_views.toString());
+        fd.append("separation", params.separation.toString());
+        fd.append("fps", params.fps.toString());
+        fd.append("format", preview ? "gif" : params.format);
+        fd.append("path", params.path);
+        fd.append("blur_depth", "5");
+
+        const r = await fetch(`${SERVER}/wigglegram`, { method: "POST", body: fd });
+        if (!r.ok) throw new Error("Wigglegram failed");
+        const result = await r.blob();
+
+        if (preview) {
+          showImage(result, "Wigglegram preview");
+        } else {
+          const ext = params.format === "mp4" ? "mp4" : "gif";
+          const name = (state.currentFile?.name || "image").replace(/\.[^.]+$/, "") + `_wiggle.${ext}`;
+          await saveBlob(result, name);
+        }
+      }
+      log(`Wigglegram ${preview ? "preview" : "saved"}`, "success");
+      setIndeterminate(false);
+      return;
+    }
+
+    // Spatial — uses its own endpoint
+    if (fx === "spatial") {
+      const fd = new FormData();
+      fd.append("session_id", state.sessionId);
+      fd.append("eye_separation", params.eye_separation.toString());
+      fd.append("convergence", params.convergence.toString());
+      fd.append("output", preview ? "sbs" : params.output);
+
+      const r = await fetch(`${SERVER}/spatial`, { method: "POST", body: fd });
+      if (!r.ok) throw new Error("Spatial failed");
+      const result = await r.blob();
+
+      if (preview) {
+        showImage(result, "Spatial preview (SBS)");
+      } else {
+        const ext = params.output === "zip" ? "zip" : "png";
+        const name = (state.currentFile?.name || "image").replace(/\.[^.]+$/, "") + `_spatial.${ext}`;
+        await saveBlob(result, name);
+      }
+      log(`Spatial ${preview ? "preview" : "saved"}`, "success");
+      setIndeterminate(false);
+      return;
+    }
+
+    // Transition — uses two images. If no second image loaded, use depth map result.
+    if (fx === "transition") {
+      const imgB = state.fileB || state.depthBlob;
+      if (!state.currentBlob || !imgB) {
+        log("Process a depth map first, or load a second image.", "warn");
+        setIndeterminate(false);
+        return;
+      }
+      const fd = new FormData();
+      fd.append("file_a", state.currentBlob, state.currentFile?.name || "image_a.png");
+      fd.append("file_b", imgB, state.fileBName || "depth.png");
+      fd.append("model", $("model").value);
+      fd.append("transition_val", params.transition_val.toString());
+      fd.append("softness", params.softness.toString());
+
+      const endpoint = preview ? `${SERVER}/transition/preview` : `${SERVER}/transition`;
+      const r = await fetch(endpoint, { method: "POST", body: fd });
+      if (!r.ok) throw new Error("Transition failed");
+      const result = await r.blob();
+
+      if (!preview) state.depthBlob = result;
+      showImage(result, `Transition ${preview ? "preview" : "result"}`);
+      log(`Transition ${preview ? "preview" : "applied"}`, "success");
+      if (!preview) $("btn-save").disabled = false;
+      setIndeterminate(false);
+      return;
+    }
+
+    // Standard effects (dof, grade, slice, fog, parallax, posterize)
+    const endpoint = preview
+      ? `${SERVER}/effect/${fx}/preview`
+      : `${SERVER}/effect/${fx}`;
+
+    // Inject posterize modifier into params
+    const posterizeOn = $("posterize-on").checked;
+    if (posterizeOn) {
+      params._posterize = true;
+      params._posterize_levels = parseInt($("posterize-levels").value);
+    }
+
+    const fd = new FormData();
+    fd.append("session_id", state.sessionId);
+    fd.append("colormap", $("colormap").value || "inferno");
+    fd.append("params_json", JSON.stringify(params));
+
+    const r = await fetch(endpoint, { method: "POST", body: fd });
+    if (!r.ok) throw new Error("Effect failed");
+
+    const result = await r.blob();
+    if (!preview) state.depthBlob = result;
+    showImage(result, `${fx} ${preview ? "preview" : "result"}`);
+    log(`${fx} ${preview ? "preview" : "applied"}`, "success");
+    if (!preview) $("btn-save").disabled = false;
+  } catch (e) {
+    log(`Effect error: ${e.message}`, "error");
+  } finally {
+    setIndeterminate(false);
+  }
+}
+
+// ── Drag & drop ──────────────────────────────────────────────────
+// ── Timeline ─────────────────────────────────────────────────────
+function showTimeline(vi) {
+  state.trimIn = 0;
+  state.trimOut = 1;
+  state.playheadPos = 0;
+  $("timeline").classList.add("show");
+  updateTimelineDisplay(vi);
+  // Build ruler marks
+  const dur = vi.duration;
+  const marks = Math.min(10, Math.ceil(dur));
+  let ruler = "";
+  for (let i = 0; i <= marks; i++) {
+    const t = (i / marks) * dur;
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    ruler += `<span>${m}:${s.toString().padStart(2, "0")}</span>`;
+  }
+  $("tl-ruler").innerHTML = ruler;
+}
+
+function hideTimeline() {
+  $("timeline").classList.remove("show");
+}
+
+function updateTimelineDisplay(vi) {
+  if (!vi) return;
+  const dur = vi.duration;
+  const inTime = state.trimIn * dur;
+  const outTime = state.trimOut * dur;
+  const inFrame = Math.round(state.trimIn * vi.frames);
+  const outFrame = Math.round(state.trimOut * vi.frames);
+  const rangeFrames = outFrame - inFrame;
+
+  $("tl-in").textContent = fmtTime(inTime);
+  $("tl-out").textContent = fmtTime(outTime);
+  $("tl-range-info").textContent = `${rangeFrames} frames · ${fmtTime(outTime - inTime)}`;
+
+  $("tl-trim").style.left = (state.trimIn * 100) + "%";
+  $("tl-trim").style.right = ((1 - state.trimOut) * 100) + "%";
+  $("tl-playhead").style.left = (state.playheadPos * 100) + "%";
+}
+
+function fmtTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  const fr = Math.floor((s % 1) * 100);
+  return `${m}:${sec.toString().padStart(2, "0")}.${fr.toString().padStart(2, "0")}`;
+}
+
+function setupTimeline() {
+  const track = $("tl-track");
+  const handleIn = $("tl-handle-in");
+  const handleOut = $("tl-handle-out");
+  const playhead = $("tl-playhead");
+  let dragging = null; // "in", "out", "playhead"
+
+  function getPos(e) {
+    const rect = track.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  }
+
+  function nearHandle(pos, handlePos) {
+    // 20px grab zone
+    const rect = track.getBoundingClientRect();
+    const pxDist = Math.abs(pos - handlePos) * rect.width;
+    return pxDist < 20;
+  }
+
+  function scrubToFrame(pos) {
+    state.playheadPos = pos;
+    updateTimelineDisplay(state.videoInfo);
+    // Show frame at playhead if we have cached frames
+    if (state.videoInfo && (compare.depthFrames.length > 0 || compare.sourceFrames.length > 0)) {
+      const totalFrames = compare.depthFrames.length || compare.sourceFrames.length;
+      const idx = Math.min(totalFrames - 1, Math.max(0, Math.round(pos * (totalFrames - 1))));
+      if (compare.depthFrames[idx]) {
+        $("preview-img").src = compare.depthFrames[idx];
+        $("preview-img").style.display = "block";
+        $("drop-zone").classList.add("hidden");
+      } else if (compare.sourceFrames[idx]) {
+        $("preview-img").src = compare.sourceFrames[idx];
+        $("preview-img").style.display = "block";
+        $("drop-zone").classList.add("hidden");
+      }
+    }
+  }
+
+  // Mouse down on track — detect what to drag
+  track.addEventListener("mousedown", e => {
+    e.preventDefault();
+    const pos = getPos(e);
+
+    // Check handles first (wider grab zone)
+    if (nearHandle(pos, state.trimIn)) {
+      dragging = "in";
+    } else if (nearHandle(pos, state.trimOut)) {
+      dragging = "out";
+    } else {
+      // Click anywhere else = playhead
+      dragging = "playhead";
+      scrubToFrame(pos);
+    }
+  });
+
+  // Handle-specific mousedown (for direct clicks on handles)
+  handleIn.addEventListener("mousedown", e => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragging = "in";
+  });
+  handleOut.addEventListener("mousedown", e => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragging = "out";
+  });
+
+  window.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    e.preventDefault();
+    const pos = getPos(e);
+
+    if (dragging === "in") {
+      state.trimIn = Math.max(0, Math.min(pos, state.trimOut - 0.02));
+    } else if (dragging === "out") {
+      state.trimOut = Math.min(1, Math.max(pos, state.trimIn + 0.02));
+    } else if (dragging === "playhead") {
+      scrubToFrame(pos);
+    }
+    updateTimelineDisplay(state.videoInfo);
+  });
+
+  window.addEventListener("mouseup", () => {
+    dragging = null;
+  });
+}
+
+function setupDrop() {
+  const area = $("preview-area");
+  area.addEventListener("dragover", e => { e.preventDefault(); area.classList.add("drop-active"); });
+  area.addEventListener("dragleave", () => area.classList.remove("drop-active"));
+  area.addEventListener("drop", async e => {
+    e.preventDefault();
+    area.classList.remove("drop-active");
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    if (file.type.startsWith("image/") || file.type.startsWith("video/") || isVideoFile(file.name)) {
+      await loadFile(file);
+    }
+  });
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+async function init() {
+  // Wait for server
+  let attempts = 0;
+  while (attempts < 30) {
+    const data = await ping();
+    if (data) {
+      setStatus(true);
+      $("device-info").textContent = data.device;
+      await loadColormaps();
+      // Auto-suggest model based on device
+      const suggested = suggestModel(data.device);
+      $("model").value = suggested;
+      $("model-hint").style.display = "block";
+      $("model-hint").textContent = `✓ ${suggested} recommended for ${data.device}`;
+      log(`Server ready (${data.device}) — suggested: ${suggested}`, "success");
+      break;
+    }
+    attempts++;
+    await new Promise(r => setTimeout(r, 500));
+  }
+  if (attempts >= 30) {
+    setStatus(false);
+    log("Server failed to start", "error");
+  }
+
+  // Event listeners
+  $("btn-open-file").addEventListener("click", () => $("file-input").click());
+  $("file-input").addEventListener("change", async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    // Warn if unsaved render exists
+    if (hasUnsavedRender()) {
+      const ok = await showConfirm("Unsaved Render", "You have an unsaved depth map. Opening a new file will discard it.", "Discard");
+      if (!ok) { e.target.value = ""; return; }
+    }
+    // Warn if mid-render
+    if (state.processing) {
+      const ok = await showConfirm("Processing", "Depth map is still rendering. Opening a new file will cancel it.", "Cancel Render");
+      if (!ok) { e.target.value = ""; return; }
+      state.processing = false;
+    }
+    if (files.length > 1) {
+      // Batch mode: multiple images
+      state.batchFiles = [];
+      for (let i = 0; i < files.length; i++) {
+        state.batchFiles.push({ name: files[i].name, blob: files[i], status: "pending" });
+      }
+      renderBatchList();
+      $("batch-controls").hidden = false;
+      log(`Batch: ${files.length} files loaded`);
+      // Also load first file as preview
+      await loadFile(files[0]);
+    } else {
+      $("batch-controls").hidden = true;
+      $("batch-files").innerHTML = "";
+      state.batchFiles = [];
+      await loadFile(files[0]);
+    }
+    e.target.value = "";  // reset so same file can be re-selected
+  });
+  // Batch buttons
+  $("btn-process-batch").addEventListener("click", processBatch);
+  $("btn-clear-batch").addEventListener("click", () => {
+    clearBatch();
+    $("batch-controls").hidden = true;
+  });
+
+  // Second image for transition effect
+  if ($("btn-load-file-b")) $("btn-load-file-b").addEventListener("click", () => $("file-b-input").click());
+  $("file-b-input").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    state.fileB = file;
+    state.fileBName = file.name;
+    $("file-b-name").textContent = file.name;
+    log(`Second image loaded: ${file.name}`);
+    e.target.value = "";
+  });
+
+  $("btn-process").addEventListener("click", processDepthMap);
+  $("btn-save").addEventListener("click", () => {
+    if (state._fileType === "video" && state.videoResultBlob) saveVideoResult();
+    else saveResult();
+  });
+  $("btn-fx-preview").addEventListener("click", () => runEffect(true));
+  $("btn-fx-apply").addEventListener("click", () => runEffect(false));
+  $("btn-3d").addEventListener("click", goTo3D);
+  $("nav-3d").addEventListener("click", goTo3D);
+
+  // Save location picker — uses Tauri dialog.open() for folder selection
+  if ($("btn-save-location")) {
+    $("btn-save-location").addEventListener("click", async () => {
+      try {
+        if (window.electronAPI?.openFolder) {
+          const dir = await window.electronAPI.openFolder();
+          if (dir) {
+            state.saveDir = dir;
+            $("btn-save-location").textContent = dir.split(/[/\\]/).pop();
+            $("btn-save-location").title = dir;
+            log(`Save location: ${dir}`, "info");
+          }
+        } else {
+          log("Save location requires Tauri desktop app", "info");
+        }
+      } catch(e) { if (e.name !== "AbortError") log(`${e.message || e}`, "warn"); }
+    });
+  }
+
+  async function goTo3D() {
+    if (state.processing) {
+      var ok = await showConfirm("Processing", "Depth map is still rendering. Switching will cancel it.", "Switch Anyway");
+      if (!ok) return;
+    } else if (hasUnsavedRender()) {
+      var ok = await showConfirm("Unsaved Render", "You have an unsaved depth map. It will be available in Effects Workspace via session.", "Continue");
+      if (!ok) return;
+    }
+    var url = `workspace.html?server=${encodeURIComponent(SERVER)}`;
+    if (state.sessionId) url += `&session=${state.sessionId}`;
+    window.location.href = url;
+  }
+
+  // FX toggle
+  state.fxEnabled = false;
+  $("fx-toggle").addEventListener("click", () => {
+    if (!state.sessionId) {
+      log("Process a depth map first", "warn");
+      return;
+    }
+    state.fxEnabled = !state.fxEnabled;
+    $("fx-toggle").classList.toggle("on", state.fxEnabled);
+    $("fx-controls").classList.toggle("fx-disabled", !state.fxEnabled);
+    if (state.fxEnabled) {
+      $("btn-fx-preview").disabled = false;
+      $("btn-fx-apply").disabled = false;
+      runEffect(true);
+    } else {
+      if (state.depthBlob) showImage(state.depthBlob, "Depth map");
+    }
+  });
+
+  // FX tabs
+  document.querySelectorAll(".fx-tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".fx-tab").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".fx-pane").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      const pane = $(`fx-${btn.dataset.fx}`);
+      if (pane) pane.classList.add("active");
+      // Show transition note if video is loaded
+      if (btn.dataset.fx === "transition" && state._fileType === "video") {
+        $("transition-note").style.display = "block";
+      } else {
+        $("transition-note").style.display = "none";
+      }
+      // Stop transition loop when switching tabs
+      if (state._trLooping) {
+        state._trLooping = false;
+        $("btn-tr-loop").style.display = "inline-block";
+        $("btn-tr-stop").style.display = "none";
+        if (state._trAnimId) cancelAnimationFrame(state._trAnimId);
+      }
+      // Auto-preview on tab switch if enabled (skip transition — needs two images)
+      if (state.fxEnabled && btn.dataset.fx !== "transition") runEffect(true);
+    });
+  });
+
+  // Live preview on slider change (debounced)
+  let fxDebounce = null;
+  function onFxSliderChange() {
+    if (!state.fxEnabled) return;
+    // Skip auto-preview for transition (needs explicit preview click)
+    if (getActiveFx() === "transition") return;
+    clearTimeout(fxDebounce);
+    fxDebounce = setTimeout(() => runEffect(true), 300);
+  }
+  document.querySelectorAll("#effects-section input[type=range], #effects-section input[type=color], #effects-section select").forEach(el => {
+    el.addEventListener("input", onFxSliderChange);
+    el.addEventListener("change", onFxSliderChange);
+  });
+  // Posterize checkbox triggers live preview too
+  $("posterize-on").addEventListener("change", onFxSliderChange);
+  $("posterize-levels").addEventListener("input", onFxSliderChange);
+
+  // Transition ping-pong loop
+  state._trLooping = false;
+  state._trAnimId = null;
+
+  $("btn-tr-loop").addEventListener("click", function() {
+    if (!state.sessionId) {
+      log("Process a depth map first", "warn");
+      return;
+    }
+    state._trLooping = true;
+    $("btn-tr-loop").style.display = "none";
+    $("btn-tr-stop").style.display = "inline-block";
+    state._trStartTime = performance.now();
+    animateTransition();
+  });
+
+  $("btn-tr-stop").addEventListener("click", function() {
+    state._trLooping = false;
+    $("btn-tr-loop").style.display = "inline-block";
+    $("btn-tr-stop").style.display = "none";
+    if (state._trAnimId) cancelAnimationFrame(state._trAnimId);
+  });
+
+  function animateTransition() {
+    if (!state._trLooping) return;
+    var elapsed = (performance.now() - state._trStartTime) / 1000;
+    var speed = parseFloat($("tr-speed").value) || 1.0;
+    var phase = (elapsed * speed) % 2.0; // 0→1→2 = one full ping-pong
+    var val = phase <= 1.0 ? phase : 2.0 - phase; // ping-pong 0→1→0
+
+    $("tr-val").value = val;
+    $("tr-val-v").textContent = val.toFixed(2);
+
+    // Trigger effect preview with debounce
+    if (!state._trFetching) {
+      state._trFetching = true;
+      runEffect(true).then(function() {
+        state._trFetching = false;
+      }).catch(function() {
+        state._trFetching = false;
+      });
+    }
+
+    state._trAnimId = requestAnimationFrame(animateTransition);
+  }
+
+  // Format toggle
+  // Show/hide bokeh style sliders based on selected shape
+  function updateBokehParams() {
+    const shape = $("dof-bokeh").value;
+    document.querySelectorAll(".bokeh-param").forEach(function(el) {
+      const shapes = el.dataset.shapes;
+      el.style.display = (shapes === "all" || shapes.split(",").indexOf(shape) >= 0) ? "flex" : "none";
+    });
+  }
+  $("dof-bokeh").addEventListener("change", updateBokehParams);
+  updateBokehParams();
+
+  $("output-format").addEventListener("change", () => {
+    const fmt = $("output-format").value;
+    const showCmap = fmt === "png_color";
+    $("colormap-row").style.display = showCmap ? "flex" : "none";
+    $("colormap-preview").style.display = showCmap ? "block" : "none";
+    if (showCmap) drawColormapGradient($("colormap").value);
+    const hint = $("format-hint");
+    if (fmt === "exr") {
+      hint.style.display = "block";
+      hint.style.color = "var(--warn)";
+      hint.textContent = "⚠ EXR: 32-bit float for compositing. Preview shows PNG.";
+    } else if (fmt === "png_color") {
+      hint.style.display = "block";
+      hint.style.color = "var(--muted)";
+      hint.textContent = "Colorized RGB — select colormap below.";
+    } else {
+      hint.style.display = "none";
+    }
+  });
+
+  setupDrop();
+  setupViewportButtons();
+  setupWipeDrag();
+  setupTimeline();
+  state.viewMode = "depth";
+
+  // Re-estimate when model or every-N changes
+  if ($("model")) $("model").addEventListener("change", updateEstimate);
+  if ($("vid-every")) $("vid-every").addEventListener("change", updateEstimate);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  init().catch(e => console.error("Init error:", e));
+});
+</script>
+</body>
+</html>

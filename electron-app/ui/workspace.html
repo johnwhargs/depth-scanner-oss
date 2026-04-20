@@ -17,8 +17,8 @@ html,body{height:100%;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.5;display:flex;flex-direction:column}
 
 /* ── Header ─────────────────────────────────────────────── */
-.header{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid var(--border);user-select:none;flex-shrink:0}
-.header-left{display:flex;align-items:center;gap:14px}
+.header{display:flex;align-items:center;justify-content:space-between;padding:10px 20px 10px 84px;border-bottom:1px solid var(--border);-webkit-app-region:drag;user-select:none;flex-shrink:0}
+.header-left{display:flex;align-items:center;gap:14px;-webkit-app-region:no-drag}
 .back-link{color:var(--muted);text-decoration:none;font-size:12px;transition:color .15s}
 .back-link:hover{color:var(--accent)}
 .header-title{font-family:var(--mono);font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:var(--muted)}
@@ -707,6 +707,8 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
       fd.append('separation', params.separation.toString());
       fd.append('path', params.path);
       fd.append('format', format);
+      fd.append('fps', Math.round(params.speed * 12).toString());
+      fd.append('loops', params.loops.toString());
       fd.append('blur_depth', '5');
 
     var r = await fetch(SERVER + '/wigglegram', {method:'POST', body:fd});
@@ -755,14 +757,14 @@ input[type="checkbox"]:checked::after{content:'';position:absolute;left:4px;top:
   }
 
   async function saveBlob(blob, filename){
-    // Tauri v2: dialog.save() → fs.writeFile()
-    if (window.__TAURI__?.dialog?.save && window.__TAURI__?.fs?.writeFile) {
+    // Electron: native save dialog + fs write
+    if (window.electronAPI) {
       try {
-        var path = await window.__TAURI__.dialog.save({ defaultPath: filename });
-        if (!path) return;
-        var bytes = new Uint8Array(await blob.arrayBuffer());
-        await window.__TAURI__.fs.writeFile(path, bytes);
-        logMsg('Saved: ' + path.split(/[/\\]/).pop(), 'ok');
+        var filePath = await window.electronAPI.saveDialog(filename);
+        if (!filePath) return;
+        var buf = await blob.arrayBuffer();
+        await window.electronAPI.writeFile(filePath, buf);
+        logMsg('Saved: ' + filePath.split(/[/\\]/).pop(), 'ok');
         return;
       } catch(e) {
         logMsg('Save error: ' + (e.message || e), 'err');

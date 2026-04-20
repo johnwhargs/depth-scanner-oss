@@ -6,13 +6,16 @@ Project context for Claude Code. Read this before touching any file.
 
 ## What this project is
 
-An open-source After Effects depth map plugin powered by Depth Anything V2.
-Two components that work together:
+An open-source depth map tool powered by Depth Anything V2.
+Three components:
 
-- **`backend/`** — Python FastAPI server running on `localhost:7842`
-- **`panel/`** — Adobe CEP panel (HTML/JS + ExtendScript) that talks to the backend
+- **`backend/`** — Python FastAPI server running on `localhost:7843`
+- **`electron-app/`** — Electron desktop app (HTML/JS frontend + Node main process). **This is the primary UI.** Auto-starts backend.
+- **`ae-plugin/`** — Adobe CEP panel (HTML/JS + ExtendScript) for After Effects integration
 
-The user runs the backend manually. The AE panel connects to it over HTTP.
+The Electron app auto-starts the backend. The AE plugin requires manual backend start.
+
+> **Note:** `tauri-app/` exists but is deprecated. Do NOT use or modify Tauri code. Electron is the gold standard.
 
 ---
 
