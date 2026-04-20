@@ -463,9 +463,11 @@
   })();
 
   // ── WebGL elevation renderer ──────────────────────────
-  // Three.js renderer available — wire up backward-compat shim
-  // Three.js renderer loaded but not ready for takeover yet — use legacy WebGL
-  if (false && typeof Renderer3D !== 'undefined' && Renderer3D.init) {
+  if (typeof Renderer3D !== 'undefined' && typeof R3DAdapter !== 'undefined') {
+    R3DAdapter.init($("elev-canvas"), state);
+    // Skip old raw WebGL renderer below
+  } else if (false) {
+    // Dead code — old adapter removed, kept for git history reference
     (function() {
       var elevCanvas = $("elev-canvas");
 

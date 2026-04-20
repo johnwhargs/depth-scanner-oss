@@ -894,6 +894,7 @@
 <script src="lib/three-addons/LuminosityHighPassShader.js"></script>
 <script src="js/renderer3d-shaders.js"></script>
 <script src="js/renderer3d.js"></script>
+<script src="js/renderer3d-adapter.js"></script>
 
 <script>
 const SERVER = "http://127.0.0.1:7843";
@@ -3156,62 +3157,9 @@ async function init() {
   });
 
   // WebGL elevation renderer
-  // Three.js adapter (when Renderer3D available, skip old WebGL)
-  // Three.js renderer loaded but not ready for takeover yet — use legacy WebGL
-  if (false && typeof Renderer3D !== 'undefined' && Renderer3D.init) {
-    (function() {
-      var elevCanvas = $("elev-canvas");
-      function showElev(asHolo) {
-        Renderer3D.show(elevCanvas, asHolo);
-        elevCanvas.width = 1200; elevCanvas.height = 800;
-        $("preview-img").style.display = "none";
-        if ($("compare-canvas")) $("compare-canvas").style.display = "none";
-        elevCanvas.style.display = "block";
-        if ($("gizmo-canvas")) $("gizmo-canvas").style.display = "";
-        var depthBlob = state._latestDepthBlob || state.depthBlob;
-        var srcBlob = state.currentBlob || state.currentFile;
-        var smoothing = parseInt($("elev-smooth")?.value || "3");
-        Renderer3D.reload(depthBlob, srcBlob, smoothing);
-      }
-      function hideElev() {
-        Renderer3D.hide();
-        elevCanvas.style.display = "none";
-        $("preview-img").style.display = "";
-        if ($("gizmo-canvas")) $("gizmo-canvas").style.display = "none";
-      }
-      window._elevRenderer = {
-        show: function(asHolo) { showElev(asHolo); },
-        hide: function() { hideElev(); },
-        render: function() { Renderer3D.render(); },
-        reload: function(cb) {
-          var depthBlob = state._latestDepthBlob || state.depthBlob;
-          var srcBlob = state.currentBlob || state.currentFile;
-          Renderer3D.reload(depthBlob, srcBlob, parseInt($("elev-smooth")?.value || "3"), cb);
-        },
-        getCanvas: function() { return elevCanvas; },
-        setHoloMode: function(v) { Renderer3D.setHoloMode(v); }
-      };
-      window._elevExport = function(format) {
-        var type = $("elev-anim-select")?.value || $("holo-anim-select")?.value;
-        if (!type) { log("Select an animation first", "warn"); return; }
-        Renderer3D.captureAnimation(type, 24, 3).then(function(frames) {
-          log("Encoding " + frames.length + " frames as " + format + "...");
-          var fd = new FormData();
-          for (var i = 0; i < frames.length; i++) fd.append("frames", frames[i], "frame_" + String(i).padStart(4, "0") + ".png");
-          fd.append("fps", "24"); fd.append("format", format); fd.append("loop", "true");
-          fetch(SERVER + "/animate/export", { method: "POST", body: fd }).then(r => {
-            if (!r.ok) throw new Error("Export failed: " + r.status);
-            return r.blob();
-          }).then(blob => {
-            var ext = format === "gif" ? ".gif" : ".mp4";
-            var name = (state.currentFile?.name || "animation").replace(/\.[^.]+$/, "") + "_3d" + ext;
-            saveBlob(blob, name);
-            log("Animation saved: " + name, "ok");
-          }).catch(e => log("Export error: " + e.message, "err"));
-        });
-      };
-      console.log("[R3D] Three.js renderer active on render page");
-    })();
+  // Three.js renderer — full adapter with all slider/drag/preset wiring
+  if (typeof Renderer3D !== 'undefined' && typeof R3DAdapter !== 'undefined') {
+    R3DAdapter.init($("elev-canvas"), state);
   } else
   (function() {
     var canvas = $("elev-canvas");
