@@ -475,18 +475,19 @@ def apply_film_filter(
         mask = d[:, :, np.newaxis]  # 0=near(sharp), 1=far(blurred)
         img = img * (1 - mask) + blurred * mask
 
-    # 2. Flash simulation — steep falloff so foreground pops, background stays dark
+    # 2. Flash simulation — additive light, steep depth falloff
+    #    Real flash adds light (washes out near objects), doesn't just multiply
     if flash_intensity > 0:
-        # Inverse-square-ish falloff: near objects get strong flash, drops off fast
-        falloff = np.power(1.0 - d, 3.0)  # cubic falloff — much steeper than linear
-        brightness = 1.0 + flash_intensity * falloff
-        # Add slight specular hotspot in center (like on-camera flash)
+        falloff = np.power(1.0 - d, 3.0)  # cubic: near=1.0, mid≈0.12, far=0
+        flash_light = flash_intensity * falloff
+        # Radial hotspot (on-camera flash center bias)
         cy, cx = h / 2, w / 2
         yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
         radial = 1.0 - np.sqrt(((xx - cx) / w) ** 2 + ((yy - cy) / h) ** 2) * 1.2
         radial = np.clip(radial, 0, 1) ** 2
-        brightness += flash_intensity * 0.15 * falloff * radial
-        img = img * brightness[:, :, np.newaxis]
+        flash_light += flash_intensity * 0.3 * falloff * radial
+        # Additive: white light added on top — washes out foreground
+        img = img + flash_light[:, :, np.newaxis]
 
     # 3. Contrast adjustment
     if contrast != 0:
