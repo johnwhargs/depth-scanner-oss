@@ -204,6 +204,28 @@ input[type="file"]{display:none}
   </div>
 </div>
 
+<!-- Batch FX modal -->
+<div class="modal-overlay" id="batch-fx-modal">
+  <div class="modal-box" style="max-width:440px;text-align:left">
+    <div class="modal-title" id="batch-fx-modal-title">Batch Effect Export</div>
+    <div class="modal-msg" id="batch-fx-modal-msg" style="text-align:left;line-height:1.8"></div>
+    <div style="margin:10px 0">
+      <div style="background:var(--raised);border-radius:2px;height:4px;overflow:hidden">
+        <div id="batch-fx-progress" style="height:100%;background:var(--accent);width:0%;transition:width .3s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:9px;color:var(--muted);font-family:var(--mono)">
+        <span id="batch-fx-status">Ready</span>
+        <span id="batch-fx-eta"></span>
+      </div>
+    </div>
+    <div class="modal-btns" style="justify-content:flex-end">
+      <button class="btn btn-sm" id="batch-fx-pause" style="display:none">Pause</button>
+      <button class="btn btn-accent btn-sm" id="batch-fx-start">Start Export</button>
+      <button class="btn btn-sm" id="batch-fx-close">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ HEADER ══════════════════════════════════════════════════════ -->
 <div class="header">
   <div class="header-left">
@@ -226,6 +248,14 @@ input[type="file"]{display:none}
 
   <!-- ─── Sidebar ─────────────────────────────────────────────── -->
   <div class="sidebar">
+
+    <!-- ── Batch drop zone ──── -->
+    <div class="sb-section" id="batch-drop-section" style="padding:8px 16px">
+      <div id="batch-drop-zone" style="border:2px dashed var(--border);border-radius:var(--radius);padding:12px;text-align:center;cursor:pointer;font-size:10px;color:var(--muted);transition:all .15s" title="Drop multiple images for batch processing">
+        Drop images here for batch
+      </div>
+      <input type="file" id="batch-file-input" accept="image/*" multiple style="display:none"/>
+    </div>
 
     <!-- ── Open / File info ──── -->
     <div class="sb-section">
@@ -336,6 +366,16 @@ input[type="file"]{display:none}
       <div class="toggle-row">
         <span class="toggle-label">Effects</span>
         <div class="toggle" id="fx-toggle" title="Enable live effect preview"></div>
+      </div>
+      <div id="batch-fx-bar" style="display:none;margin-bottom:8px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.15em;flex-shrink:0">Batch File</span>
+          <select id="batch-fx-select" style="flex:1;font-size:10px"></select>
+        </div>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm" id="btn-batch-fx-save" style="flex:1;font-size:9px;padding:4px 6px">Save This</button>
+          <button class="btn btn-accent btn-sm" id="btn-batch-fx-export" style="flex:1;font-size:9px;padding:4px 6px">Batch Export Effects</button>
+        </div>
       </div>
       <div id="fx-controls" class="fx-disabled">
       <!-- Posterize modifier (global) -->
@@ -1785,7 +1825,274 @@ async function processBatch() {
 
 function clearBatch() {
   state.batchFiles = [];
+  state._batchFxSettings = {};
   renderBatchList();
+  updateBatchFxBar();
+}
+
+// ── Batch Effect Export ─────────────────────────────────────────
+
+// Per-file effect settings stored as { filename: { fx, params } }
+if (!state._batchFxSettings) state._batchFxSettings = {};
+
+function saveBatchFxSettings(name) {
+  const fx = getActiveFx();
+  const params = getEffectParams(fx);
+  state._batchFxSettings[name] = { fx, params };
+}
+
+function loadBatchFxSettings(name) {
+  return state._batchFxSettings[name] || null;
+}
+
+function updateBatchFxBar() {
+  const show = state.batchFiles.length > 1;
+  $("batch-fx-bar").style.display = show ? "" : "none";
+  if (!show) return;
+  const sel = $("batch-fx-select");
+  const curVal = sel.value;
+  sel.innerHTML = state.batchFiles.map((f, i) => {
+    const hasSettings = state._batchFxSettings[f.name] ? " ✓" : "";
+    return `<option value="${i}">${f.name}${hasSettings}</option>`;
+  }).join("");
+  if (curVal && curVal < state.batchFiles.length) sel.value = curVal;
+}
+
+async function switchToBatchFile(idx) {
+  const f = state.batchFiles[idx];
+  if (!f || !f.blob) return;
+
+  // Save current file's settings if we have a session
+  if (state.currentFile && state.sessionId) {
+    saveBatchFxSettings(state.currentFile.name);
+  }
+
+  // Load this file
+  await loadFile(f.blob);
+
+  // Process depth if not done
+  if (!f.depthBlob && !f.sessionId) {
+    await processImage();
+    f.sessionId = state.sessionId;
+    f.depthBlob = state.depthBlob;
+  } else if (f.sessionId) {
+    state.sessionId = f.sessionId;
+    if (f.depthBlob) {
+      state.depthBlob = f.depthBlob;
+      showImage(f.depthBlob, "Depth map");
+    }
+  }
+
+  // Restore saved effect settings
+  const saved = loadBatchFxSettings(f.name);
+  if (saved) {
+    // Activate the saved effect tab
+    document.querySelectorAll(".fx-tab").forEach(t => {
+      t.classList.toggle("active", t.dataset.fx === saved.fx);
+    });
+    document.querySelectorAll(".fx-pane").forEach(p => {
+      p.classList.toggle("active", p.id === "fx-" + saved.fx);
+    });
+  }
+}
+
+function formatETA(seconds) {
+  if (seconds < 60) return Math.ceil(seconds) + "s";
+  return Math.floor(seconds / 60) + "m " + Math.ceil(seconds % 60) + "s";
+}
+
+let _batchFxPaused = false;
+let _batchFxCancelled = false;
+
+async function showBatchFxDialog() {
+  if (state.batchFiles.length < 2) {
+    log("Need 2+ files for batch export", "warn");
+    return;
+  }
+
+  // Save current file settings
+  if (state.currentFile && state.sessionId) {
+    saveBatchFxSettings(state.currentFile.name);
+  }
+
+  const fx = getActiveFx();
+  const count = state.batchFiles.length;
+  const needsCanvas = ["elevation", "hologram"].includes(fx);
+
+  let warning = `${count} files · Effect: ${fx}\n`;
+  if (needsCanvas) {
+    warning += "⚠ 3D effects (elevation/hologram) require individual canvas recording. This will take longer and the app will be unresponsive during each render.\n";
+  }
+  warning += `Files without custom settings will use current slider values.\nEach file needs a depth session — unprocessed files will be auto-processed.`;
+
+  $("batch-fx-modal-title").textContent = "Batch Effect Export";
+  $("batch-fx-modal-msg").textContent = warning;
+  $("batch-fx-progress").style.width = "0%";
+  $("batch-fx-status").textContent = `${count} files ready`;
+  $("batch-fx-eta").textContent = "";
+  $("batch-fx-start").style.display = "";
+  $("batch-fx-pause").style.display = "none";
+  $("batch-fx-close").textContent = "Cancel";
+  _batchFxPaused = false;
+  _batchFxCancelled = false;
+
+  $("batch-fx-modal").classList.add("show");
+
+  return new Promise(resolve => {
+    $("batch-fx-start").onclick = () => {
+      resolve(true);
+    };
+    $("batch-fx-close").onclick = () => {
+      _batchFxCancelled = true;
+      $("batch-fx-modal").classList.remove("show");
+      resolve(false);
+    };
+  });
+}
+
+async function batchEffectExport() {
+  const go = await showBatchFxDialog();
+  if (!go) return;
+
+  $("batch-fx-start").style.display = "none";
+  $("batch-fx-pause").style.display = "";
+  $("batch-fx-close").textContent = "Stop";
+
+  $("batch-fx-pause").onclick = () => {
+    _batchFxPaused = !_batchFxPaused;
+    $("batch-fx-pause").textContent = _batchFxPaused ? "Resume" : "Pause";
+    $("batch-fx-status").textContent = _batchFxPaused ? "Paused" : "Processing...";
+  };
+
+  const total = state.batchFiles.length;
+  const defaultFx = getActiveFx();
+  const defaultParams = getEffectParams(defaultFx);
+  let completed = 0;
+  const startTime = Date.now();
+
+  for (let i = 0; i < total; i++) {
+    if (_batchFxCancelled) break;
+
+    // Wait while paused
+    while (_batchFxPaused && !_batchFxCancelled) {
+      await new Promise(r => setTimeout(r, 200));
+    }
+    if (_batchFxCancelled) break;
+
+    const f = state.batchFiles[i];
+    if (!f.blob) { completed++; continue; }
+
+    $("batch-fx-status").textContent = `${i + 1}/${total}: ${f.name}`;
+    $("batch-fx-progress").style.width = Math.round((i / total) * 100) + "%";
+
+    // ETA
+    if (completed > 0) {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const perFile = elapsed / completed;
+      const remaining = perFile * (total - i);
+      $("batch-fx-eta").textContent = "ETA: " + formatETA(remaining);
+    }
+
+    try {
+      // Get per-file settings or use defaults
+      const saved = state._batchFxSettings[f.name];
+      const fx = saved ? saved.fx : defaultFx;
+      const params = saved ? saved.params : defaultParams;
+
+      // Ensure session exists
+      if (!f.sessionId) {
+        const fd = new FormData();
+        fd.append("file", f.blob, f.name);
+        fd.append("model", $("model").value);
+        fd.append("format", "png_gray");
+        const r = await fetch(`${SERVER}/process/frame`, { method: "POST", body: fd });
+        if (!r.ok) throw new Error("Depth failed");
+        f.sessionId = r.headers.get("X-Session-Id");
+        f.depthBlob = await r.blob();
+      }
+
+      // Run the effect
+      let result;
+      if (fx === "wiggle") {
+        const fd = new FormData();
+        fd.append("session_id", f.sessionId);
+        fd.append("num_views", (params.num_views || 5).toString());
+        fd.append("separation", (params.separation || 15).toString());
+        fd.append("fps", (params.fps || 12).toString());
+        fd.append("format", params.format || "gif");
+        fd.append("path", params.path || "linear");
+        fd.append("blur_depth", "5");
+        if (params.film_filter) fd.append("film_filter_json", JSON.stringify(params.film_filter));
+        fd.append("pivot_x", (params.pivot_x || 0.5).toString());
+        fd.append("pivot_y", (params.pivot_y || 0.5).toString());
+        const r = await fetch(`${SERVER}/wigglegram`, { method: "POST", body: fd });
+        if (!r.ok) throw new Error("Wigglegram failed");
+        result = await r.blob();
+        const ext = (params.format === "mp4") ? "mp4" : "gif";
+        const name = f.name.replace(/\.[^.]+$/, "") + `_wiggle.${ext}`;
+        await saveBlobDirect(result, name);
+      } else if (fx === "spatial") {
+        const fd = new FormData();
+        fd.append("session_id", f.sessionId);
+        fd.append("eye_separation", (params.eye_separation || 30).toString());
+        fd.append("convergence", (params.convergence || 0.5).toString());
+        fd.append("output", params.output || "sbs");
+        const r = await fetch(`${SERVER}/spatial`, { method: "POST", body: fd });
+        if (!r.ok) throw new Error("Spatial failed");
+        result = await r.blob();
+        await saveBlobDirect(result, f.name.replace(/\.[^.]+$/, "") + `_spatial.png`);
+      } else if (fx === "elevation") {
+        const fd = new FormData();
+        fd.append("session_id", f.sessionId);
+        for (const [k, v] of Object.entries(params)) fd.append(k, v.toString());
+        const r = await fetch(`${SERVER}/elevation`, { method: "POST", body: fd });
+        if (!r.ok) throw new Error("Elevation failed");
+        result = await r.blob();
+        await saveBlobDirect(result, f.name.replace(/\.[^.]+$/, "") + `_elevation.png`);
+      } else {
+        // Standard effects: dof, grade, slice, fog, parallax, hologram
+        const fd = new FormData();
+        fd.append("session_id", f.sessionId);
+        fd.append("colormap", $("colormap")?.value || "inferno");
+        fd.append("params_json", JSON.stringify(params));
+        const r = await fetch(`${SERVER}/effect/${fx}`, { method: "POST", body: fd });
+        if (!r.ok) throw new Error("Effect failed");
+        result = await r.blob();
+        await saveBlobDirect(result, f.name.replace(/\.[^.]+$/, "") + `_${fx}.png`);
+      }
+
+      log(`[${i + 1}/${total}] ${f.name} — ${fx} done`, "success");
+    } catch (e) {
+      log(`[${i + 1}/${total}] ${f.name} — ${e.message}`, "error");
+    }
+    completed++;
+  }
+
+  $("batch-fx-progress").style.width = "100%";
+  $("batch-fx-status").textContent = _batchFxCancelled ? "Cancelled" : `Complete: ${completed}/${total}`;
+  $("batch-fx-eta").textContent = "";
+  $("batch-fx-pause").style.display = "none";
+  $("batch-fx-close").textContent = "Close";
+  $("batch-fx-close").onclick = () => $("batch-fx-modal").classList.remove("show");
+  log(`Batch effects: ${completed}/${total} done`, "success");
+}
+
+// Save without dialog — auto-save to batch output dir
+async function saveBlobDirect(blob, defaultName) {
+  if (state.saveDir) {
+    const sep = state.saveDir.includes("\\") ? "\\" : "/";
+    const filePath = state.saveDir + sep + defaultName;
+    const buf = await blob.arrayBuffer();
+    await window.electronAPI.writeFile(filePath, buf);
+    return;
+  }
+  // Fallback to individual download
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = defaultName;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ── Video processing ─────────────────────────────────────────────
@@ -2622,6 +2929,54 @@ async function init() {
     clearBatch();
     $("batch-controls").hidden = true;
   });
+
+  // Batch drop zone
+  $("batch-drop-zone").addEventListener("click", () => $("batch-file-input").click());
+  $("batch-file-input").addEventListener("change", async (e) => {
+    const files = e.target.files;
+    if (!files || files.length < 2) { log("Drop 2+ images for batch", "warn"); return; }
+    state.batchFiles = [];
+    for (let i = 0; i < files.length; i++) {
+      state.batchFiles.push({ name: files[i].name, blob: files[i], status: "pending" });
+    }
+    renderBatchList();
+    $("batch-controls").hidden = false;
+    updateBatchFxBar();
+    log(`Batch: ${files.length} files loaded`, "info");
+    e.target.value = "";
+  });
+  const batchDrop = $("batch-drop-zone");
+  batchDrop.addEventListener("dragover", (e) => { e.preventDefault(); batchDrop.style.borderColor = "var(--accent)"; batchDrop.style.color = "var(--text)"; });
+  batchDrop.addEventListener("dragleave", () => { batchDrop.style.borderColor = "var(--border)"; batchDrop.style.color = "var(--muted)"; });
+  batchDrop.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    batchDrop.style.borderColor = "var(--border)"; batchDrop.style.color = "var(--muted)";
+    const files = e.dataTransfer.files;
+    if (!files || files.length < 2) { log("Drop 2+ images for batch", "warn"); return; }
+    state.batchFiles = [];
+    for (let i = 0; i < files.length; i++) {
+      if (files[i].type.startsWith("image/")) {
+        state.batchFiles.push({ name: files[i].name, blob: files[i], status: "pending" });
+      }
+    }
+    renderBatchList();
+    $("batch-controls").hidden = false;
+    updateBatchFxBar();
+    log(`Batch: ${state.batchFiles.length} files loaded`, "info");
+  });
+
+  // Batch FX controls
+  $("batch-fx-select").addEventListener("change", (e) => {
+    switchToBatchFile(parseInt(e.target.value));
+  });
+  $("btn-batch-fx-save").addEventListener("click", () => {
+    if (state.currentFile && state.sessionId) {
+      saveBatchFxSettings(state.currentFile.name);
+      updateBatchFxBar();
+      log(`Settings saved for ${state.currentFile.name}`, "success");
+    }
+  });
+  $("btn-batch-fx-export").addEventListener("click", () => batchEffectExport());
 
   // Second image for transition effect
   if ($("btn-load-file-b")) $("btn-load-file-b").addEventListener("click", () => $("file-b-input").click());
