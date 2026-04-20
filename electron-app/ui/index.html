@@ -77,7 +77,7 @@ input[type="color"]::-webkit-color-swatch{border:none;border-radius:3px}
 /* ── Hidden file inputs ──────────────────────────────── */
 input[type="file"]{display:none}
 
-.range-val{font-family:var(--mono);font-size:11px;color:var(--text);min-width:32px;text-align:right}
+.range-val{font-family:var(--mono);font-size:11px;color:var(--text);min-width:40px;text-align:right;flex-shrink:0}
 .fx-select{flex:1;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:3px 6px;font-size:11px;font-family:var(--mono)}
 .pm-btn{width:22px;height:22px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:3px;cursor:pointer;font-size:14px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center}
 .pm-btn:hover{background:var(--border)}
@@ -902,11 +902,32 @@ input[type="file"]{display:none}
         <div class="field"><label>Line width</label><input type="range" id="holo-linewidth" min="1" max="4" step="1" value="1" oninput="$('elev-linewidth').value=this.value;$('elev-linewidth-v').textContent=this.value+'px'"/><span class="range-val" id="holo-linewidth-v">1px</span></div>
         <div class="field"><label>Glow</label><input type="range" id="holo-glow" min="0" max="1" step="0.05" value="0.8" oninput="$('elev-glow').value=this.value;$('elev-glow-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="holo-glow-v">0.80</span></div>
         <div class="field"><label>Bloom</label><input type="range" id="holo-bloom2" min="0" max="3" step="0.1" value="1.5" oninput="$('elev-bloom').value=this.value;$('elev-bloom-v').textContent=parseFloat(this.value).toFixed(1)"/><span class="range-val" id="holo-bloom2-v">1.5</span></div>
-        <div class="field"><label>Smoothing</label><input type="range" id="holo-smooth" min="0" max="20" step="1" value="3" oninput="$('elev-smooth').value=this.value;$('elev-smooth-v').textContent=this.value"/><span class="range-val" id="holo-smooth-v">3</span></div>
+        <div class="field"><label>Smoothing</label><input type="range" id="holo-smooth" min="0" max="20" step="1" value="3" oninput="$('elev-smooth').value=this.value;$('elev-smooth-v').textContent=this.value;$('holo-smooth-v').textContent=this.value"/><span class="range-val" id="holo-smooth-v">3</span></div>
         <div style="display:flex;gap:4px;margin-bottom:4px">
           <div class="field" style="flex:1;margin:0"><label>Near</label><input type="color" id="holo-color1" value="#00ff88"/></div>
+          <div class="field" style="flex:1;margin:0"><label>Mid</label><input type="color" id="holo-color-mid" value="#00aa55"/></div>
           <div class="field" style="flex:1;margin:0"><label>Far</label><input type="color" id="holo-color2" value="#003322"/></div>
+        </div>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
           <div class="field" style="flex:1;margin:0"><label>BG</label><input type="color" id="holo-bg" value="#000505"/></div>
+          <div class="field" style="flex:1;margin:0"><label>Source</label><input type="color" id="holo-src-color" value="#ffffff"/></div>
+        </div>
+        <div class="field"><label>Source tint</label><input type="range" id="holo-src-tint" min="0" max="1" step="0.05" value="0" oninput="$('holo-src-tint-v').textContent=parseFloat(this.value).toFixed(2)"/><span class="range-val" id="holo-src-tint-v">0.00</span></div>
+        <!-- Gradient map builder -->
+        <div style="margin:6px 0;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:4px">
+          <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Gradient Map</div>
+          <canvas id="holo-gradmap" width="240" height="16" style="width:100%;height:16px;border-radius:3px;border:1px solid var(--border);cursor:pointer;margin-bottom:4px"></canvas>
+          <div class="field" style="margin:0"><label>Preset</label><select id="holo-gradmap-preset" class="fx-select" style="font-size:10px">
+            <option value="none">None (use colors)</option>
+            <option value="matrix">Matrix</option>
+            <option value="infrared">Infrared</option>
+            <option value="ocean">Ocean</option>
+            <option value="fire">Fire</option>
+            <option value="neon">Neon</option>
+            <option value="thermal">Thermal</option>
+            <option value="midnight">Midnight</option>
+            <option value="custom">Custom</option>
+          </select></div>
         </div>
         <div style="display:flex;gap:12px;margin:4px 0;flex-wrap:wrap">
           <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:4px"><input type="checkbox" id="holo-scanlines" checked/> Scan lines</label>
@@ -3292,6 +3313,9 @@ async function init() {
       "uniform float uRenderMode;",
       "uniform sampler2D uSrcTex;",
       "uniform vec3 uHoloColor;",
+      "uniform vec3 uHoloColorMid;",
+      "uniform vec3 uSrcTint;",
+      "uniform float uSrcTintAmt;",
       "uniform float uDither;",
       "uniform float uScanLines;",
       "uniform float uScanDensity;",
@@ -3345,7 +3369,11 @@ async function init() {
       "    }",
       "    vec3 img = texture2D(uSrcTex, uv).rgb;",
       "    float luma = dot(img, vec3(0.299, 0.587, 0.114));",
-      "    vec3 tinted = uHoloColor * (0.2 + 0.8 * luma) * (0.4 + 0.6 * vDepth);",
+      // 3-stop depth gradient: far→mid→near
+      "    vec3 depthColor = vDepth < 0.5 ? mix(uGridColor2, uHoloColorMid, vDepth * 2.0) : mix(uHoloColorMid, uHoloColor, (vDepth - 0.5) * 2.0);",
+      // Source tint: blend original image color into hologram
+      "    vec3 srcTint = img * uSrcTint * uSrcTintAmt;",
+      "    vec3 tinted = depthColor * (0.2 + 0.8 * luma) * (0.4 + 0.6 * vDepth) + srcTint;",
       // Chromatic aberration follows depth
       "    if (glitchRand > 0.97) {",
       "      float rShift = texture2D(uSrcTex, uv + vec2(0.01 * vDepth, 0.0)).r;",
@@ -3355,10 +3383,8 @@ async function init() {
       "    }",
       // Dither with gap adjustment
       "    if (uDither > 0.5) {",
-      "      float gx = gapScale(gl_FragCoord.x, uGap);",
-      "      float gy = gapScale(gl_FragCoord.y, uGap);",
-      "      float px = floor(mod(gx / 2.0, 4.0));",
-      "      float py = floor(mod(gy / 2.0, 4.0));",
+      "      float px = floor(mod(gl_FragCoord.x / 2.0, 4.0));",
+      "      float py = floor(mod(gl_FragCoord.y / 2.0, 4.0));",
       "      float idx = py * 4.0 + px;",
       "      float threshold = 0.0;",
       "      if (idx < 0.5) threshold = 0.0/16.0;",
@@ -3397,7 +3423,7 @@ async function init() {
       "    return;",
       "  }",
       // Mode 0: grid wireframe — grid type patterns
-      "  vec3 gradColor = mix(uGridColor2, uGridColor, vDepth);",
+      "  vec3 gradColor = vDepth < 0.5 ? mix(uGridColor2, uHoloColorMid, vDepth * 2.0) : mix(uHoloColorMid, uGridColor, (vDepth - 0.5) * 2.0);",
       "  float bright = 0.3 + 0.7 * vDepth;",
       // Grid type masking (applied via gap-adjusted coords)
       "  float gx = gapScale(gl_FragCoord.x, uGap);",
@@ -3731,6 +3757,12 @@ async function init() {
       gl.uniform3fv(gl.getUniformLocation(program, "uBgColor"), bg);
       gl.uniform1f(gl.getUniformLocation(program, "uGlow"), glow);
       gl.uniform3fv(gl.getUniformLocation(program, "uHoloColor"), holoColor);
+      var midColor = holoMode ? hexToVec3($("holo-color-mid")?.value || "#00aa55") : [gc[0]*0.5+gc2[0]*0.5, gc[1]*0.5+gc2[1]*0.5, gc[2]*0.5+gc2[2]*0.5];
+      gl.uniform3fv(gl.getUniformLocation(program, "uHoloColorMid"), midColor);
+      var srcTintColor = holoMode ? hexToVec3($("holo-src-color")?.value || "#ffffff") : [1,1,1];
+      var srcTintAmt = holoMode ? parseFloat($("holo-src-tint")?.value || "0") : 0;
+      gl.uniform3fv(gl.getUniformLocation(program, "uSrcTint"), srcTintColor);
+      gl.uniform1f(gl.getUniformLocation(program, "uSrcTintAmt"), srcTintAmt);
       gl.uniform1f(gl.getUniformLocation(program, "uDither"), holoDither ? 1.0 : 0.0);
       var scanOpacity = holoMode
         ? parseFloat($("holo-scan-opacity")?.value || "0.5")
@@ -3935,7 +3967,7 @@ async function init() {
       if (el) el.addEventListener("change", function() { if (canvas.style.display !== "none") render(); });
     });
     // Hologram slider listeners
-    ["holo-color1","holo-color2","holo-bg","holo-edges","holo-chromatic","holo-noise","holo-bloom","holo-transparency","holo-scan-density","holo-scan-opacity","holo-scan-speed","holo-gap","holo-dither-size","holo-grid-density"].forEach(function(id) {
+    ["holo-color1","holo-color2","holo-bg","holo-color-mid","holo-src-color","holo-src-tint","holo-edges","holo-chromatic","holo-noise","holo-bloom","holo-transparency","holo-scan-density","holo-scan-opacity","holo-scan-speed","holo-gap","holo-dither-size","holo-grid-density","holo-smooth"].forEach(function(id) {
       var el = $(id);
       if (el) el.addEventListener("input", function() { if (canvas.style.display !== "none" && holoMode) render(); });
     });
@@ -4304,8 +4336,41 @@ async function init() {
       if (s.gap !== undefined) { $("holo-gap").value = s.gap; $("holo-gap-v").textContent = s.gap; }
       if (canvas.style.display !== "none") render();
     });
-    ["holo-color1","holo-color2","holo-bg"].forEach(function(id) {
-      $(id).addEventListener("input", function() { $("holo-style").value = "custom"; });
+    ["holo-color1","holo-color2","holo-bg","holo-color-mid","holo-src-color"].forEach(function(id) {
+      $(id).addEventListener("input", function() { $("holo-style").value = "custom"; if (canvas.style.display !== "none") render(); });
+    });
+
+    // Gradient map builder
+    var holoGradPresets = {
+      none: null,
+      matrix: ["#001100","#003300","#00ff44"],
+      infrared: ["#000040","#ff0040","#ffff00"],
+      ocean: ["#000820","#0044aa","#00ffcc"],
+      fire: ["#100000","#ff4400","#ffee00"],
+      neon: ["#ff00ff","#00ffff","#ffff00"],
+      thermal: ["#000040","#ff0000","#ffff00"],
+      midnight: ["#0a0020","#2244aa","#88aaff"]
+    };
+    function drawHoloGradmap() {
+      var cv = $("holo-gradmap");
+      if (!cv) return;
+      var ctx2 = cv.getContext("2d");
+      var c1 = $("holo-color2").value, c2 = $("holo-color-mid").value, c3 = $("holo-color1").value;
+      var g = ctx2.createLinearGradient(0,0,cv.width,0);
+      g.addColorStop(0, c1); g.addColorStop(0.5, c2); g.addColorStop(1, c3);
+      ctx2.fillStyle = g; ctx2.fillRect(0,0,cv.width,cv.height);
+    }
+    drawHoloGradmap();
+    ["holo-color1","holo-color2","holo-color-mid"].forEach(function(id) {
+      $(id).addEventListener("input", drawHoloGradmap);
+    });
+    $("holo-gradmap-preset").addEventListener("change", function() {
+      var p = holoGradPresets[this.value];
+      if (!p) return;
+      $("holo-color2").value = p[0]; $("holo-color-mid").value = p[1]; $("holo-color1").value = p[2];
+      drawHoloGradmap();
+      $("holo-style").value = "custom";
+      if (canvas.style.display !== "none") render();
     });
 
     // Split elevation toggle
