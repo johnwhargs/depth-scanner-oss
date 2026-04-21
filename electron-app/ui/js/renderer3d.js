@@ -18,6 +18,7 @@ window.Renderer3D = (function() {
   var depthTex, srcTex;
   var depthLoaded = false, srcLoaded = false;
   var depthDataRaw, depthW, depthH;
+  var _videoMode = false; // true when using VideoTexture
   var lastDensity = 0, lastGridType = '', lastSmoothing = -1;
   var holoMode = false, visible = false, initialized = false;
   var loopActive = false, animId = null;
@@ -499,6 +500,38 @@ window.Renderer3D = (function() {
     });
   }
 
+  // ── Video Texture Mode ──
+  function setVideoTextures(srcVideoEl, depthVideoEl) {
+    // Replace static textures with VideoTextures
+    if (srcTex) srcTex.dispose();
+    if (depthTex) depthTex.dispose();
+
+    srcTex = new THREE.VideoTexture(srcVideoEl);
+    srcTex.minFilter = THREE.LinearFilter;
+    srcTex.magFilter = THREE.LinearFilter;
+    srcTex.format = THREE.RGBFormat;
+    U.uSrcTex.value = srcTex;
+    srcLoaded = true;
+
+    depthTex = new THREE.VideoTexture(depthVideoEl);
+    depthTex.minFilter = THREE.LinearFilter;
+    depthTex.magFilter = THREE.LinearFilter;
+    depthTex.format = THREE.RGBFormat;
+    U.uDepth.value = depthTex;
+    depthLoaded = true;
+
+    _videoMode = true;
+    console.log('[R3D] VideoTexture mode active');
+  }
+
+  function clearVideoTextures() {
+    _videoMode = false;
+    if (srcTex && srcTex.isVideoTexture) { srcTex.dispose(); srcTex = null; U.uSrcTex.value = null; srcLoaded = false; }
+    if (depthTex && depthTex.isVideoTexture) { depthTex.dispose(); depthTex = null; U.uDepth.value = null; depthLoaded = false; }
+  }
+
+  function isVideoMode() { return _videoMode; }
+
   return {
     init: init, show: show, hide: hide, isVisible: isVisible, reload: reload,
     render: render, startLoop: startLoop, stopLoop: stopLoop,
@@ -514,6 +547,7 @@ window.Renderer3D = (function() {
     startAnimation: startAnimation, stopAnimation: stopAnimation,
     setAnimationSpeed: setAnimationSpeed, setAnimationDirection: setAnimationDirection,
     captureFrame: captureFrame, captureAnimation: captureAnimation,
+    setVideoTextures: setVideoTextures, clearVideoTextures: clearVideoTextures, isVideoMode: isVideoMode,
     _buildMesh: buildMesh, _getCanvas: function() { return canvas; }
   };
 })();
