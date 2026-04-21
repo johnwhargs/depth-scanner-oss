@@ -161,7 +161,7 @@ window.R3DAdapter = (function() {
   // ── Show/hide elevation canvas ──
   function showElevCanvas(asHolo) {
     var depthBlob = _state._latestDepthBlob || _state.depthBlob || _state.depthFile;
-    var srcBlob = _state.currentBlob || _state.sourceFile || _state.currentFile;
+    var srcBlob = _state._latestSrcBlob || _state.currentBlob || _state.sourceFile || _state.currentFile;
     if (!depthBlob) return;
 
     // Already visible — just switch mode and re-sync
@@ -505,7 +505,7 @@ window.R3DAdapter = (function() {
       render: function() { Renderer3D.render(); },
       reload: function(cb) {
         var depthBlob = _state._latestDepthBlob || _state.depthBlob || _state.depthFile;
-        var srcBlob = _state.currentBlob || _state.sourceFile || _state.currentFile;
+        var srcBlob = _state._latestSrcBlob || _state.currentBlob || _state.sourceFile || _state.currentFile;
         var smoothing = parseInt($("elev-smooth")?.value || "3");
         Renderer3D.reload(depthBlob, srcBlob, smoothing, function() { syncAll(); if (cb) cb(); });
       },

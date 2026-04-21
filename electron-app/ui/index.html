@@ -1586,6 +1586,7 @@ async function processImage() {
     }
     state.depthBlob = result;
     state._latestDepthBlob = result;
+    state._latestSrcBlob = state.currentBlob; // for 3D renderer
 
     // Store source image for compare views
     if (state.currentBlob) {
@@ -2239,6 +2240,7 @@ async function processVideo() {
         const srcR = await fetch(`${SERVER}/process/video/source/${session.session_id}/${i}`);
         if (srcR.ok) {
           const srcBlob = await srcR.blob();
+          state._latestSrcBlob = srcBlob;
           // Revoke previous to prevent memory leak
           if (compare.sourceFrames[i]) URL.revokeObjectURL(compare.sourceFrames[i]);
           const srcUrl = URL.createObjectURL(srcBlob);
