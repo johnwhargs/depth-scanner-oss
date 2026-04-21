@@ -111,6 +111,7 @@ window.Renderer3D = (function() {
     uSrcTint: { value: new THREE.Color(0xffffff) },
     uSrcTintAmt: { value: 0.0 },
     uDither: { value: 0.0 },
+    uDitherStyle: { value: 1.0 }, // 0=none,1=bayer4,2=bayer8,3=halftone,4=crosshatch,5=noise
     uScanLines: { value: 0.0 },
     uScanDensity: { value: 3.0 },
     uScanOpacity: { value: 0.3 },
@@ -142,6 +143,7 @@ window.Renderer3D = (function() {
       u.uSrcTintAmt.value = _uniformDefs.uSrcTintAmt.value;
       u.uGlow.value = _uniformDefs.uGlow.value;
       u.uDither.value = _uniformDefs.uDither.value;
+      u.uDitherStyle.value = _uniformDefs.uDitherStyle.value;
       u.uScanLines.value = _uniformDefs.uScanLines.value;
       u.uScanDensity.value = _uniformDefs.uScanDensity.value;
       u.uScanOpacity.value = _uniformDefs.uScanOpacity.value;
@@ -575,6 +577,8 @@ window.Renderer3D = (function() {
 
   function setDither(opts) {
     _uniformDefs.uDither.value = opts.enabled ? 1.0 : 0.0;
+    var styleMap = { none: 0, bayer4: 1, bayer8: 2, halftone: 3, crosshatch: 4, noise: 5 };
+    _uniformDefs.uDitherStyle.value = styleMap[opts.style] || 1;
   }
 
   function setSrcTint(color, amount) {

@@ -111,7 +111,8 @@ window.R3DAdapter = (function() {
         $("holo-color2")?.value || "#003322",
         $("holo-bg")?.value || "#000505"
       );
-      Renderer3D.setDither({ enabled: !!$("holo-dither")?.checked && ($("holo-dither-style")?.value || "none") !== "none" });
+      var ditherStyle = $("holo-dither-style")?.value || "none";
+      Renderer3D.setDither({ enabled: !!$("holo-dither")?.checked && ditherStyle !== "none", style: ditherStyle });
       Renderer3D.setSrcTint($("holo-src-color")?.value || "#ffffff", parseFloat($("holo-src-tint")?.value || "0"));
       Renderer3D.setLayerVisible('grid', !!$("holo-grid")?.checked);
     } else {
