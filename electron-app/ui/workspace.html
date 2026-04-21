@@ -63,6 +63,22 @@
       </div>
     </div>
 
+    <!-- Video Export (shown when video loaded) -->
+    <div class="sb-section" id="ws-video-export" style="display:none">
+      <div class="sb-title">Video Export</div>
+      <div class="btn-row">
+        <button class="btn btn-accent btn-sm" id="ws-export-mp4">Export MP4</button>
+        <button class="btn btn-accent btn-sm" id="ws-export-webm">Export WebM</button>
+      </div>
+      <button class="btn btn-sm" id="ws-export-frame">Export Current Frame</button>
+      <div id="ws-export-progress" style="display:none;margin-top:var(--sp-md)">
+        <div style="height:4px;background:var(--raised);border-radius:2px;overflow:hidden">
+          <div id="ws-export-bar" style="height:100%;background:var(--accent);width:0%;transition:width .2s"></div>
+        </div>
+        <div style="font-size:var(--fs-sm);color:var(--muted);margin-top:var(--sp-xs)" id="ws-export-status"></div>
+      </div>
+    </div>
+
     <!-- Effect Selector -->
     <div class="sb-section">
       <div class="sb-title">Effect</div>
@@ -139,11 +155,14 @@
         <!-- Video Comb (3D Video) -->
         <div style="margin-top:8px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px">
           <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.15em;margin-bottom:6px">Video Comb (3D Video)</div>
+          <div id="wig-comb-video-status" style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:6px">Load source + depth videos above</div>
           <input type="file" id="wig-video-input" accept="video/*" style="display:none"/>
-          <div class="field"><label>Source</label><button class="btn btn-sm" id="wig-video-load" style="font-size:10px">Load Video</button></div>
-          <div id="wig-video-name" style="font-size:10px;color:var(--muted);font-family:var(--mono);margin-bottom:6px;display:none"></div>
-          <div class="field"><label>Comb interval</label><input type="range" id="wig-comb-interval" min="1" max="6" value="3" step="1"/><span class="range-val" id="wig-comb-interval-val">3f</span></div>
-          <div class="btn-row"><button class="btn btn-accent" id="wig-comb-export" disabled>Export Comb Video</button></div>
+          <div class="field"><label>Comb frames</label><input type="range" id="wig-comb-interval" min="1" max="6" value="3" step="1"/><span class="range-val" id="wig-comb-interval-val">3f</span></div>
+          <div class="field"><label>Eye sep</label><input type="range" id="wig-comb-sep" min="5" max="40" value="15" step="1"/><span class="range-val" id="wig-comb-sep-val">15px</span></div>
+          <div class="btn-row">
+            <button class="btn" id="wig-comb-preview" disabled>Preview Comb</button>
+            <button class="btn btn-accent" id="wig-comb-export" disabled>Export Comb</button>
+          </div>
         </div>
         <div class="btn-row" style="margin-top:8px"><button class="btn" id="wig-preview">Preview</button></div>
         <div class="btn-row" style="margin-top:6px">

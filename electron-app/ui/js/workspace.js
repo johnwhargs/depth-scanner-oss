@@ -147,6 +147,13 @@
       $('ws-time-total').textContent = _fmtTime(dur);
       $('infoLeft').textContent = 'Video: ' + dur.toFixed(1) + 's';
 
+      // Show export section + enable comb
+      $('ws-video-export').style.display = '';
+      $('wig-comb-preview').disabled = false;
+      $('wig-comb-export').disabled = false;
+      $('wig-comb-video-status').textContent = 'Videos loaded ✓';
+      $('wig-comb-video-status').style.color = 'var(--ok)';
+
       // Auto-show elevation
       var fx = state.activeFx || 'elevation';
       VideoFX.show(fx === 'hologram' ? 'hologram' : 'elevation');
@@ -215,6 +222,88 @@
       $('ws-pause').disabled = false;
     }
   }, 50);
+
+  // ── Video export buttons ──
+  on('ws-export-frame', 'click', function() {
+    if (!VideoFX.isActive()) return;
+    VideoFX.exportFrame().then(function(blob) {
+      DS.saveBlob(blob, 'frame_' + VideoFX.getPlayhead().toFixed(2) + 's.png');
+      logMsg('Frame exported', 'ok');
+    });
+  });
+
+  on('ws-export-mp4', 'click', function() { _exportVideo('mp4'); });
+  on('ws-export-webm', 'click', function() { _exportVideo('webm'); });
+
+  function _exportVideo(format) {
+    if (!VideoFX.isActive()) return;
+    $('ws-export-progress').style.display = '';
+    $('ws-export-status').textContent = 'Recording...';
+    $('ws-export-mp4').disabled = true;
+    $('ws-export-webm').disabled = true;
+    logMsg('Recording ' + format + '...', 'info');
+
+    VideoFX.exportVideo(format, function(frame, total) {
+      var pct = Math.round((frame / total) * 100);
+      $('ws-export-bar').style.width = pct + '%';
+      $('ws-export-status').textContent = 'Frame ' + frame + '/' + total + ' (' + pct + '%)';
+    }).then(function(blob) {
+      DS.saveBlob(blob, 'effects_export.' + (format === 'mp4' ? 'mp4' : 'webm'));
+      logMsg('Export complete: ' + (blob.size / 1024 / 1024).toFixed(1) + 'MB', 'ok');
+      $('ws-export-progress').style.display = 'none';
+      $('ws-export-mp4').disabled = false;
+      $('ws-export-webm').disabled = false;
+    }).catch(function(err) {
+      logMsg('Export failed: ' + err.message, 'err');
+      $('ws-export-progress').style.display = 'none';
+      $('ws-export-mp4').disabled = false;
+      $('ws-export-webm').disabled = false;
+    });
+  }
+
+  // ── Video comb mode ──
+  DS.bindRange('wig-comb-sep', 'px');
+
+  on('wig-comb-preview', 'click', function() {
+    if (!VideoFX.isActive()) { logMsg('Load source + depth videos first', 'warn'); return; }
+    // Comb preview: alternate L/R eye displacement in Three.js
+    var sep = parseInt($('wig-comb-sep')?.value || '15');
+    var interval = parseInt($('wig-comb-interval')?.value || '3');
+    logMsg('Comb preview: sep=' + sep + 'px interval=' + interval + 'f', 'info');
+    // Set parallax shift based on comb pattern — the shader already displaces by depth
+    // For comb, we toggle elevation sign every N frames during playback
+    state._combMode = true;
+    state._combInterval = interval;
+    state._combSep = sep;
+    state._combFrame = 0;
+    VideoFX.play();
+  });
+
+  on('wig-comb-export', 'click', function() {
+    if (!VideoFX.isActive()) { logMsg('Load source + depth videos first', 'warn'); return; }
+    var sep = parseInt($('wig-comb-sep')?.value || '15');
+    var interval = parseInt($('wig-comb-interval')?.value || '3');
+    logMsg('Exporting comb video: sep=' + sep + 'px interval=' + interval + 'f', 'info');
+    // Use server-side comb endpoint if source video available
+    if (state.sourceFile && state.depthFile) {
+      var fd = new FormData();
+      fd.append('file', state.sourceFile, state.sourceFile.name);
+      fd.append('separation', sep.toString());
+      fd.append('interval', interval.toString());
+      fd.append('blur_depth', '5');
+      fd.append('pivot_x', '0.5');
+      fd.append('pivot_y', '0.5');
+      DS.fetchWithProgress(SERVER + '/wigglegram/comb', { method: 'POST', body: fd }).then(function(r) {
+        if (!r.ok) throw new Error('Server error: ' + r.status);
+        return r.blob();
+      }).then(function(blob) {
+        DS.saveBlob(blob, 'comb_3d.mp4');
+        logMsg('Comb video exported', 'ok');
+      }).catch(function(err) {
+        logMsg('Comb export failed: ' + err.message, 'err');
+      });
+    }
+  });
 
   // ── Effect tabs ────────────────────────────────────────
   var fxTabs = document.querySelectorAll('.fx-tab');
