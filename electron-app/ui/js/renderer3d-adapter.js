@@ -78,6 +78,9 @@ window.R3DAdapter = (function() {
     if (!Renderer3D.isVisible()) return;
     var isHolo = _isHoloActive();
 
+    // Ensure correct mode + material swap
+    Renderer3D.setHoloMode(isHolo);
+
     Renderer3D.setElevation(parseFloat($("elev-height")?.value || "0.3"));
     Renderer3D.setDensity(parseInt($("elev-density")?.value || "40"));
     Renderer3D.setGridType(isHolo ? ($("holo-grid-type")?.value || "square") : ($("elev-grid-type")?.value || "square"));
@@ -161,12 +164,17 @@ window.R3DAdapter = (function() {
     var srcBlob = _state.currentBlob || _state.sourceFile || _state.currentFile;
     if (!depthBlob) return;
 
-    Renderer3D.setHoloMode(!!asHolo);
-
-    if (!Renderer3D.isVisible()) {
-      Renderer3D.init(_canvas, { width: 1200, height: 800 });
-      Renderer3D._buildMesh(parseInt($("elev-density")?.value || "40"), $("elev-grid-type")?.value || "square");
+    // Already visible — just switch mode and re-sync
+    if (Renderer3D.isVisible()) {
+      Renderer3D.setHoloMode(!!asHolo);
+      syncAll();
+      return;
     }
+
+    // First show — init, load textures, start loop
+    Renderer3D.init(_canvas, { width: 1200, height: 800 });
+    Renderer3D._buildMesh(parseInt($("elev-density")?.value || "40"), $("elev-grid-type")?.value || "square");
+    Renderer3D.setHoloMode(!!asHolo);
 
     var smoothing = parseInt($("elev-smooth")?.value || "3");
     Renderer3D.reload(depthBlob, srcBlob, smoothing, function() {
