@@ -76,21 +76,34 @@
     img.src = url;
   }
 
+  var VIDEO_EXTS = ['.mp4', '.mov', '.webm', '.avi', '.mkv', '.m4v'];
+  function isVideoFile(name) {
+    var ext = '.' + name.split('.').pop().toLowerCase();
+    return VIDEO_EXTS.indexOf(ext) >= 0;
+  }
+
   on('btnLoadSource', 'click', function() { $('inputSource').click(); });
   on('inputSource', 'change', function(e) {
     var file = e.target.files && e.target.files[0];
     if (!file) return;
     state.sourceFile = file;
+    state._sourceIsVideo = file.type.startsWith('video/') || isVideoFile(file.name);
     $('sourceFilename').textContent = file.name;
     $('sourceFilename').classList.add('loaded');
-    logMsg('Loading source: ' + file.name);
-    loadFileAsImage(file, function(err, img) {
-      if (err) { logMsg(err.message, 'err'); return; }
-      state.sourceImg = img;
-      drawImage(img);
-      $('infoLeft').textContent = img.naturalWidth + ' x ' + img.naturalHeight;
-      logMsg('Source loaded: ' + img.naturalWidth + 'x' + img.naturalHeight, 'ok');
-    });
+    logMsg('Loading source: ' + file.name + (state._sourceIsVideo ? ' (video)' : ''));
+
+    if (state._sourceIsVideo) {
+      logMsg('Video source loaded — load matching depth video to enable 3D effects', 'ok');
+      _checkVideoReady();
+    } else {
+      loadFileAsImage(file, function(err, img) {
+        if (err) { logMsg(err.message, 'err'); return; }
+        state.sourceImg = img;
+        drawImage(img);
+        $('infoLeft').textContent = img.naturalWidth + ' x ' + img.naturalHeight;
+        logMsg('Source loaded: ' + img.naturalWidth + 'x' + img.naturalHeight, 'ok');
+      });
+    }
   });
 
   on('btnLoadDepth', 'click', function() { $('inputDepth').click(); });
@@ -98,13 +111,110 @@
     var file = e.target.files && e.target.files[0];
     if (!file) return;
     state.depthFile = file;
+    state._depthIsVideo = file.type.startsWith('video/') || isVideoFile(file.name);
     $('depthFilename').textContent = file.name;
     $('depthFilename').classList.add('loaded');
-    logMsg('Depth map loaded: ' + file.name, 'ok');
-    loadFileAsImage(file, function(err, img) {
-      if (!err) state.depthImg = img;
-    });
+    logMsg('Depth map loaded: ' + file.name + (state._depthIsVideo ? ' (video)' : ''), 'ok');
+
+    if (state._depthIsVideo) {
+      _checkVideoReady();
+    } else {
+      loadFileAsImage(file, function(err, img) {
+        if (!err) state.depthImg = img;
+      });
+    }
   });
+
+  // ── Video mode: init when both source + depth videos loaded ──
+  function _checkVideoReady() {
+    if (!state._sourceIsVideo || !state._depthIsVideo) {
+      // Show controls section but indicate need both
+      $('ws-video-controls').style.display = 'none';
+      return;
+    }
+    if (!state.sourceFile || !state.depthFile) return;
+
+    logMsg('Both video files loaded — initializing 3D video effects...', 'info');
+    $('ws-video-controls').style.display = '';
+
+    // Create video info object
+    var videoInfo = { fps: 24, duration: 0 };
+
+    // Init VideoFX with both video blobs
+    VideoFX.init(state.sourceFile, state.depthFile, videoInfo, $('elev-canvas')).then(function() {
+      var dur = VideoFX.getDuration();
+      logMsg('Video effects ready: ' + dur.toFixed(1) + 's — use effect tabs + play/scrub', 'ok');
+      $('ws-time-total').textContent = _fmtTime(dur);
+      $('infoLeft').textContent = 'Video: ' + dur.toFixed(1) + 's';
+
+      // Auto-show elevation
+      var fx = state.activeFx || 'elevation';
+      VideoFX.show(fx === 'hologram' ? 'hologram' : 'elevation');
+      if (window.R3DAdapter) R3DAdapter.syncAll();
+    }).catch(function(err) {
+      logMsg('Video init failed: ' + err.message, 'err');
+    });
+  }
+
+  function _fmtTime(s) {
+    var m = Math.floor(s / 60);
+    var sec = Math.floor(s % 60);
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+
+  // ── Video playback controls ──
+  on('ws-play', 'click', function() {
+    if (!VideoFX.isActive()) return;
+    VideoFX.play();
+    $('ws-play').disabled = true;
+    $('ws-pause').disabled = false;
+    logMsg('Playing', 'ok');
+  });
+
+  on('ws-pause', 'click', function() {
+    VideoFX.pause();
+    $('ws-play').disabled = false;
+    $('ws-pause').disabled = true;
+  });
+
+  on('ws-stop', 'click', function() {
+    VideoFX.pause();
+    VideoFX.seek(0);
+    $('ws-play').disabled = false;
+    $('ws-pause').disabled = true;
+  });
+
+  // Timeline scrub
+  (function() {
+    var track = $('ws-timeline-track');
+    if (!track) return;
+    var dragging = false;
+    function scrub(e) {
+      var rect = track.getBoundingClientRect();
+      var pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      VideoFX.seekNormalized(pos);
+    }
+    track.addEventListener('mousedown', function(e) { dragging = true; scrub(e); });
+    window.addEventListener('mousemove', function(e) { if (dragging) scrub(e); });
+    window.addEventListener('mouseup', function() { dragging = false; });
+  })();
+
+  // Update timeline display during playback
+  setInterval(function() {
+    if (!VideoFX.isActive()) return;
+    var t = VideoFX.getPlayhead();
+    var dur = VideoFX.getDuration();
+    if (dur <= 0) return;
+    var pct = (t / dur) * 100;
+    $('ws-timeline-fill').style.width = pct + '%';
+    $('ws-timeline-head').style.left = pct + '%';
+    $('ws-time-current').textContent = _fmtTime(t);
+    // Update play/pause state
+    if (VideoFX.isPlaying()) {
+      $('ws-play').disabled = true;
+      $('ws-pause').disabled = false;
+    }
+  }, 50);
 
   // ── Effect tabs ────────────────────────────────────────
   var fxTabs = document.querySelectorAll('.fx-tab');
@@ -118,7 +228,16 @@
         var target = $('pane-' + tab.getAttribute('data-fx'));
         if (target) target.classList.add('active');
         state.activeFx = tab.getAttribute('data-fx');
-        if (tab.getAttribute('data-fx') !== 'elevation' && tab.getAttribute('data-fx') !== 'hologram' && window._elevRenderer) {
+        var fx = tab.getAttribute('data-fx');
+        // Video mode: switch 3D effect type
+        if (VideoFX.isActive()) {
+          if (fx === 'elevation' || fx === 'hologram') {
+            VideoFX.show(fx);
+            if (window.R3DAdapter) R3DAdapter.syncAll();
+          } else {
+            VideoFX.hide();
+          }
+        } else if (fx !== 'elevation' && fx !== 'hologram' && window._elevRenderer) {
           window._elevRenderer.hide();
         }
       });

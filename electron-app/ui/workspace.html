@@ -37,12 +37,30 @@
         <button class="btn btn-sm" id="btnLoadSource">Load Original</button>
         <span class="filename" id="sourceFilename">No file loaded</span>
       </div>
-      <input type="file" id="inputSource" accept="image/*" style="display:none"/>
+      <input type="file" id="inputSource" accept="image/*,video/*,.mp4,.mov,.webm,.avi" style="display:none"/>
       <div class="file-row">
         <button class="btn btn-sm" id="btnLoadDepth">Load Depth Map</button>
         <span class="filename" id="depthFilename">No file loaded</span>
       </div>
-      <input type="file" id="inputDepth" accept="image/*" style="display:none"/>
+      <input type="file" id="inputDepth" accept="image/*,video/*,.mp4,.mov,.webm,.avi" style="display:none"/>
+    </div>
+
+    <!-- Video Playback (shown when video loaded) -->
+    <div class="sb-section" id="ws-video-controls" style="display:none">
+      <div class="sb-title">Video Playback</div>
+      <div class="btn-row" style="margin-bottom:var(--sp-lg)">
+        <button class="btn btn-sm" id="ws-play">&#9654; Play</button>
+        <button class="btn btn-sm" id="ws-pause" disabled>&#9646;&#9646; Pause</button>
+        <button class="btn btn-sm" id="ws-stop">&#9632; Stop</button>
+      </div>
+      <div style="position:relative;height:6px;background:var(--raised);border-radius:3px;cursor:pointer;margin-bottom:var(--sp-md)" id="ws-timeline-track">
+        <div style="position:absolute;top:0;left:0;height:100%;background:var(--accent);border-radius:3px;width:0%;pointer-events:none" id="ws-timeline-fill"></div>
+        <div style="position:absolute;top:-4px;width:2px;height:14px;background:var(--ok);pointer-events:none;left:0%" id="ws-timeline-head"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:var(--fs-sm);color:var(--muted)">
+        <span id="ws-time-current">0:00</span>
+        <span id="ws-time-total">0:00</span>
+      </div>
     </div>
 
     <!-- Effect Selector -->
@@ -346,6 +364,7 @@
 <script src="js/renderer3d-shaders.js"></script>
 <script src="js/renderer3d.js"></script>
 <script src="js/renderer3d-adapter.js"></script>
+<script src="js/video-effects.js"></script>
 <script src="js/common.js"></script>
 <script src="js/workspace.js"></script>
 
