@@ -29,7 +29,7 @@ window.R3D_SHADERS = (function() {
     '  vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);',
     '  gl_Position = projectionMatrix * mvPos;',
     '  vScreen = gl_Position.xy * 0.5 + 0.5;',
-    '  gl_PointSize = 3.0;',
+    '  gl_PointSize = 4.0 + depth * 4.0;',
     '}'
   ].join('\n');
 

@@ -571,7 +571,9 @@ window.Renderer3D = (function() {
 
   function setGridType(type) {
     if (type !== _lastGridType) _buildMesh(_lastDensity || 40, type);
+    // Dot/dotmatrix: show points, hide lines for dotmatrix (dots only)
     if (_gridPoints) _gridPoints.visible = (type === 'dot' || type === 'dotmatrix');
+    if (_gridLines) _gridLines.visible = (type !== 'dotmatrix');
   }
 
   function setScanLines(opts) {
