@@ -1345,6 +1345,7 @@ async function loadFile(file) {
   state.depthBlob = null;
   state._saved = false;
   state.sessionId = null;
+  state._videoSessionId = null;
   state.videoBlob = null;
   state.videoResultBlob = null;
   state.videoInfo = null;
@@ -2205,6 +2206,7 @@ async function processVideo() {
     if (!startR.ok) throw new Error((await startR.json()).detail || "Upload failed");
 
     const session = await startR.json();
+    state._videoSessionId = session.session_id; // video session for frame access
     const total = session.frames;
     const uploadTime = Math.round((Date.now() - uploadStart) / 1000);
     setIndeterminate(false);
@@ -2796,16 +2798,18 @@ function setupTimeline() {
     // Effects enabled + 3D effect active → update 3D renderer with this frame
     var fx = getActiveFx();
     if (state.fxEnabled && (fx === "elevation" || fx === "hologram") && window._elevRenderer) {
+      // Show 3D canvas if not already
+      if (!Renderer3D.isVisible()) window._elevRenderer.show(fx === "hologram");
       // Load this frame's depth + source into 3D renderer
       clearTimeout(_scrubDebounce);
       _scrubDebounce = setTimeout(function() {
         _loadFrameInto3D(idx);
-      }, 50);
+      }, 100);
       return;
     }
 
     // Effects enabled + server effect → request preview for this frame
-    if (state.fxEnabled && state.sessionId && fx !== "elevation" && fx !== "hologram" && fx !== "transition") {
+    if (state.fxEnabled && state._videoSessionId && fx !== "elevation" && fx !== "hologram" && fx !== "transition") {
       clearTimeout(_scrubDebounce);
       _scrubDebounce = setTimeout(function() {
         _previewEffectAtFrame(idx);
@@ -2828,14 +2832,15 @@ function setupTimeline() {
 
   // Load specific frame into Three.js 3D renderer
   async function _loadFrameInto3D(frameIdx) {
-    if (!state.sessionId) return;
+    var vsid = state._videoSessionId;
+    if (!vsid) return;
     try {
-      // Fetch source frame
-      var srcR = await fetch(SERVER + "/process/video/source/" + state.sessionId + "/" + frameIdx);
+      // Fetch source frame from video session
+      var srcR = await fetch(SERVER + "/process/video/source/" + vsid + "/" + frameIdx);
       var srcBlob = srcR.ok ? await srcR.blob() : null;
-      // Fetch depth frame
+      // Fetch depth frame from video session
       var smooth = parseFloat($("smooth")?.value || "0.4");
-      var depR = await fetch(SERVER + "/process/video/frame/" + state.sessionId + "/" + frameIdx + "?format=png_gray&smooth=" + smooth + "&align_scale=true");
+      var depR = await fetch(SERVER + "/process/video/frame/" + vsid + "/" + frameIdx + "?format=png_gray&smooth=" + smooth + "&align_scale=true");
       var depBlob = depR.ok ? await depR.blob() : null;
       if (srcBlob) state._latestSrcBlob = srcBlob;
       if (depBlob) state._latestDepthBlob = depBlob;
@@ -2849,12 +2854,13 @@ function setupTimeline() {
 
   // Preview server-side effect at specific video frame
   async function _previewEffectAtFrame(frameIdx) {
-    if (!state.sessionId) return;
+    var vsid = state._videoSessionId;
+    if (!vsid) return;
     var fx = getActiveFx();
     var params = getEffectParams(fx);
     try {
-      // Create a per-frame session
-      var srcR = await fetch(SERVER + "/process/video/source/" + state.sessionId + "/" + frameIdx);
+      // Create a per-frame session from video source
+      var srcR = await fetch(SERVER + "/process/video/source/" + vsid + "/" + frameIdx);
       if (!srcR.ok) return;
       var srcBlob = await srcR.blob();
       var fd = new FormData();
