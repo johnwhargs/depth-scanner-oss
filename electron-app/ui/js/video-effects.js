@@ -91,27 +91,41 @@ window.VideoFX = (function() {
       }
 
       // Set handlers BEFORE src to avoid race condition
-      _srcVideo.onloadeddata = checkBoth;
-      _depthVideo.onloadeddata = checkBoth;
-      _srcVideo.onerror = function(e) { console.error('[VideoFX] src error', e); reject(new Error('Source video load failed')); };
-      _depthVideo.onerror = function(e) { console.error('[VideoFX] depth error', e); reject(new Error('Depth video load failed')); };
+      _srcVideo.onloadedmetadata = function() { console.log('[VideoFX] src metadata: dur=' + _srcVideo.duration + ' w=' + _srcVideo.videoWidth); if (loaded < 2) checkBoth(); };
+      _depthVideo.onloadedmetadata = function() { console.log('[VideoFX] depth metadata: dur=' + _depthVideo.duration + ' w=' + _depthVideo.videoWidth); if (loaded < 2) checkBoth(); };
+      _srcVideo.onloadeddata = function() { if (loaded < 2) checkBoth(); };
+      _depthVideo.onloadeddata = function() { if (loaded < 2) checkBoth(); };
+      _srcVideo.oncanplaythrough = function() { if (loaded < 2) checkBoth(); };
+      _depthVideo.oncanplaythrough = function() { if (loaded < 2) checkBoth(); };
+      // Don't reject on error — log and let timeout handle (one video might have unsupported codec)
+      _srcVideo.onerror = function() {
+        var err = _srcVideo.error;
+        console.error('[VideoFX] src error: code=' + (err ? err.code : '?') + ' msg=' + (err ? err.message : 'unknown'));
+      };
+      _depthVideo.onerror = function() {
+        var err = _depthVideo.error;
+        console.error('[VideoFX] depth error: code=' + (err ? err.code : '?') + ' msg=' + (err ? err.message : 'unknown'));
+      };
 
-      // Also listen for canplaythrough as fallback
-      _srcVideo.oncanplaythrough = function() { if (loaded < 1) checkBoth(); };
-      _depthVideo.oncanplaythrough = function() { if (loaded < 1) checkBoth(); };
-
+      console.log('[VideoFX] Setting src URLs: src=' + srcUrl + ' depth=' + depthUrl);
       _srcVideo.src = srcUrl;
       _depthVideo.src = depthUrl;
       _srcVideo.load();
       _depthVideo.load();
 
-      // Timeout fallback — if loadeddata never fires (some codecs)
+      // Timeout — if nothing loads in 5s, check what we have
       setTimeout(function() {
         if (loaded < 2) {
-          console.warn('[VideoFX] Timeout waiting for video load, proceeding anyway');
-          _duration = _srcVideo.duration || _depthVideo.duration || _duration;
-          _trimOut = _duration;
-          resolve();
+          var srcOk = _srcVideo.readyState >= 2;
+          var depOk = _depthVideo.readyState >= 2;
+          console.warn('[VideoFX] Timeout: srcReady=' + srcOk + '(' + _srcVideo.readyState + ') depReady=' + depOk + '(' + _depthVideo.readyState + ')');
+          if (srcOk || depOk) {
+            _duration = _srcVideo.duration || _depthVideo.duration || _duration;
+            _trimOut = _duration;
+            resolve();
+          } else {
+            reject(new Error('Videos could not be loaded — check codec (needs H.264)'));
+          }
         }
       }, 5000);
     });
