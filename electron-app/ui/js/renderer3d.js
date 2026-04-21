@@ -64,6 +64,7 @@ window.Renderer3D = (function() {
 
   // Camera state (degrees)
   var _camRX = -35, _camRY = 15, _camRZ = 0, _camZoom = 1.2;
+  var _panX = 0, _panY = 0; // scene pan offset
 
   // Frame-ahead buffer
   var _frameBuffer = {
@@ -491,14 +492,17 @@ window.Renderer3D = (function() {
     var rx = _camRX * Math.PI / 180;
     var ry = _camRY * Math.PI / 180;
     _camera.position.set(
-      dist * Math.sin(ry) * Math.cos(rx),
-      dist * Math.sin(-rx),
+      dist * Math.sin(ry) * Math.cos(rx) + _panX,
+      dist * Math.sin(-rx) + _panY,
       dist * Math.cos(ry) * Math.cos(rx)
     );
-    _camera.lookAt(0, 0, 0);
+    _camera.lookAt(_panX, _panY, 0);
     var rz = _camRZ * Math.PI / 180;
     _camera.up.set(Math.sin(rz), Math.cos(rz), 0);
   }
+
+  function setPan(x, y) { _panX = x; _panY = y; }
+  function getPan() { return { x: _panX, y: _panY }; }
 
   function getCamera() { return { rx: _camRX, ry: _camRY, rz: _camRZ, zoom: _camZoom }; }
 
@@ -789,7 +793,7 @@ window.Renderer3D = (function() {
     init: init, dispose: dispose, resize: resize,
     setDepthImage: setDepthImage, setSourceImage: setSourceImage, updateFrame: updateFrame,
     setLayerVisible: setLayerVisible, setLayerOpacity: setLayerOpacity,
-    setCamera: setCamera, setCameraPreset: setCameraPreset, getCamera: getCamera,
+    setCamera: setCamera, setCameraPreset: setCameraPreset, getCamera: getCamera, setPan: setPan, getPan: getPan,
     setDensity: setDensity, setGridType: setGridType,
     setElevation: setElevation, setSplitElevation: setSplitElevation, clearSplitElevation: clearSplitElevation,
     setColors: setColors, setGlow: setGlow, setScanLines: setScanLines,

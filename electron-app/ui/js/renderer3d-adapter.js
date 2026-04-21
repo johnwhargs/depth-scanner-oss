@@ -9,6 +9,7 @@ window.R3DAdapter = (function() {
   var $ = typeof DS !== 'undefined' ? DS.$ : function(id) { return document.getElementById(id); };
   var _canvas = null;
   var _state = null;
+  var panX = 0, panY = 0;
   var _logFn = typeof DS !== 'undefined' ? DS.logMsg : (window.log || console.log);
   var _saveFn = typeof DS !== 'undefined' ? DS.saveBlob : window.saveBlob;
   var _SERVER = typeof DS !== 'undefined' ? DS.SERVER : (window.SERVER || 'http://127.0.0.1:7843');
@@ -187,41 +188,73 @@ window.R3DAdapter = (function() {
     var gizmo = $("gizmo-canvas"); if (gizmo) gizmo.style.display = "none";
   }
 
-  // ── Drag orbit ──
+  // ── Blender-style controls ──
+  // LMB drag = orbit, MMB drag = pan, Shift+LMB = pan, Scroll = zoom
   function setupDrag() {
-    var orbiting = false, startX = 0, startY = 0, startRX = 0, startRY = 0;
+    var mode = null; // 'orbit' | 'pan'
+    var startX = 0, startY = 0, startRX = 0, startRY = 0;
+    var startPanX = 0, startPanY = 0;
 
     _canvas.addEventListener("mousedown", function(e) {
-      orbiting = true; startX = e.clientX; startY = e.clientY;
+      e.preventDefault();
+      startX = e.clientX; startY = e.clientY;
       var cam = Renderer3D.getCamera();
       startRX = cam.rx; startRY = cam.ry;
-      _canvas.style.cursor = "grabbing"; e.preventDefault();
+      startPanX = panX; startPanY = panY;
+
+      // MMB or Shift+LMB = pan
+      if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
+        mode = 'pan';
+        _canvas.style.cursor = "move";
+      } else if (e.button === 0) {
+        mode = 'orbit';
+        _canvas.style.cursor = "grabbing";
+      }
     });
 
     window.addEventListener("mousemove", function(e) {
-      if (!orbiting) return;
-      var newRY = Math.max(-180, Math.min(180, startRY + (e.clientX - startX) * 0.5));
-      var newRX = Math.max(-90, Math.min(90, startRX + (e.clientY - startY) * 0.3));
-      Renderer3D.setCamera(newRX, newRY, Renderer3D.getCamera().rz, Renderer3D.getCamera().zoom);
-      // Sync sliders
-      if ($("elev-ry")) { $("elev-ry").value = newRY; $("elev-ry-v").textContent = Math.round(newRY) + "\u00B0"; }
-      if ($("elev-rx")) { $("elev-rx").value = newRX; $("elev-rx-v").textContent = Math.round(newRX) + "\u00B0"; }
-      if ($("holo-ry")) { $("holo-ry").value = newRY; $("holo-ry-v").textContent = Math.round(newRY) + "\u00B0"; }
-      if ($("holo-rx")) { $("holo-rx").value = newRX; $("holo-rx-v").textContent = Math.round(newRX) + "\u00B0"; }
+      if (!mode) return;
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
+
+      if (mode === 'orbit') {
+        var newRY = startRY + dx * 0.5;
+        // Wrap Y rotation instead of clamping
+        while (newRY > 180) newRY -= 360;
+        while (newRY < -180) newRY += 360;
+        var newRX = Math.max(-90, Math.min(90, startRX + dy * 0.3));
+        var cam = Renderer3D.getCamera();
+        Renderer3D.setCamera(newRX, newRY, cam.rz, cam.zoom);
+        _syncCameraToDOM(newRX, newRY, cam.rz, cam.zoom);
+      } else if (mode === 'pan') {
+        // Pan moves the scene target (translates all layers)
+        panX = startPanX + dx * 0.003;
+        panY = startPanY - dy * 0.003;
+        _applyPan();
+      }
     });
 
     window.addEventListener("mouseup", function() {
-      if (orbiting) { orbiting = false; _canvas.style.cursor = "grab"; }
+      if (mode) { mode = null; _canvas.style.cursor = "grab"; }
     });
 
+    // Scroll = zoom (smooth)
     _canvas.addEventListener("wheel", function(e) {
       e.preventDefault();
       var cam = Renderer3D.getCamera();
-      var newZ = Math.max(0.5, Math.min(3, cam.zoom + (e.deltaY > 0 ? -0.1 : 0.1)));
+      var zoomSpeed = 0.1 * (cam.zoom / 1.2); // proportional zoom
+      var newZ = Math.max(0.3, Math.min(5, cam.zoom + (e.deltaY > 0 ? -zoomSpeed : zoomSpeed)));
       Renderer3D.setCamera(cam.rx, cam.ry, cam.rz, newZ);
       if ($("elev-zoom")) { $("elev-zoom").value = newZ; $("elev-zoom-v").textContent = newZ.toFixed(2); }
       if ($("holo-zoom")) { $("holo-zoom").value = newZ; }
     }, { passive: false });
+
+    // Prevent context menu on canvas
+    _canvas.addEventListener("contextmenu", function(e) { e.preventDefault(); });
+  }
+
+  function _applyPan() {
+    Renderer3D.setPan(panX, panY);
   }
 
   // ── Slider listeners ──
