@@ -450,9 +450,8 @@ def video_render(
                 rgb = cv2.resize(rgb, (w, h), interpolation=cv2.INTER_LINEAR)
             writer.write(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
         writer.release()
-        # Clean up session
-        video_sessions[session_id].cleanup()
-        del video_sessions[session_id]
+        # Keep session alive for additional renders (e.g. grayscale depth MP4 for effects)
+        # Session will be cleaned up when limit reached or app closes
         return FileResponse(tmp_out.name, media_type="video/mp4", filename="depth_video.mp4")
 
 
