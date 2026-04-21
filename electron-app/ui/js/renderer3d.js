@@ -326,8 +326,14 @@ window.Renderer3D = (function() {
   function setBloom() {} // placeholder
 
   // ── Render (multi-pass, single material) ──
+  var _renderCount = 0;
   function render() {
-    if (!renderer || !depthLoaded || !material) return;
+    if (!renderer || !depthLoaded || !material) {
+      if (_renderCount === 0) console.warn('[R3D] render skipped: renderer=' + !!renderer + ' depthLoaded=' + depthLoaded + ' material=' + !!material);
+      return;
+    }
+    if (_renderCount < 3) console.log('[R3D] render #' + _renderCount + ' videoMode=' + _videoMode + ' holoMode=' + holoMode + ' showGrid=' + showGrid);
+    _renderCount++;
 
     U.uTime.value = performance.now() / 1000;
     updateCamera();
@@ -502,7 +508,7 @@ window.Renderer3D = (function() {
 
   // ── Video Texture Mode ──
   function setVideoTextures(srcVideoEl, depthVideoEl) {
-    // Replace static textures with VideoTextures
+    console.log('[R3D] setVideoTextures src=' + srcVideoEl.readyState + ' depth=' + depthVideoEl.readyState + ' src.dur=' + srcVideoEl.duration + ' depth.dur=' + depthVideoEl.duration);
     if (srcTex) srcTex.dispose();
     if (depthTex) depthTex.dispose();
 

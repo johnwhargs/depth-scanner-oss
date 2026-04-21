@@ -53,10 +53,13 @@ window.VideoFX = (function() {
     var srcUrl = URL.createObjectURL(srcBlob);
     var depthUrl = URL.createObjectURL(depthBlob);
 
+    console.log('[VideoFX] init: srcBlob=' + srcBlob.size + 'B depthBlob=' + depthBlob.size + 'B fps=' + _fps);
+
     return new Promise(function(resolve, reject) {
       var loaded = 0;
       function checkBoth() {
         loaded++;
+        console.log('[VideoFX] video loaded (' + loaded + '/2) src.dur=' + _srcVideo.duration + ' depth.dur=' + _depthVideo.duration);
         if (loaded >= 2) {
           _duration = _srcVideo.duration || _duration;
           _trimOut = _duration;
@@ -79,6 +82,7 @@ window.VideoFX = (function() {
 
   // ── Show 3D canvas with video textures ──
   function show(effectType) {
+    console.log('[VideoFX] show(' + effectType + ') srcReady=' + !!_srcVideo + ' depthReady=' + !!_depthVideo + ' srcDur=' + (_srcVideo?.duration || 0));
     if (!_srcVideo || !_depthVideo) return;
     if (!Renderer3D.isVisible()) {
       Renderer3D.init(_canvas, { width: 1200, height: 800 });
@@ -118,6 +122,7 @@ window.VideoFX = (function() {
 
   // ── Playback ──
   function play() {
+    console.log('[VideoFX] play() srcTime=' + (_srcVideo?.currentTime || 0) + ' depthTime=' + (_depthVideo?.currentTime || 0));
     if (!_srcVideo || !_depthVideo) return;
     // Start from trim in if at end
     if (_srcVideo.currentTime >= _trimOut - 0.05) {
@@ -150,6 +155,7 @@ window.VideoFX = (function() {
   }
 
   function seek(time) {
+    console.log('[VideoFX] seek(' + time.toFixed(2) + ')');
     time = Math.max(_trimIn, Math.min(_trimOut, time));
     if (_srcVideo) _srcVideo.currentTime = time;
     if (_depthVideo) _depthVideo.currentTime = time;

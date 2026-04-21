@@ -160,6 +160,7 @@ window.R3DAdapter = (function() {
 
   // ── Show/hide elevation canvas ──
   function showElevCanvas(asHolo) {
+    console.log('[R3DAdapter] showElevCanvas holo=' + asHolo + ' videoFxActive=' + (typeof VideoFX !== 'undefined' && VideoFX.isActive()));
     var depthBlob = _state._latestDepthBlob || _state.depthBlob || _state.depthFile;
     var srcBlob = _state._latestSrcBlob || _state.currentBlob || _state.sourceFile || _state.currentFile;
     if (!depthBlob) return;
