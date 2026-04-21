@@ -438,7 +438,7 @@ def video_render(
     else:
         tmp_out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
         tmp_out.close()
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        fourcc = cv2.VideoWriter_fourcc(*"avc1")
         writer = cv2.VideoWriter(tmp_out.name, fourcc, sess.fps, (w, h))
         for d in depths:
             if format == "png_color":
@@ -536,7 +536,7 @@ async def process_video(
             tmp_out.close()
 
             out_fps = fps / every
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            fourcc = cv2.VideoWriter_fourcc(*"avc1")
             writer = cv2.VideoWriter(tmp_out.name, fourcc, out_fps, (w, h))
 
             for depth in depths:
@@ -894,7 +894,7 @@ async def wigglegram(
         tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
         tmp.close()
         w, h = views[0].size
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        fourcc = cv2.VideoWriter_fourcc(*"avc1")
         writer = cv2.VideoWriter(tmp.name, fourcc, float(fps), (w, h))
         for frame in bounce:
             bgr = cv2.cvtColor(np.array(frame), cv2.COLOR_RGB2BGR)
@@ -953,7 +953,7 @@ async def wigglegram_comb(
 
     tmp_out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
     tmp_out.close()
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fourcc = cv2.VideoWriter_fourcc(*"avc1")
     writer = cv2.VideoWriter(tmp_out.name, fourcc, float(fps_orig), (w_orig, h_orig))
 
     engine.load_model(model)

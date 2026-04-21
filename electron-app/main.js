@@ -64,8 +64,8 @@ async function startBackend() {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  proc.stdout.on('data', d => process.stdout.write(d));
-  proc.stderr.on('data', d => process.stderr.write(d));
+  proc.stdout.on('data', d => { try { process.stdout.write(d); } catch(e) {} });
+  proc.stderr.on('data', d => { try { process.stderr.write(d); } catch(e) {} });
   proc.on('error', err => console.error('[Backend] Spawn error:', err.message));
   proc.on('exit', code => {
     console.log(`[Backend] Exited (code ${code})`);
