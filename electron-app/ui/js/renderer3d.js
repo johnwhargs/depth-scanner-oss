@@ -1,258 +1,206 @@
 /**
- * renderer3d.js — Three.js multi-layer elevation/hologram renderer
- * Replaces raw WebGL renderer. Depends on: three.min.js, three-addons/*, renderer3d-shaders.js
- * Exposes: window.Renderer3D
+ * renderer3d.js — Three.js elevation/hologram renderer (clean rewrite)
+ * Single shader, multi-pass rendering — matches original WebGL exactly.
+ * Depends on: three.min.js, renderer3d-shaders.js
  */
 window.Renderer3D = (function() {
   'use strict';
 
   var S = window.R3D_SHADERS;
-  if (!S) { console.error('[R3D] renderer3d-shaders.js not loaded'); return {}; }
+  if (!S) { console.error('[R3D] shaders not loaded'); return {}; }
   if (typeof THREE === 'undefined') { console.error('[R3D] three.js not loaded'); return {}; }
 
-  // ── Internal state ──
-  var _canvas = null;
-  var _renderer = null;
-  var _scene = null;
-  var _camera = null;
-  var _composer = null;
-  var _bloomPass = null;
-  var _animId = null;
-  var _loopActive = false;
+  // ── State ──
+  var canvas, renderer, scene, camera;
+  var material;          // single ShaderMaterial for all passes
+  var triGeom, lineGeom, pointGeom;
+  var triMesh, lineMesh, pointMesh;
+  var depthTex, srcTex;
+  var depthLoaded = false, srcLoaded = false;
+  var depthDataRaw, depthW, depthH;
+  var lastDensity = 0, lastGridType = '', lastSmoothing = -1;
+  var holoMode = false, visible = false, initialized = false;
+  var loopActive = false, animId = null;
 
-  // Layers
-  var _sourceGroup = null;
-  var _depthGroup = null;
-  var _gridGroup = null;
-  var _sourceMesh = null;
-  var _depthMesh = null;
-  var _gridLines = null;
-  var _gridPoints = null;
-
-  // Textures
-  var _depthTex = null;
-  var _srcTex = null;
-  var _depthLoaded = false;
-  var _srcLoaded = false;
-  var _depthDataRaw = null;
-  var _depthW = 0, _depthH = 0;
-
-  // Materials
-  var _sourceMat = null;
-  var _depthMat = null;
-  var _gridMat = null;
-  var _pointsMat = null;
-  var _holoMat = null;
-
-  // Mesh state
-  var _lastDensity = 0;
-  var _lastGridType = '';
-  var _lastSmoothing = -1;
-
-  // Mode
-  var _holoMode = false;
-  var _visible = false;
-  var _initialized = false;
+  // Camera
+  var camRX = -35, camRY = 15, camRZ = 0, camZoom = 1.2;
+  var panX = 0, panY = 0;
 
   // Animation
-  var _animType = null;
-  var _animT = 0;
-  var _animSpeed = 1.0;
-  var _animDir = 1;
-  var _animBaseRX = 0, _animBaseRY = 0, _animBaseRZ = 0, _animBaseZoom = 1.2;
+  var animType = null, animT = 0, animSpeed = 1, animDir = 1;
+  var animBaseRX, animBaseRY, animBaseRZ, animBaseZoom;
   var TWO_PI = Math.PI * 2;
 
-  // Camera state (degrees)
-  var _camRX = -35, _camRY = 15, _camRZ = 0, _camZoom = 1.2;
-  var _panX = 0, _panY = 0; // scene pan offset
-
-  // Frame-ahead buffer
-  var _frameBuffer = {
-    enabled: false,
-    capacity: 12,
-    targets: [],
-    writeHead: 0,
-    readHead: 0,
-    filled: 0,
-    paramVersion: 0,
-    state: 'idle'
-  };
-
-  // ── Deep-clone uniforms per material (critical — shallow copy shares value refs) ──
-  function _cloneUniforms(src) {
-    var out = {};
-    for (var key in src) {
-      var u = src[key];
-      if (u.value && u.value.isColor) {
-        out[key] = { value: u.value.clone() };
-      } else if (u.value && u.value.isVector2) {
-        out[key] = { value: u.value.clone() };
-      } else {
-        out[key] = { value: u.value };
-      }
-    }
-    return out;
-  }
-
-  // Base uniform definitions (templates — cloned per material)
-  var _uniformDefs = {
-    uDepth: { value: null },
-    uElevation: { value: 0.3 },
+  // Uniforms — single object, shared by one material
+  var U = {
+    uDepth:        { value: null },
+    uSrcTex:       { value: null },
+    uElevation:    { value: 0.3 },
     uElevOverride: { value: -100.0 },
-    uGapOffset: { value: 0.0 },
-    uGridColor: { value: new THREE.Color(0x00ff88) },
-    uGridColor2: { value: new THREE.Color(0x0044ff) },
+    uGapOffset:    { value: 0.0 },
+    uRenderMode:   { value: 0.0 },
+    uGlowPass:     { value: 0.0 },
+    uGridColor:    { value: new THREE.Color(0x00ff88) },
+    uGridColor2:   { value: new THREE.Color(0x0044ff) },
+    uHoloColor:    { value: new THREE.Color(0x00ff88) },
     uHoloColorMid: { value: new THREE.Color(0x00aa55) },
-    uHoloColor: { value: new THREE.Color(0x00ff88) },
-    uBgColor: { value: new THREE.Color(0x0a0a14) },
-    uGlow: { value: 0.8 },
-    uGlowPass: { value: 0.0 },
-    uSrcTex: { value: null },
-    uSrcTint: { value: new THREE.Color(0xffffff) },
-    uSrcTintAmt: { value: 0.0 },
-    uDither: { value: 0.0 },
-    uDitherStyle: { value: 1.0 }, // 0=none,1=bayer4,2=bayer8,3=halftone,4=crosshatch,5=noise
-    uScanLines: { value: 0.0 },
-    uScanDensity: { value: 3.0 },
-    uScanOpacity: { value: 0.3 },
-    uScanSpeed: { value: 0.5 },
-    uScanDir: { value: 1.0 },
-    uTime: { value: 0.0 }
+    uBgColor:      { value: new THREE.Color(0x0a0a14) },
+    uGlow:         { value: 0.8 },
+    uSrcTint:      { value: new THREE.Color(0xffffff) },
+    uSrcTintAmt:   { value: 0.0 },
+    uDither:       { value: 0.0 },
+    uDitherStyle:  { value: 1.0 },
+    uScanLines:    { value: 0.0 },
+    uScanDensity:  { value: 3.0 },
+    uScanOpacity:  { value: 0.3 },
+    uScanSpeed:    { value: 0.5 },
+    uScanDir:      { value: 1.0 },
+    uTime:         { value: 0.0 }
   };
 
-  // ── Update ALL materials' shared uniforms from current values ──
-  function _syncUniforms() {
-    var mats = [_sourceMat, _depthMat, _gridMat, _pointsMat, _holoMat];
-    var t = performance.now() / 1000.0;
-    for (var i = 0; i < mats.length; i++) {
-      var m = mats[i];
-      if (!m) continue;
-      var u = m.uniforms;
-      u.uDepth.value = _depthTex;
-      u.uElevation.value = _uniformDefs.uElevation.value;
-      // Gap only applies to grid layers, not source/depth/holo
-      if (m === _gridMat || m === _pointsMat) {
-        u.uGapOffset.value = _uniformDefs.uGapOffset.value;
-      } else {
-        u.uGapOffset.value = 0.0;
-      }
-      u.uSrcTex.value = _srcTex;
-      u.uTime.value = t;
-      // Colors (set on Color objects, not replace)
-      u.uGridColor.value.copy(_uniformDefs.uGridColor.value);
-      u.uGridColor2.value.copy(_uniformDefs.uGridColor2.value);
-      u.uHoloColorMid.value.copy(_uniformDefs.uHoloColorMid.value);
-      u.uHoloColor.value.copy(_uniformDefs.uHoloColor.value);
-      u.uBgColor.value.copy(_uniformDefs.uBgColor.value);
-      u.uSrcTint.value.copy(_uniformDefs.uSrcTint.value);
-      u.uSrcTintAmt.value = _uniformDefs.uSrcTintAmt.value;
-      u.uGlow.value = _uniformDefs.uGlow.value;
-      u.uDither.value = _uniformDefs.uDither.value;
-      u.uDitherStyle.value = _uniformDefs.uDitherStyle.value;
-      u.uScanLines.value = _uniformDefs.uScanLines.value;
-      u.uScanDensity.value = _uniformDefs.uScanDensity.value;
-      u.uScanOpacity.value = _uniformDefs.uScanOpacity.value;
-      u.uScanSpeed.value = _uniformDefs.uScanSpeed.value;
-      u.uScanDir.value = _uniformDefs.uScanDir.value;
-      // uElevOverride and uGlowPass are per-material — DON'T overwrite
-    }
-  }
+  // ── Split elevation state (per-pass overrides) ──
+  var splitEnabled = false;
+  var splitSrcElev = 0, splitGridElev = 0.3;
+
+  // ── Render config (read from adapter each frame) ──
+  var showGrid = true, showImage = false, showPoints = false, hideLines = false;
 
   // ── Init ──
-  function init(canvas, options) {
-    if (_initialized && _canvas === canvas) return; // already init'd on this canvas
-    options = options || {};
-    _canvas = canvas;
-    var w = options.width || 1200;
-    var h = options.height || 800;
+  function init(cvs, opts) {
+    if (initialized) return;
+    opts = opts || {};
+    canvas = cvs;
+    var w = opts.width || 1200, h = opts.height || 800;
 
-    _renderer = new THREE.WebGLRenderer({ canvas: _canvas, antialias: true, alpha: false, preserveDrawingBuffer: true });
-    _renderer.setSize(w, h);
-    _renderer.setPixelRatio(window.devicePixelRatio || 1);
-    _renderer.autoClear = true;
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false, preserveDrawingBuffer: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    renderer.autoClear = false;
 
-    _scene = new THREE.Scene();
-    _scene.background = new THREE.Color(0x0a0a14);
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(50, w / h, 0.01, 100);
 
-    _camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
-    _camera.position.set(0, 0, 4);
-    _camera.lookAt(0, 0, 0);
+    material = new THREE.ShaderMaterial({
+      uniforms: U,
+      vertexShader: S.vertexShader,
+      fragmentShader: S.fragmentShader,
+      side: THREE.DoubleSide,
+      depthTest: true,
+      depthWrite: true,
+      transparent: false
+    });
 
-    // Layer groups
-    _sourceGroup = new THREE.Group();
-    _sourceGroup.name = 'source';
-    _sourceGroup.renderOrder = 0;
+    initialized = true;
+    console.log('[R3D] Init ' + w + 'x' + h);
+  }
 
-    _depthGroup = new THREE.Group();
-    _depthGroup.name = 'depth';
-    _depthGroup.renderOrder = 1;
-    _depthGroup.visible = false;
+  // ── Mesh ──
+  function buildMesh(density, gridType) {
+    gridType = gridType || 'square';
+    if (density === lastDensity && gridType === lastGridType) return;
+    lastDensity = density; lastGridType = gridType;
 
-    _gridGroup = new THREE.Group();
-    _gridGroup.name = 'grid';
-    _gridGroup.renderOrder = 2;
+    var N = density;
+    var pos = new Float32Array(N * N * 3);
+    var uvs = new Float32Array(N * N * 2);
+    for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+      var i = y * N + x;
+      var u = x / (N - 1), v = y / (N - 1);
+      pos[i * 3] = (u - 0.5) * 2;
+      pos[i * 3 + 1] = 0;
+      pos[i * 3 + 2] = (v - 0.5) * 2;
+      uvs[i * 2] = u; uvs[i * 2 + 1] = v;
+    }
 
-    _scene.add(_sourceGroup);
-    _scene.add(_depthGroup);
-    _scene.add(_gridGroup);
+    // Triangles
+    var tri = [];
+    for (var y = 0; y < N - 1; y++) for (var x = 0; x < N - 1; x++) {
+      var tl = y * N + x, tr = tl + 1, bl = tl + N, br = bl + 1;
+      tri.push(tl, bl, tr, tr, bl, br);
+    }
 
-    // Post-processing
-    _composer = null;
-    _bloomPass = null;
-    if (typeof THREE.EffectComposer !== 'undefined') {
-      _composer = new THREE.EffectComposer(_renderer);
-      _composer.addPass(new THREE.RenderPass(_scene, _camera));
-      if (typeof THREE.UnrealBloomPass !== 'undefined') {
-        _bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(w, h), 0, 0.4, 0.85);
-        _bloomPass.enabled = false;
-        _composer.addPass(_bloomPass);
+    // Lines
+    var li = [], I = function(x, y) { return y * N + x; };
+    if (gridType === 'polygon') {
+      for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+        if (x < N - 1) li.push(I(x, y), I(x + 1, y));
+        if (y < N - 1) li.push(I(x, y), I(x, y + 1));
+        if (x < N - 1 && y < N - 1) { if (y % 2 === 0) li.push(I(x, y), I(x + 1, y + 1)); else li.push(I(x + 1, y), I(x, y + 1)); }
+      }
+    } else if (gridType === 'hex') {
+      for (var y = 0; y < N; y++) { var odd = y % 2; for (var x = 0; x < N; x++) {
+        if (x < N - 1 && (x + odd) % 2 === 0) li.push(I(x, y), I(x + 1, y));
+        if (y < N - 1 && (x + odd) % 2 === 0) { li.push(I(x, y), I(x, y + 1)); if (x < N - 1) li.push(I(x, y), I(x + 1, y + 1)); }
+      }}
+    } else if (gridType === 'cross') {
+      for (var y = 0; y < N - 1; y++) for (var x = 0; x < N - 1; x++) { li.push(I(x, y), I(x + 1, y + 1)); li.push(I(x + 1, y), I(x, y + 1)); }
+    } else if (gridType === 'dotmatrix') {
+      // No lines for dotmatrix — points only
+    } else if (gridType === 'dot') {
+      for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+        if (x < N - 1) li.push(I(x, y), I(x + 1, y));
+        if (y < N - 1) li.push(I(x, y), I(x, y + 1));
+        if (x < N - 1 && y < N - 1) li.push(I(x, y), I(x + 1, y + 1));
+        if (x > 0 && y < N - 1) li.push(I(x, y), I(x - 1, y + 1));
+      }
+    } else { // square
+      for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+        if (x < N - 1) li.push(I(x, y), I(x + 1, y));
+        if (y < N - 1) li.push(I(x, y), I(x, y + 1));
       }
     }
 
-    _initialized = true;
-    console.log('[R3D] Initialized ' + w + 'x' + h + (_composer ? ' +bloom' : ' (no post-processing)'));
+    // Remove old
+    if (triMesh) { scene.remove(triMesh); triMesh.geometry.dispose(); }
+    if (lineMesh) { scene.remove(lineMesh); lineMesh.geometry.dispose(); }
+    if (pointMesh) { scene.remove(pointMesh); pointMesh.geometry.dispose(); }
+
+    triGeom = new THREE.BufferGeometry();
+    triGeom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    triGeom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    triGeom.setIndex(tri);
+    triMesh = new THREE.Mesh(triGeom, material);
+    triMesh.frustumCulled = false;
+
+    lineGeom = new THREE.BufferGeometry();
+    lineGeom.setAttribute('position', new THREE.BufferAttribute(pos.slice(), 3));
+    lineGeom.setAttribute('uv', new THREE.BufferAttribute(uvs.slice(), 2));
+    if (li.length > 0) lineGeom.setIndex(li);
+    lineMesh = new THREE.LineSegments(lineGeom, material);
+    lineMesh.frustumCulled = false;
+
+    pointGeom = new THREE.BufferGeometry();
+    pointGeom.setAttribute('position', new THREE.BufferAttribute(pos.slice(), 3));
+    pointGeom.setAttribute('uv', new THREE.BufferAttribute(uvs.slice(), 2));
+    pointMesh = new THREE.Points(pointGeom, material);
+    pointMesh.frustumCulled = false;
+
+    // Add all to scene (visibility controlled per render pass)
+    scene.add(triMesh);
+    scene.add(lineMesh);
+    scene.add(pointMesh);
+
+    showPoints = (gridType === 'dot' || gridType === 'dotmatrix');
+    hideLines = (gridType === 'dotmatrix');
   }
 
-  // ── Dispose ──
-  function dispose() {
-    stopLoop();
-    if (_renderer) _renderer.dispose();
-    if (_depthTex) _depthTex.dispose();
-    if (_srcTex) _srcTex.dispose();
-    _depthLoaded = false;
-    _srcLoaded = false;
-    _initialized = false;
-  }
-
-  // ── Resize ──
-  function resize(w, h) {
-    if (!_renderer) return;
-    _renderer.setSize(w, h);
-    _camera.aspect = w / h;
-    _camera.updateProjectionMatrix();
-    if (_composer) _composer.setSize(w, h);
-    if (_bloomPass) _bloomPass.resolution.set(w, h);
-  }
-
-  // ── Texture loading ──
+  // ── Textures ──
   function setDepthImage(blob, smoothing) {
     smoothing = smoothing || 0;
     return new Promise(function(resolve) {
       var img = new Image();
       img.onload = function() {
-        var tc = document.createElement('canvas');
-        tc.width = img.width; tc.height = img.height;
-        var tctx = tc.getContext('2d');
-        tctx.drawImage(img, 0, 0);
-        var id = tctx.getImageData(0, 0, img.width, img.height);
-        _depthW = img.width; _depthH = img.height;
-        _depthDataRaw = new Float32Array(_depthW * _depthH);
-        for (var i = 0; i < _depthDataRaw.length; i++) {
-          _depthDataRaw[i] = id.data[i * 4] / 255.0;
-        }
+        var c = document.createElement('canvas');
+        c.width = img.width; c.height = img.height;
+        var ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        var id = ctx.getImageData(0, 0, img.width, img.height);
+        depthW = img.width; depthH = img.height;
+        depthDataRaw = new Float32Array(depthW * depthH);
+        for (var i = 0; i < depthDataRaw.length; i++) depthDataRaw[i] = id.data[i * 4] / 255.0;
         URL.revokeObjectURL(img.src);
-        _uploadDepthTex(smoothing);
-        _depthLoaded = true;
+        uploadDepthTex(smoothing);
+        depthLoaded = true;
         resolve();
       };
       img.src = URL.createObjectURL(blob);
@@ -263,15 +211,16 @@ window.Renderer3D = (function() {
     return new Promise(function(resolve) {
       var img = new Image();
       img.onload = function() {
-        if (_srcTex) _srcTex.dispose();
-        _srcTex = new THREE.Texture(img);
-        _srcTex.flipY = false; // match DataTexture (both use raw image coords)
-        _srcTex.needsUpdate = true;
-        _srcTex.minFilter = THREE.LinearFilter;
-        _srcTex.magFilter = THREE.LinearFilter;
-        _srcTex.wrapS = THREE.ClampToEdgeWrapping;
-        _srcTex.wrapT = THREE.ClampToEdgeWrapping;
-        _srcLoaded = true;
+        if (srcTex) srcTex.dispose();
+        srcTex = new THREE.Texture(img);
+        srcTex.flipY = false;
+        srcTex.needsUpdate = true;
+        srcTex.minFilter = THREE.LinearFilter;
+        srcTex.magFilter = THREE.LinearFilter;
+        srcTex.wrapS = THREE.ClampToEdgeWrapping;
+        srcTex.wrapT = THREE.ClampToEdgeWrapping;
+        U.uSrcTex.value = srcTex;
+        srcLoaded = true;
         URL.revokeObjectURL(img.src);
         resolve();
       };
@@ -279,543 +228,292 @@ window.Renderer3D = (function() {
     });
   }
 
-  function updateFrame(sourceBlob, depthBlob) {
-    return Promise.all([
-      sourceBlob ? setSourceImage(sourceBlob) : Promise.resolve(),
-      depthBlob ? setDepthImage(depthBlob) : Promise.resolve()
-    ]);
-  }
-
-  function _uploadDepthTex(smoothing) {
-    if (!_depthDataRaw) return;
-    var data = smoothing > 0 ? _blurDepth(_depthDataRaw, _depthW, _depthH, smoothing) : _depthDataRaw;
-    var rgba = new Uint8Array(_depthW * _depthH * 4);
-    for (var i = 0; i < _depthW * _depthH; i++) {
+  function uploadDepthTex(smoothing) {
+    if (!depthDataRaw) return;
+    var data = smoothing > 0 ? blurDepth(depthDataRaw, depthW, depthH, smoothing) : depthDataRaw;
+    var rgba = new Uint8Array(depthW * depthH * 4);
+    for (var i = 0; i < depthW * depthH; i++) {
       var v = Math.round(data[i] * 255);
       rgba[i * 4] = v; rgba[i * 4 + 1] = v; rgba[i * 4 + 2] = v; rgba[i * 4 + 3] = 255;
     }
-    if (_depthTex) _depthTex.dispose();
-    _depthTex = new THREE.DataTexture(rgba, _depthW, _depthH, THREE.RGBAFormat);
-    // flipY default false for DataTexture — matches source texture below
-    _depthTex.minFilter = THREE.LinearFilter;
-    _depthTex.magFilter = THREE.LinearFilter;
-    _depthTex.wrapS = THREE.ClampToEdgeWrapping;
-    _depthTex.wrapT = THREE.ClampToEdgeWrapping;
-    _depthTex.needsUpdate = true;
-    _lastSmoothing = smoothing;
+    if (depthTex) depthTex.dispose();
+    depthTex = new THREE.DataTexture(rgba, depthW, depthH, THREE.RGBAFormat);
+    depthTex.flipY = false;
+    depthTex.minFilter = THREE.LinearFilter;
+    depthTex.magFilter = THREE.LinearFilter;
+    depthTex.wrapS = THREE.ClampToEdgeWrapping;
+    depthTex.wrapT = THREE.ClampToEdgeWrapping;
+    depthTex.needsUpdate = true;
+    U.uDepth.value = depthTex;
+    lastSmoothing = smoothing;
   }
 
-  function _blurDepth(d, w, h, radius) {
-    if (radius <= 0) return d;
-    var tmp = new Float32Array(d.length);
-    var out = new Float32Array(d.length);
-    for (var y = 0; y < h; y++) {
-      for (var x = 0; x < w; x++) {
-        var sum = 0, count = 0;
-        for (var dx = -radius; dx <= radius; dx++) {
-          var nx = x + dx;
-          if (nx >= 0 && nx < w) { sum += d[y * w + nx]; count++; }
-        }
-        tmp[y * w + x] = sum / count;
-      }
+  function blurDepth(d, w, h, r) {
+    var tmp = new Float32Array(d.length), out = new Float32Array(d.length);
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+      var s = 0, c = 0;
+      for (var dx = -r; dx <= r; dx++) { var nx = x + dx; if (nx >= 0 && nx < w) { s += d[y * w + nx]; c++; } }
+      tmp[y * w + x] = s / c;
     }
-    for (var x2 = 0; x2 < w; x2++) {
-      for (var y2 = 0; y2 < h; y2++) {
-        var sum2 = 0, count2 = 0;
-        for (var dy = -radius; dy <= radius; dy++) {
-          var ny = y2 + dy;
-          if (ny >= 0 && ny < h) { sum2 += tmp[ny * w + x2]; count2++; }
-        }
-        out[y2 * w + x2] = sum2 / count2;
-      }
+    for (var x = 0; x < w; x++) for (var y = 0; y < h; y++) {
+      var s = 0, c = 0;
+      for (var dy = -r; dy <= r; dy++) { var ny = y + dy; if (ny >= 0 && ny < h) { s += tmp[ny * w + x]; c++; } }
+      out[y * w + x] = s / c;
     }
     return out;
   }
 
-  // ── Create materials (once) ──
-  function _ensureMaterials() {
-    if (_sourceMat) return; // already created
-    _sourceMat = new THREE.ShaderMaterial({
-      uniforms: _cloneUniforms(_uniformDefs),
-      vertexShader: S.meshVert, fragmentShader: S.sourceFrag,
-      side: THREE.DoubleSide, depthTest: true
-    });
-    _depthMat = new THREE.ShaderMaterial({
-      uniforms: _cloneUniforms(_uniformDefs),
-      vertexShader: S.meshVert, fragmentShader: S.depthFrag,
-      side: THREE.DoubleSide, depthTest: true
-    });
-    _holoMat = new THREE.ShaderMaterial({
-      uniforms: _cloneUniforms(_uniformDefs),
-      vertexShader: S.meshVert, fragmentShader: S.holoFrag,
-      side: THREE.DoubleSide, depthTest: true
-    });
-    _gridMat = new THREE.ShaderMaterial({
-      uniforms: _cloneUniforms(_uniformDefs),
-      vertexShader: S.meshVert, fragmentShader: S.gridFrag,
-      depthWrite: false, depthTest: true, transparent: true
-    });
-    _pointsMat = new THREE.ShaderMaterial({
-      uniforms: _cloneUniforms(_uniformDefs),
-      vertexShader: S.meshVert, fragmentShader: S.pointsFrag,
-      depthWrite: false, depthTest: true, transparent: true
-    });
-  }
-
-  // ── Mesh building (geometry only — materials reused) ──
-  function _buildMesh(density, gridType) {
-    gridType = gridType || 'square';
-    if (!_initialized) return;
-    if (density === _lastDensity && gridType === _lastGridType) return;
-    _lastDensity = density;
-    _lastGridType = gridType;
-
-    _ensureMaterials();
-
-    var gridW = density, gridH = density;
-
-    var positions = new Float32Array(gridW * gridH * 3);
-    var uvs = new Float32Array(gridW * gridH * 2);
-    for (var y = 0; y < gridH; y++) {
-      for (var x = 0; x < gridW; x++) {
-        var idx = y * gridW + x;
-        var u = x / (gridW - 1);
-        var v = y / (gridH - 1);
-        positions[idx * 3] = (u - 0.5) * 2;
-        positions[idx * 3 + 1] = 0;
-        positions[idx * 3 + 2] = (v - 0.5) * 2;
-        uvs[idx * 2] = u;
-        uvs[idx * 2 + 1] = v;
-      }
-    }
-
-    var triIdx = [];
-    for (var y3 = 0; y3 < gridH - 1; y3++) {
-      for (var x3 = 0; x3 < gridW - 1; x3++) {
-        var tl = y3 * gridW + x3, tr = tl + 1, bl = tl + gridW, br = bl + 1;
-        triIdx.push(tl, bl, tr, tr, bl, br);
-      }
-    }
-
-    var lineIdx = [];
-    var I = function(x, y) { return y * gridW + x; };
-    _buildGridLines(lineIdx, gridW, gridH, gridType, I);
-
-    var triGeom = new THREE.BufferGeometry();
-    triGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    triGeom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-    triGeom.setIndex(triIdx);
-
-    var lineGeom = new THREE.BufferGeometry();
-    lineGeom.setAttribute('position', new THREE.BufferAttribute(positions.slice(), 3));
-    lineGeom.setAttribute('uv', new THREE.BufferAttribute(uvs.slice(), 2));
-    lineGeom.setIndex(lineIdx);
-
-    var pointGeom = new THREE.BufferGeometry();
-    pointGeom.setAttribute('position', new THREE.BufferAttribute(positions.slice(), 3));
-    pointGeom.setAttribute('uv', new THREE.BufferAttribute(uvs.slice(), 2));
-
-    // Clear old meshes, rebuild with existing materials
-    _sourceGroup.clear();
-    _depthGroup.clear();
-    _gridGroup.clear();
-
-    _sourceMesh = new THREE.Mesh(triGeom, _holoMode ? _holoMat : _sourceMat);
-    _sourceGroup.add(_sourceMesh);
-
-    _depthMesh = new THREE.Mesh(triGeom.clone(), _depthMat);
-    _depthGroup.add(_depthMesh);
-
-    _gridLines = new THREE.LineSegments(lineGeom, _gridMat);
-    _gridGroup.add(_gridLines);
-
-    _gridPoints = new THREE.Points(pointGeom, _pointsMat);
-    _gridPoints.visible = (gridType === 'dot' || gridType === 'dotmatrix');
-    _gridGroup.add(_gridPoints);
-
-    // Set blend mode for hologram grid
-    if (_holoMode) {
-      _gridMat.blending = THREE.AdditiveBlending;
-      _pointsMat.blending = THREE.AdditiveBlending;
-    }
-  }
-
-  function _buildGridLines(lineIdx, gridW, gridH, gridType, I) {
-    if (gridType === 'polygon' || gridType === 'triangle') {
-      for (var y = 0; y < gridH; y++) for (var x = 0; x < gridW; x++) {
-        if (x < gridW - 1) lineIdx.push(I(x, y), I(x + 1, y));
-        if (y < gridH - 1) lineIdx.push(I(x, y), I(x, y + 1));
-        if (x < gridW - 1 && y < gridH - 1) {
-          if (y % 2 === 0) lineIdx.push(I(x, y), I(x + 1, y + 1));
-          else lineIdx.push(I(x + 1, y), I(x, y + 1));
-        }
-      }
-    } else if (gridType === 'dot' || gridType === 'dotmatrix') {
-      for (var y = 0; y < gridH; y++) for (var x = 0; x < gridW; x++) {
-        if (gridType === 'dotmatrix') {
-          if (x < gridW - 1 && x % 2 === 0) lineIdx.push(I(x, y), I(x + 1, y));
-          if (y < gridH - 1 && y % 2 === 0) lineIdx.push(I(x, y), I(x, y + 1));
-        } else {
-          if (x < gridW - 1) lineIdx.push(I(x, y), I(x + 1, y));
-          if (y < gridH - 1) lineIdx.push(I(x, y), I(x, y + 1));
-          if (x < gridW - 1 && y < gridH - 1) lineIdx.push(I(x, y), I(x + 1, y + 1));
-          if (x > 0 && y < gridH - 1) lineIdx.push(I(x, y), I(x - 1, y + 1));
-        }
-      }
-    } else if (gridType === 'hex') {
-      for (var y = 0; y < gridH; y++) {
-        var odd = y % 2;
-        for (var x = 0; x < gridW; x++) {
-          if (x < gridW - 1 && (x + odd) % 2 === 0) lineIdx.push(I(x, y), I(x + 1, y));
-          if (y < gridH - 1 && (x + odd) % 2 === 0) {
-            lineIdx.push(I(x, y), I(x, y + 1));
-            if (x < gridW - 1) lineIdx.push(I(x, y), I(x + 1, y + 1));
-          }
-        }
-      }
-    } else if (gridType === 'cross') {
-      for (var y = 0; y < gridH - 1; y++) for (var x = 0; x < gridW - 1; x++) {
-        lineIdx.push(I(x, y), I(x + 1, y + 1));
-        lineIdx.push(I(x + 1, y), I(x, y + 1));
-      }
-    } else {
-      for (var y = 0; y < gridH; y++) for (var x = 0; x < gridW; x++) {
-        if (x < gridW - 1) lineIdx.push(I(x, y), I(x + 1, y));
-        if (y < gridH - 1) lineIdx.push(I(x, y), I(x, y + 1));
-      }
-    }
-  }
-
   // ── Camera ──
-  function setCamera(rx, ry, rz, zoom) {
-    _camRX = rx; _camRY = ry; _camRZ = rz; _camZoom = zoom;
-    _updateCamera();
-  }
-
-  function _updateCamera() {
-    if (!_camera) return;
-    var dist = 4.0 / _camZoom;
-    var rx = _camRX * Math.PI / 180;
-    var ry = _camRY * Math.PI / 180;
-    _camera.position.set(
-      dist * Math.sin(ry) * Math.cos(rx) + _panX,
-      dist * Math.sin(-rx) + _panY,
+  function updateCamera() {
+    if (!camera) return;
+    var dist = 4.0 / camZoom;
+    var rx = camRX * Math.PI / 180, ry = camRY * Math.PI / 180;
+    camera.position.set(
+      dist * Math.sin(ry) * Math.cos(rx) + panX,
+      dist * Math.sin(-rx) + panY,
       dist * Math.cos(ry) * Math.cos(rx)
     );
-    _camera.lookAt(_panX, _panY, 0);
-    var rz = _camRZ * Math.PI / 180;
-    _camera.up.set(Math.sin(rz), Math.cos(rz), 0);
+    camera.lookAt(panX, panY, 0);
+    var rz = camRZ * Math.PI / 180;
+    camera.up.set(Math.sin(rz), Math.cos(rz), 0);
   }
 
-  function setPan(x, y) { _panX = x; _panY = y; }
-  function getPan() { return { x: _panX, y: _panY }; }
-
-  function getCamera() { return { rx: _camRX, ry: _camRY, rz: _camRZ, zoom: _camZoom }; }
+  function setCamera(rx, ry, rz, zoom) { camRX = rx; camRY = ry; camRZ = rz; camZoom = zoom; }
+  function getCamera() { return { rx: camRX, ry: camRY, rz: camRZ, zoom: camZoom }; }
+  function setPan(x, y) { panX = x; panY = y; }
+  function getPan() { return { x: panX, y: panY }; }
 
   function setCameraPreset(name) {
-    var presets = {
-      'default': { rx: -35, ry: 15, zoom: 1.2 }, 'iso': { rx: -35, ry: 45, zoom: 1.2 },
-      'top': { rx: -90, ry: 0, zoom: 1.0 }, 'front': { rx: 0, ry: 0, zoom: 1.2 },
-      'side': { rx: 0, ry: 90, zoom: 1.2 }, 'close': { rx: -60, ry: 30, zoom: 1.5 },
-      'rear': { rx: -20, ry: 160, zoom: 1.0 }, 'wide': { rx: -70, ry: -45, zoom: 0.8 }
-    };
-    var p = presets[name];
-    if (p) setCamera(p.rx, p.ry, p.rz || 0, p.zoom);
+    var p = { 'default': [-35, 15, 1.2], iso: [-35, 45, 1.2], top: [-90, 0, 1.0], front: [0, 0, 1.2],
+              side: [0, 90, 1.2], close: [-60, 30, 1.5], rear: [-20, 160, 1.0], wide: [-70, -45, 0.8] }[name];
+    if (p) setCamera(p[0], p[1], 0, p[2]);
   }
 
-  // ── Layer control ──
-  function setLayerVisible(name, visible) {
-    var g = name === 'source' ? _sourceGroup : name === 'depth' ? _depthGroup : name === 'grid' ? _gridGroup : null;
-    if (g) g.visible = visible;
-  }
-
-  function setLayerOpacity(name, opacity) {
-    var g = name === 'source' ? _sourceGroup : name === 'depth' ? _depthGroup : name === 'grid' ? _gridGroup : null;
-    if (!g) return;
-    g.traverse(function(child) {
-      if (child.material) { child.material.transparent = true; child.material.opacity = opacity; }
-    });
-  }
-
-  // ── Appearance setters ──
+  // ── Setters ──
+  function setElevation(h) { U.uElevation.value = h; }
+  function setGlow(v) { U.uGlow.value = v; }
+  var _gapValue = 0;
+  function setGap(v) { _gapValue = v * -0.005; }
   function setColors(near, mid, far, bg) {
-    _uniformDefs.uGridColor.value.set(near);
-    if (mid) _uniformDefs.uHoloColorMid.value.set(mid);
-    _uniformDefs.uGridColor2.value.set(far);
-    _uniformDefs.uBgColor.value.set(bg);
-    if (_scene) _scene.background = _uniformDefs.uBgColor.value.clone();
+    U.uGridColor.value.set(near);
+    if (mid) U.uHoloColorMid.value.set(mid);
+    U.uGridColor2.value.set(far);
+    U.uBgColor.value.set(bg);
   }
-
-  function setElevation(h) { _uniformDefs.uElevation.value = h; }
-  function setGlow(amount) { _uniformDefs.uGlow.value = amount; }
-
-  function setSplitElevation(srcElev, gridElev) {
-    if (_sourceMat) _sourceMat.uniforms.uElevOverride.value = srcElev;
-    if (_holoMat) _holoMat.uniforms.uElevOverride.value = srcElev;
-    if (_gridMat) _gridMat.uniforms.uElevOverride.value = gridElev;
-    if (_pointsMat) _pointsMat.uniforms.uElevOverride.value = gridElev;
+  function setScanLines(o) {
+    U.uScanLines.value = o.enabled ? 1 : 0;
+    if (o.density !== undefined) U.uScanDensity.value = o.density;
+    if (o.opacity !== undefined) U.uScanOpacity.value = o.opacity;
+    if (o.speed !== undefined) U.uScanSpeed.value = o.speed;
+    if (o.dir !== undefined) U.uScanDir.value = o.dir;
   }
-
-  function clearSplitElevation() {
-    [_sourceMat, _holoMat, _gridMat, _pointsMat].forEach(function(m) {
-      if (m) m.uniforms.uElevOverride.value = -100.0;
-    });
+  function setDither(o) {
+    U.uDither.value = o.enabled ? 1 : 0;
+    var m = { none: 0, bayer4: 1, bayer8: 2, halftone: 3, crosshatch: 4, noise: 5 };
+    U.uDitherStyle.value = m[o.style] || 1;
   }
-
-  function setDensity(n) {
-    if (n !== _lastDensity) _buildMesh(n, _lastGridType || 'square');
+  function setSrcTint(color, amt) { U.uSrcTint.value.set(color); U.uSrcTintAmt.value = amt; }
+  function setHoloMode(v) { holoMode = v; }
+  function setSplitElevation(srcE, gridE) { splitEnabled = true; splitSrcElev = srcE; splitGridElev = gridE; }
+  function clearSplitElevation() { splitEnabled = false; }
+  function setDensity(n) { buildMesh(n, lastGridType || 'square'); }
+  function setGridType(t) { buildMesh(lastDensity || 40, t); }
+  function setLayerVisible(name, v) {
+    if (name === 'grid') showGrid = v;
+    if (name === 'source') showImage = v;
   }
+  function setBloom() {} // placeholder
 
-  function setGridType(type) {
-    if (type !== _lastGridType) _buildMesh(_lastDensity || 40, type);
-    // Dot/dotmatrix: show points, hide lines for dotmatrix (dots only)
-    if (_gridPoints) _gridPoints.visible = (type === 'dot' || type === 'dotmatrix');
-    if (_gridLines) _gridLines.visible = (type !== 'dotmatrix');
-  }
+  // ── Render (multi-pass, single material) ──
+  function render() {
+    if (!renderer || !depthLoaded || !material) return;
 
-  function setScanLines(opts) {
-    _uniformDefs.uScanLines.value = opts.enabled ? 1.0 : 0.0;
-    if (opts.density !== undefined) _uniformDefs.uScanDensity.value = opts.density;
-    if (opts.opacity !== undefined) _uniformDefs.uScanOpacity.value = opts.opacity;
-    if (opts.speed !== undefined) _uniformDefs.uScanSpeed.value = opts.speed;
-    if (opts.dir !== undefined) _uniformDefs.uScanDir.value = opts.dir;
-  }
+    U.uTime.value = performance.now() / 1000;
+    updateCamera();
+    renderer.setClearColor(U.uBgColor.value, 1);
+    renderer.clear(true, true, true);
 
-  function setDither(opts) {
-    _uniformDefs.uDither.value = opts.enabled ? 1.0 : 0.0;
-    var styleMap = { none: 0, bayer4: 1, bayer8: 2, halftone: 3, crosshatch: 4, noise: 5 };
-    _uniformDefs.uDitherStyle.value = styleMap[opts.style] || 1;
-  }
+    // Hide everything first
+    triMesh.visible = false;
+    lineMesh.visible = false;
+    pointMesh.visible = false;
 
-  function setSrcTint(color, amount) {
-    _uniformDefs.uSrcTint.value.set(color);
-    _uniformDefs.uSrcTintAmt.value = amount;
-  }
-
-  function setGap(value) {
-    _uniformDefs.uGapOffset.value = value * -0.005;
-  }
-
-  // ── Post-processing ──
-  function setBloom(intensity, radius, threshold) {
-    if (!_bloomPass) return;
-    _bloomPass.strength = intensity;
-    if (radius !== undefined) _bloomPass.radius = radius;
-    if (threshold !== undefined) _bloomPass.threshold = threshold;
-    _bloomPass.enabled = intensity > 0;
-  }
-
-  // ── Hologram mode ──
-  function setHoloMode(enabled) {
-    _holoMode = enabled;
-    if (_sourceMesh) {
-      _sourceMesh.material = _holoMode ? _holoMat : _sourceMat;
+    // PASS 1: Hologram body OR source image (filled triangles)
+    if (holoMode && srcLoaded) {
+      U.uRenderMode.value = 2.0;
+      U.uGlowPass.value = 0.0;
+      U.uElevOverride.value = splitEnabled ? splitSrcElev : -100.0;
+      U.uGapOffset.value = 0.0; // source layer at zero gap
+      triMesh.visible = true;
+      renderer.render(scene, camera);
+      triMesh.visible = false;
+    } else if (showImage && srcLoaded && !showGrid) {
+      U.uRenderMode.value = 1.0;
+      U.uGlowPass.value = 0.0;
+      U.uElevOverride.value = -100.0;
+      U.uGapOffset.value = 0.0;
+      triMesh.visible = true;
+      renderer.render(scene, camera);
+      triMesh.visible = false;
     }
-    if (_gridMat) _gridMat.blending = _holoMode ? THREE.AdditiveBlending : THREE.NormalBlending;
-    if (_pointsMat) _pointsMat.blending = _holoMode ? THREE.AdditiveBlending : THREE.NormalBlending;
+
+    // PASS 2: Grid wireframe
+    if (showGrid && !hideLines && lineGeom.index && lineGeom.index.count > 0) {
+      U.uRenderMode.value = 0.0;
+      U.uElevOverride.value = splitEnabled ? splitGridElev : -100.0;
+      U.uGapOffset.value = _gapValue; // grid gets gap offset
+
+      if (holoMode) {
+        material.blending = THREE.AdditiveBlending;
+        material.depthWrite = false;
+        material.transparent = true;
+      }
+
+      // Glow pass
+      if (U.uGlow.value > 0) {
+        U.uGlowPass.value = 1.0;
+        lineMesh.visible = true;
+        renderer.render(scene, camera);
+        lineMesh.visible = false;
+      }
+
+      // Main pass
+      U.uGlowPass.value = 0.0;
+      lineMesh.visible = true;
+      renderer.render(scene, camera);
+      lineMesh.visible = false;
+
+      if (holoMode) {
+        material.blending = THREE.NormalBlending;
+        material.depthWrite = true;
+        material.transparent = false;
+      }
+    }
+
+    // PASS 3: Points (dot/dotmatrix)
+    if (showGrid && showPoints) {
+      U.uRenderMode.value = 3.0;
+      U.uGlowPass.value = 0.0;
+      U.uElevOverride.value = splitEnabled ? splitGridElev : -100.0;
+      U.uGapOffset.value = _gapValue; // points get gap too
+
+      if (holoMode) {
+        material.blending = THREE.AdditiveBlending;
+        material.depthWrite = false;
+        material.transparent = true;
+      }
+
+      pointMesh.visible = true;
+      renderer.render(scene, camera);
+      pointMesh.visible = false;
+
+      if (holoMode) {
+        material.blending = THREE.NormalBlending;
+        material.depthWrite = true;
+        material.transparent = false;
+      }
+    }
+
+    // Reset gap for next frame's source pass
+    U.uElevOverride.value = -100.0;
   }
 
   // ── Animation ──
+  function tickAnimation() {
+    if (!animType) return;
+    animT += 0.01 * animSpeed * animDir;
+    if (animT >= TWO_PI) animT -= TWO_PI;
+    if (animT < 0) animT += TWO_PI;
+    var f = animT / TWO_PI, t = animT;
+    var bRX = animBaseRX, bRY = animBaseRY, bRZ = animBaseRZ, bZ = animBaseZoom;
+
+    if (animType === 'orbit-y' || animType === 'orbit') { var ry = bRY + f * 360; while (ry > 180) ry -= 360; setCamera(bRX, ry, bRZ, bZ); }
+    else if (animType === 'orbit-x') { var rx = bRX + f * 360; while (rx > 180) rx -= 360; setCamera(rx, bRY, bRZ, bZ); }
+    else if (animType === 'orbit-z') { var rz = bRZ + f * 360; while (rz > 180) rz -= 360; setCamera(bRX, bRY, rz, bZ); }
+    else if (animType === 'wiggle') { setCamera(bRX, bRY - Math.cos(t) * 15, bRZ, bZ); }
+    else if (animType === 'spin') { var sry = bRY + f * 360; while (sry > 180) sry -= 360; var srz = bRZ + f * 180; while (srz > 180) srz -= 360; setCamera(bRX + Math.sin(t) * 25, sry, srz, bZ); }
+    else if (animType === 'handheld') { setCamera(bRX + Math.sin(t * 2) * 2.5 + Math.sin(t * 5) * 1.2, bRY + Math.sin(t * 3) * 3 + Math.sin(t * 7) * 1, bRZ + Math.sin(t * 4) * 1, bZ); }
+    else if (animType === 'dolly') { setCamera(bRX, bRY + Math.sin(t * 2) * 8, bRZ, bZ + Math.sin(t) * 0.8); }
+    else if (animType === 'breathe') { setCamera(bRX, bRY + Math.sin(t) * 15, bRZ, bZ); }
+    else if (animType === 'tilt') { setCamera(bRX + Math.sin(t) * 30, bRY + Math.sin(t * 2) * 20, bRZ, bZ); }
+    else if (animType === 'flyover') { var fry = bRY + f * 360; while (fry > 180) fry -= 360; setCamera(bRX + Math.sin(t) * 25 - 40, fry, bRZ, bZ + Math.sin(t * 2) * 0.3); }
+  }
+
   function startAnimation(type, speed, dir) {
-    stopAnimation();
-    _animType = type;
-    _animT = 0;
-    _animSpeed = speed || 1.0;
-    _animDir = dir || 1;
-    _animBaseRX = _camRX;
-    _animBaseRY = _camRY;
-    _animBaseRZ = _camRZ;
-    _animBaseZoom = _camZoom;
+    animType = type; animT = 0; animSpeed = speed || 1; animDir = dir || 1;
+    animBaseRX = camRX; animBaseRY = camRY; animBaseRZ = camRZ; animBaseZoom = camZoom;
   }
+  function stopAnimation() { animType = null; }
+  function setAnimationSpeed(v) { animSpeed = v; }
+  function setAnimationDirection(v) { animDir = v; }
 
-  function stopAnimation() { _animType = null; }
-  function setAnimationSpeed(speed) { _animSpeed = speed; }
-  function setAnimationDirection(dir) { _animDir = dir; }
-
-  function _tickAnimation() {
-    if (!_animType) return;
-    _animT += 0.01 * _animSpeed * _animDir;
-    if (_animT >= TWO_PI) _animT -= TWO_PI;
-    if (_animT < 0) _animT += TWO_PI;
-
-    var frac = _animT / TWO_PI;
-    var t = _animT;
-    var bRX = _animBaseRX, bRY = _animBaseRY, bRZ = _animBaseRZ, bZoom = _animBaseZoom;
-
-    if (_animType === 'orbit-y' || _animType === 'orbit') {
-      var ry = bRY + frac * 360; while (ry > 180) ry -= 360;
-      setCamera(bRX, ry, bRZ, bZoom);
-    } else if (_animType === 'orbit-x') {
-      var rx = bRX + frac * 360; while (rx > 180) rx -= 360;
-      setCamera(rx, bRY, bRZ, bZoom);
-    } else if (_animType === 'orbit-z') {
-      var rz = bRZ + frac * 360; while (rz > 180) rz -= 360;
-      setCamera(bRX, bRY, rz, bZoom);
-    } else if (_animType === 'wiggle') {
-      setCamera(bRX, bRY - Math.cos(t) * 15, bRZ, bZoom);
-    } else if (_animType === 'spin') {
-      var sry = bRY + frac * 360; while (sry > 180) sry -= 360;
-      var srz = bRZ + frac * 180; while (srz > 180) srz -= 360;
-      setCamera(bRX + Math.sin(t) * 25, sry, srz, bZoom);
-    } else if (_animType === 'handheld') {
-      setCamera(bRX + Math.sin(t * 2) * 2.5 + Math.sin(t * 5) * 1.2,
-                bRY + Math.sin(t * 3) * 3.0 + Math.sin(t * 7) * 1.0,
-                bRZ + Math.sin(t * 4) * 1.0, bZoom);
-    } else if (_animType === 'dolly') {
-      setCamera(bRX, bRY + Math.sin(t * 2) * 8, bRZ, bZoom + Math.sin(t) * 0.8);
-    } else if (_animType === 'breathe') {
-      setCamera(bRX, bRY + Math.sin(t) * 15, bRZ, bZoom);
-    } else if (_animType === 'tilt') {
-      setCamera(bRX + Math.sin(t) * 30, bRY + Math.sin(t * 2) * 20, bRZ, bZoom);
-    } else if (_animType === 'flyover') {
-      var fry = bRY + frac * 360; while (fry > 180) fry -= 360;
-      setCamera(bRX + Math.sin(t) * 25 - 40, fry, bRZ, bZoom + Math.sin(t * 2) * 0.3);
-    }
-  }
-
-  // ── Frame buffer ──
-  function enableFrameAhead(capacity) {
-    _frameBuffer.enabled = true;
-    _frameBuffer.capacity = capacity || 12;
-    var w = _canvas ? _canvas.width : 1200;
-    var h = _canvas ? _canvas.height : 800;
-    for (var i = _frameBuffer.targets.length; i < _frameBuffer.capacity; i++) {
-      _frameBuffer.targets.push(new THREE.WebGLRenderTarget(w, h));
-    }
-    _frameBuffer.state = 'idle';
-  }
-
-  function disableFrameAhead() {
-    _frameBuffer.enabled = false;
-    _frameBuffer.state = 'idle';
-    _frameBuffer.filled = 0;
-  }
-
-  function flushBuffer() {
-    _frameBuffer.filled = 0;
-    _frameBuffer.writeHead = 0;
-    _frameBuffer.readHead = 0;
-    _frameBuffer.state = 'flushing';
-  }
-
-  // ── Render ──
-  function render() {
-    if (!_renderer || !_scene || !_camera || !_depthLoaded) return;
-
-    _syncUniforms();
-    _updateCamera();
-
-    if (_composer && _bloomPass && _bloomPass.enabled) {
-      _composer.render();
-    } else {
-      _renderer.render(_scene, _camera);
-    }
-  }
-
-  // ── Render loop ──
+  // ── Loop ──
   function startLoop() {
-    if (_loopActive) return;
-    _loopActive = true;
-    _visible = true;
+    if (loopActive) return;
+    loopActive = true; visible = true;
     function tick() {
-      if (!_loopActive) return;
-      _tickAnimation();
+      if (!loopActive) return;
+      tickAnimation();
       render();
-      _animId = requestAnimationFrame(tick);
+      animId = requestAnimationFrame(tick);
     }
-    _animId = requestAnimationFrame(tick);
+    animId = requestAnimationFrame(tick);
   }
+  function stopLoop() { loopActive = false; if (animId) { cancelAnimationFrame(animId); animId = null; } }
 
-  function stopLoop() {
-    _loopActive = false;
-    if (_animId) { cancelAnimationFrame(_animId); _animId = null; }
+  // ── Show/Hide ──
+  function show(cvs, asHolo) {
+    holoMode = !!asHolo;
+    if (!initialized) { init(cvs); buildMesh(40, 'square'); }
+    visible = true;
+    startLoop();
+  }
+  function hide() { visible = false; stopLoop(); stopAnimation(); }
+  function isVisible() { return visible; }
+
+  function reload(depthBlob, srcBlob, smoothing, cb) {
+    depthLoaded = false; srcLoaded = false; lastSmoothing = -1;
+    var p = [];
+    if (depthBlob) p.push(setDepthImage(depthBlob, smoothing || 0));
+    if (srcBlob) p.push(setSourceImage(srcBlob));
+    Promise.all(p).then(function() { if (cb) cb(); });
   }
 
   // ── Export ──
   function captureFrame() {
-    return new Promise(function(resolve) {
-      render();
-      _canvas.toBlob(function(blob) { resolve(blob); }, 'image/png');
-    });
+    return new Promise(function(res) { render(); canvas.toBlob(function(b) { res(b); }, 'image/png'); });
   }
-
-  function captureAnimation(type, fps, duration) {
-    fps = fps || 24;
-    duration = duration || 3;
-    var totalFrames = fps * duration;
-    var frames = [];
-    var baseRX = _camRX, baseRY = _camRY, baseRZ = _camRZ, baseZoom = _camZoom;
-    var idx = 0;
-
-    return new Promise(function(resolve) {
+  function captureAnimation(type, fps, dur) {
+    fps = fps || 24; dur = dur || 3;
+    var total = fps * dur, frames = [], idx = 0;
+    var bRX = camRX, bRY = camRY, bRZ = camRZ, bZ = camZoom;
+    return new Promise(function(res) {
       function next() {
-        if (idx >= totalFrames) { resolve(frames); return; }
-        _animT = (idx / totalFrames) * TWO_PI;
-        _animType = type;
-        _animBaseRX = baseRX; _animBaseRY = baseRY; _animBaseRZ = baseRZ; _animBaseZoom = baseZoom;
-        _tickAnimation();
-        render();
-        _canvas.toBlob(function(blob) {
-          frames.push(blob);
-          idx++;
-          setTimeout(next, 0);
-        }, 'image/png');
+        if (idx >= total) { res(frames); return; }
+        animT = (idx / total) * TWO_PI; animType = type;
+        animBaseRX = bRX; animBaseRY = bRY; animBaseRZ = bRZ; animBaseZoom = bZ;
+        tickAnimation(); render();
+        canvas.toBlob(function(b) { frames.push(b); idx++; setTimeout(next, 0); }, 'image/png');
       }
       next();
     });
   }
 
-  // ── Show/Hide ──
-  function show(canvas, asHolo) {
-    _holoMode = !!asHolo;
-    if (!_initialized) {
-      init(canvas);
-      _buildMesh(40, 'square');
-    }
-    setHoloMode(_holoMode);
-    _visible = true;
-    startLoop();
-  }
-
-  function hide() {
-    _holoMode = false;
-    _visible = false;
-    stopLoop();
-    stopAnimation();
-  }
-
-  function isVisible() { return _visible; }
-
-  function reload(depthBlob, sourceBlob, smoothing, callback) {
-    _depthLoaded = false;
-    _srcLoaded = false;
-    _lastSmoothing = -1;
-    var promises = [];
-    if (depthBlob) promises.push(setDepthImage(depthBlob, smoothing || 0));
-    if (sourceBlob) promises.push(setSourceImage(sourceBlob));
-    Promise.all(promises).then(function() {
-      if (callback) callback();
-    });
-  }
-
-  // ── Public API ──
   return {
-    init: init, dispose: dispose, resize: resize,
-    setDepthImage: setDepthImage, setSourceImage: setSourceImage, updateFrame: updateFrame,
-    setLayerVisible: setLayerVisible, setLayerOpacity: setLayerOpacity,
-    setCamera: setCamera, setCameraPreset: setCameraPreset, getCamera: getCamera, setPan: setPan, getPan: getPan,
+    init: init, show: show, hide: hide, isVisible: isVisible, reload: reload,
+    render: render, startLoop: startLoop, stopLoop: stopLoop,
+    setCamera: setCamera, getCamera: getCamera, setCameraPreset: setCameraPreset,
+    setPan: setPan, getPan: getPan,
+    setElevation: setElevation, setGlow: setGlow, setGap: setGap,
+    setColors: setColors, setScanLines: setScanLines, setDither: setDither,
+    setSrcTint: setSrcTint, setHoloMode: setHoloMode,
+    setSplitElevation: setSplitElevation, clearSplitElevation: clearSplitElevation,
     setDensity: setDensity, setGridType: setGridType,
-    setElevation: setElevation, setSplitElevation: setSplitElevation, clearSplitElevation: clearSplitElevation,
-    setColors: setColors, setGlow: setGlow, setScanLines: setScanLines,
-    setDither: setDither, setSrcTint: setSrcTint, setGap: setGap, setHoloMode: setHoloMode,
+    setLayerVisible: setLayerVisible, setLayerOpacity: function() {},
     setBloom: setBloom,
     startAnimation: startAnimation, stopAnimation: stopAnimation,
     setAnimationSpeed: setAnimationSpeed, setAnimationDirection: setAnimationDirection,
-    enableFrameAhead: enableFrameAhead, disableFrameAhead: disableFrameAhead, flushBuffer: flushBuffer,
-    render: render, startLoop: startLoop, stopLoop: stopLoop,
     captureFrame: captureFrame, captureAnimation: captureAnimation,
-    show: show, hide: hide, isVisible: isVisible, reload: reload,
-    _getCanvas: function() { return _canvas; },
-    _buildMesh: _buildMesh
+    _buildMesh: buildMesh, _getCanvas: function() { return canvas; }
   };
 })();
