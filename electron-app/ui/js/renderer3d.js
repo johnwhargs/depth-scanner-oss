@@ -130,7 +130,12 @@ window.Renderer3D = (function() {
       var u = m.uniforms;
       u.uDepth.value = _depthTex;
       u.uElevation.value = _uniformDefs.uElevation.value;
-      u.uGapOffset.value = _uniformDefs.uGapOffset.value;
+      // Gap only applies to grid layers, not source/depth/holo
+      if (m === _gridMat || m === _pointsMat) {
+        u.uGapOffset.value = _uniformDefs.uGapOffset.value;
+      } else {
+        u.uGapOffset.value = 0.0;
+      }
       u.uSrcTex.value = _srcTex;
       u.uTime.value = t;
       // Colors (set on Color objects, not replace)
