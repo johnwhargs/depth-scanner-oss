@@ -2783,23 +2783,98 @@ function setupTimeline() {
     return pxDist < 20;
   }
 
+  var _scrubDebounce = null;
   function scrubToFrame(pos) {
     state.playheadPos = pos;
     updateTimelineDisplay(state.videoInfo);
-    // Show frame at playhead if we have cached frames
-    if (state.videoInfo && (compare.depthFrames.length > 0 || compare.sourceFrames.length > 0)) {
-      const totalFrames = compare.depthFrames.length || compare.sourceFrames.length;
-      const idx = Math.min(totalFrames - 1, Math.max(0, Math.round(pos * (totalFrames - 1))));
-      if (compare.depthFrames[idx]) {
-        $("preview-img").src = compare.depthFrames[idx];
-        $("preview-img").style.display = "block";
-        $("drop-zone").classList.add("hidden");
-      } else if (compare.sourceFrames[idx]) {
-        $("preview-img").src = compare.sourceFrames[idx];
-        $("preview-img").style.display = "block";
-        $("drop-zone").classList.add("hidden");
-      }
+    if (!state.videoInfo) return;
+
+    var totalFrames = compare.depthFrames.length || compare.sourceFrames.length;
+    if (totalFrames === 0) return;
+    var idx = Math.min(totalFrames - 1, Math.max(0, Math.round(pos * (totalFrames - 1))));
+
+    // Effects enabled + 3D effect active → update 3D renderer with this frame
+    var fx = getActiveFx();
+    if (state.fxEnabled && (fx === "elevation" || fx === "hologram") && window._elevRenderer) {
+      // Load this frame's depth + source into 3D renderer
+      clearTimeout(_scrubDebounce);
+      _scrubDebounce = setTimeout(function() {
+        _loadFrameInto3D(idx);
+      }, 50);
+      return;
     }
+
+    // Effects enabled + server effect → request preview for this frame
+    if (state.fxEnabled && state.sessionId && fx !== "elevation" && fx !== "hologram" && fx !== "transition") {
+      clearTimeout(_scrubDebounce);
+      _scrubDebounce = setTimeout(function() {
+        _previewEffectAtFrame(idx);
+      }, 200);
+      return;
+    }
+
+    // No effects — show raw depth or source
+    var view = state.viewMode || "depth";
+    if (view === "source" && compare.sourceFrames[idx]) {
+      $("preview-img").src = compare.sourceFrames[idx];
+    } else if (compare.depthFrames[idx]) {
+      $("preview-img").src = compare.depthFrames[idx];
+    } else if (compare.sourceFrames[idx]) {
+      $("preview-img").src = compare.sourceFrames[idx];
+    } else return;
+    $("preview-img").style.display = "block";
+    $("drop-zone").classList.add("hidden");
+  }
+
+  // Load specific frame into Three.js 3D renderer
+  async function _loadFrameInto3D(frameIdx) {
+    if (!state.sessionId) return;
+    try {
+      // Fetch source frame
+      var srcR = await fetch(SERVER + "/process/video/source/" + state.sessionId + "/" + frameIdx);
+      var srcBlob = srcR.ok ? await srcR.blob() : null;
+      // Fetch depth frame
+      var smooth = parseFloat($("smooth")?.value || "0.4");
+      var depR = await fetch(SERVER + "/process/video/frame/" + state.sessionId + "/" + frameIdx + "?format=png_gray&smooth=" + smooth + "&align_scale=true");
+      var depBlob = depR.ok ? await depR.blob() : null;
+      if (srcBlob) state._latestSrcBlob = srcBlob;
+      if (depBlob) state._latestDepthBlob = depBlob;
+      // Reload into 3D renderer
+      var smoothing = parseInt($("elev-smooth")?.value || "3");
+      Renderer3D.reload(depBlob, srcBlob, smoothing, function() {
+        if (window.R3DAdapter) R3DAdapter.syncAll();
+      });
+    } catch(e) { log("Frame load error: " + e.message, "error"); }
+  }
+
+  // Preview server-side effect at specific video frame
+  async function _previewEffectAtFrame(frameIdx) {
+    if (!state.sessionId) return;
+    var fx = getActiveFx();
+    var params = getEffectParams(fx);
+    try {
+      // Create a per-frame session
+      var srcR = await fetch(SERVER + "/process/video/source/" + state.sessionId + "/" + frameIdx);
+      if (!srcR.ok) return;
+      var srcBlob = await srcR.blob();
+      var fd = new FormData();
+      fd.append("file", srcBlob, "frame.png");
+      fd.append("model", $("model")?.value || "base");
+      fd.append("format", "png_gray");
+      var procR = await fetch(SERVER + "/process/frame", { method: "POST", body: fd });
+      if (!procR.ok) return;
+      var frameSid = procR.headers.get("X-Session-Id");
+      if (!frameSid) return;
+      // Apply effect
+      var efd = new FormData();
+      efd.append("session_id", frameSid);
+      efd.append("params_json", JSON.stringify(params));
+      var url = SERVER + "/effect/" + fx + "/preview";
+      var r = await fetch(url, { method: "POST", body: efd });
+      if (!r.ok) return;
+      var blob = await r.blob();
+      showImage(blob, fx + " @ frame " + frameIdx);
+    } catch(e) { log("Effect preview error: " + e.message, "error"); }
   }
 
   // Mouse down on track — detect what to drag
@@ -3144,7 +3219,12 @@ async function init() {
       $("btn-fx-apply").disabled = false;
       // Hide render view tabs during effects
       $("viewport-bar").style.display = "none";
-      runEffect(true);
+      // Video: preview effect at current playhead frame
+      if (state._fileType === "video" && state.videoInfo) {
+        scrubToFrame(state.playheadPos); // triggers effect preview via scrub logic
+      } else {
+        runEffect(true);
+      }
     } else {
       // Restore render view with tabs
       showViewportBar(true);
@@ -3186,8 +3266,14 @@ async function init() {
       if (btn.dataset.fx !== "elevation" && btn.dataset.fx !== "hologram" && window._elevRenderer) {
         window._elevRenderer.hide();
       }
-      // Auto-preview on tab switch if enabled (skip transition — needs two images)
-      if (state.fxEnabled && btn.dataset.fx !== "transition") runEffect(true);
+      // Auto-preview on tab switch if enabled
+      if (state.fxEnabled && btn.dataset.fx !== "transition") {
+        if (state._fileType === "video" && state.videoInfo) {
+          scrubToFrame(state.playheadPos);
+        } else {
+          runEffect(true);
+        }
+      }
     });
   });
 
@@ -3195,10 +3281,14 @@ async function init() {
   let fxDebounce = null;
   function onFxSliderChange() {
     if (!state.fxEnabled) return;
-    // Skip auto-preview for transition (needs explicit preview click)
     if (getActiveFx() === "transition") return;
     clearTimeout(fxDebounce);
-    fxDebounce = setTimeout(() => runEffect(true), 300);
+    // Video: re-preview at current playhead frame
+    if (state._fileType === "video" && state.videoInfo) {
+      fxDebounce = setTimeout(() => scrubToFrame(state.playheadPos), 300);
+    } else {
+      fxDebounce = setTimeout(() => runEffect(true), 300);
+    }
   }
   document.querySelectorAll("#effects-section input[type=range], #effects-section input[type=color], #effects-section select").forEach(el => {
     el.addEventListener("input", onFxSliderChange);
