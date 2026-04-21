@@ -137,8 +137,8 @@
     logMsg('Both video files loaded — initializing 3D video effects...', 'info');
     $('ws-video-controls').style.display = '';
 
-    // Create video info object
-    var videoInfo = { fps: 24, duration: 0 };
+    // VideoFX will auto-detect FPS from video metadata
+    var videoInfo = { fps: 0, duration: 0 };
 
     // Init VideoFX with both video blobs
     VideoFX.init(state.sourceFile, state.depthFile, videoInfo, $('elev-canvas')).then(function() {

@@ -23,7 +23,7 @@ window.VideoFX = (function() {
   // ── Init: create video elements, load blobs ──
   function init(srcBlob, depthBlob, videoInfo, elevCanvas) {
     _canvas = elevCanvas;
-    _fps = videoInfo.fps || 24;
+    _fps = videoInfo.fps || 30; // will auto-detect via requestVideoFrameCallback
     _duration = videoInfo.duration || 1;
     _trimIn = 0;
     _trimOut = _duration;
@@ -61,9 +61,31 @@ window.VideoFX = (function() {
         loaded++;
         console.log('[VideoFX] video loaded (' + loaded + '/2) src.dur=' + _srcVideo.duration + ' depth.dur=' + _depthVideo.duration);
         if (loaded >= 2) {
-          _duration = _srcVideo.duration || _duration;
+          _duration = _srcVideo.duration || _depthVideo.duration || _duration;
           _trimOut = _duration;
-          console.log('[VideoFX] Both videos loaded, duration=' + _duration.toFixed(2) + 's');
+          // Detect FPS: use requestVideoFrameCallback if available, else estimate
+          if (_srcVideo.requestVideoFrameCallback) {
+            var t0 = null, frameCount = 0;
+            function countFrame(now, meta) {
+              if (!t0) { t0 = meta.mediaTime; }
+              frameCount++;
+              if (frameCount >= 5) {
+                var elapsed = meta.mediaTime - t0;
+                if (elapsed > 0) _fps = Math.round(frameCount / elapsed);
+                _srcVideo.pause();
+                _srcVideo.currentTime = 0;
+                console.log('[VideoFX] Detected FPS: ' + _fps);
+              } else {
+                _srcVideo.requestVideoFrameCallback(countFrame);
+              }
+            }
+            // Brief play to detect FPS, then pause
+            _srcVideo.muted = true;
+            _srcVideo.requestVideoFrameCallback(countFrame);
+            _srcVideo.play().catch(function() {});
+            setTimeout(function() { _srcVideo.pause(); _srcVideo.currentTime = 0; }, 500);
+          }
+          console.log('[VideoFX] Both videos loaded, duration=' + _duration.toFixed(2) + 's fps=' + _fps);
           resolve();
         }
       }
