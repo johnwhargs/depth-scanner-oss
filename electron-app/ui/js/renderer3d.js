@@ -260,6 +260,7 @@ window.Renderer3D = (function() {
       img.onload = function() {
         if (_srcTex) _srcTex.dispose();
         _srcTex = new THREE.Texture(img);
+        _srcTex.flipY = false; // match DataTexture (both use raw image coords)
         _srcTex.needsUpdate = true;
         _srcTex.minFilter = THREE.LinearFilter;
         _srcTex.magFilter = THREE.LinearFilter;
@@ -290,6 +291,7 @@ window.Renderer3D = (function() {
     }
     if (_depthTex) _depthTex.dispose();
     _depthTex = new THREE.DataTexture(rgba, _depthW, _depthH, THREE.RGBAFormat);
+    // flipY default false for DataTexture — matches source texture below
     _depthTex.minFilter = THREE.LinearFilter;
     _depthTex.magFilter = THREE.LinearFilter;
     _depthTex.wrapS = THREE.ClampToEdgeWrapping;
