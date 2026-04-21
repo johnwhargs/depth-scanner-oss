@@ -332,7 +332,37 @@ window.Renderer3D = (function() {
     return out;
   }
 
-  // ── Mesh building ──
+  // ── Create materials (once) ──
+  function _ensureMaterials() {
+    if (_sourceMat) return; // already created
+    _sourceMat = new THREE.ShaderMaterial({
+      uniforms: _cloneUniforms(_uniformDefs),
+      vertexShader: S.meshVert, fragmentShader: S.sourceFrag,
+      side: THREE.DoubleSide, depthTest: true
+    });
+    _depthMat = new THREE.ShaderMaterial({
+      uniforms: _cloneUniforms(_uniformDefs),
+      vertexShader: S.meshVert, fragmentShader: S.depthFrag,
+      side: THREE.DoubleSide, depthTest: true
+    });
+    _holoMat = new THREE.ShaderMaterial({
+      uniforms: _cloneUniforms(_uniformDefs),
+      vertexShader: S.meshVert, fragmentShader: S.holoFrag,
+      side: THREE.DoubleSide, depthTest: true
+    });
+    _gridMat = new THREE.ShaderMaterial({
+      uniforms: _cloneUniforms(_uniformDefs),
+      vertexShader: S.meshVert, fragmentShader: S.gridFrag,
+      depthWrite: false, depthTest: true, transparent: true
+    });
+    _pointsMat = new THREE.ShaderMaterial({
+      uniforms: _cloneUniforms(_uniformDefs),
+      vertexShader: S.meshVert, fragmentShader: S.pointsFrag,
+      depthWrite: false, depthTest: true, transparent: true
+    });
+  }
+
+  // ── Mesh building (geometry only — materials reused) ──
   function _buildMesh(density, gridType) {
     gridType = gridType || 'square';
     if (!_initialized) return;
@@ -340,9 +370,10 @@ window.Renderer3D = (function() {
     _lastDensity = density;
     _lastGridType = gridType;
 
+    _ensureMaterials();
+
     var gridW = density, gridH = density;
 
-    // Build positions + UVs
     var positions = new Float32Array(gridW * gridH * 3);
     var uvs = new Float32Array(gridW * gridH * 2);
     for (var y = 0; y < gridH; y++) {
@@ -358,7 +389,6 @@ window.Renderer3D = (function() {
       }
     }
 
-    // Triangle indices
     var triIdx = [];
     for (var y3 = 0; y3 < gridH - 1; y3++) {
       for (var x3 = 0; x3 < gridW - 1; x3++) {
@@ -367,12 +397,10 @@ window.Renderer3D = (function() {
       }
     }
 
-    // Line indices
     var lineIdx = [];
     var I = function(x, y) { return y * gridW + x; };
     _buildGridLines(lineIdx, gridW, gridH, gridType, I);
 
-    // Geometries
     var triGeom = new THREE.BufferGeometry();
     triGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     triGeom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
@@ -387,38 +415,7 @@ window.Renderer3D = (function() {
     pointGeom.setAttribute('position', new THREE.BufferAttribute(positions.slice(), 3));
     pointGeom.setAttribute('uv', new THREE.BufferAttribute(uvs.slice(), 2));
 
-    // Materials — each gets DEEP-CLONED uniforms
-    _sourceMat = new THREE.ShaderMaterial({
-      uniforms: _cloneUniforms(_uniformDefs),
-      vertexShader: S.meshVert, fragmentShader: S.sourceFrag,
-      side: THREE.DoubleSide, depthTest: true
-    });
-
-    _depthMat = new THREE.ShaderMaterial({
-      uniforms: _cloneUniforms(_uniformDefs),
-      vertexShader: S.meshVert, fragmentShader: S.depthFrag,
-      side: THREE.DoubleSide, depthTest: true
-    });
-
-    _holoMat = new THREE.ShaderMaterial({
-      uniforms: _cloneUniforms(_uniformDefs),
-      vertexShader: S.meshVert, fragmentShader: S.holoFrag,
-      side: THREE.DoubleSide, depthTest: true
-    });
-
-    _gridMat = new THREE.ShaderMaterial({
-      uniforms: _cloneUniforms(_uniformDefs),
-      vertexShader: S.meshVert, fragmentShader: S.gridFrag,
-      depthWrite: false, depthTest: true, transparent: true
-    });
-
-    _pointsMat = new THREE.ShaderMaterial({
-      uniforms: _cloneUniforms(_uniformDefs),
-      vertexShader: S.meshVert, fragmentShader: S.pointsFrag,
-      depthWrite: false, depthTest: true, transparent: true
-    });
-
-    // Clear and rebuild scene
+    // Clear old meshes, rebuild with existing materials
     _sourceGroup.clear();
     _depthGroup.clear();
     _gridGroup.clear();
