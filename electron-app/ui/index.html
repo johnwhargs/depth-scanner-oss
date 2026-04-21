@@ -2786,6 +2786,10 @@ function fmtTime(s) {
   return `${m}:${sec.toString().padStart(2, "0")}.${fr.toString().padStart(2, "0")}`;
 }
 
+// scrubToFrame hoisted to top level — used by effects toggle + tab switch
+var _scrubDebounce = null;
+function scrubToFrame(pos) { if (typeof _scrubToFrameImpl === 'function') _scrubToFrameImpl(pos); }
+
 function setupTimeline() {
   const track = $("tl-track");
   const handleIn = $("tl-handle-in");
@@ -2805,8 +2809,7 @@ function setupTimeline() {
     return pxDist < 20;
   }
 
-  var _scrubDebounce = null;
-  function scrubToFrame(pos) {
+  _scrubToFrameImpl = function(pos) {
     state.playheadPos = pos;
     updateTimelineDisplay(state.videoInfo);
     if (!state.videoInfo) return;
@@ -2849,7 +2852,7 @@ function setupTimeline() {
     } else return;
     $("preview-img").style.display = "block";
     $("drop-zone").classList.add("hidden");
-  }
+  };
 
   // Load specific frame into Three.js 3D renderer
   async function _loadFrameInto3D(frameIdx) {

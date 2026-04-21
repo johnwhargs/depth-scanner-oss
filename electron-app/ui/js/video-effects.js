@@ -68,15 +68,30 @@ window.VideoFX = (function() {
         }
       }
 
+      // Set handlers BEFORE src to avoid race condition
       _srcVideo.onloadeddata = checkBoth;
       _depthVideo.onloadeddata = checkBoth;
-      _srcVideo.onerror = function() { reject(new Error('Source video load failed')); };
-      _depthVideo.onerror = function() { reject(new Error('Depth video load failed')); };
+      _srcVideo.onerror = function(e) { console.error('[VideoFX] src error', e); reject(new Error('Source video load failed')); };
+      _depthVideo.onerror = function(e) { console.error('[VideoFX] depth error', e); reject(new Error('Depth video load failed')); };
+
+      // Also listen for canplaythrough as fallback
+      _srcVideo.oncanplaythrough = function() { if (loaded < 1) checkBoth(); };
+      _depthVideo.oncanplaythrough = function() { if (loaded < 1) checkBoth(); };
 
       _srcVideo.src = srcUrl;
       _depthVideo.src = depthUrl;
       _srcVideo.load();
       _depthVideo.load();
+
+      // Timeout fallback — if loadeddata never fires (some codecs)
+      setTimeout(function() {
+        if (loaded < 2) {
+          console.warn('[VideoFX] Timeout waiting for video load, proceeding anyway');
+          _duration = _srcVideo.duration || _depthVideo.duration || _duration;
+          _trimOut = _duration;
+          resolve();
+        }
+      }, 5000);
     });
   }
 
