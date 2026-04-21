@@ -194,6 +194,9 @@
         <span class="toggle-label">Effects</span>
         <div class="toggle" id="fx-toggle" title="Enable live effect preview"></div>
       </div>
+      <div id="video-fx-notice" style="display:none;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;font-size:11px;color:var(--muted);line-height:1.5">
+        Effects are for <strong style="color:var(--text)">images only</strong>. For video effects, save your depth map and use <strong style="color:var(--accent)">Effects Workshop</strong> with source + depth files.
+      </div>
       <div id="batch-fx-bar" style="display:none;margin-bottom:8px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
           <span style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.15em;flex-shrink:0">Batch File</span>
@@ -894,7 +897,6 @@
 <script src="js/renderer3d-shaders.js"></script>
 <script src="js/renderer3d.js"></script>
 <script src="js/renderer3d-adapter.js"></script>
-<script src="js/video-effects.js"></script>
 
 <script>
 const SERVER = "http://127.0.0.1:7843";
@@ -1346,9 +1348,6 @@ async function loadFile(file) {
   state.depthBlob = null;
   state._saved = false;
   state.sessionId = null;
-  state._videoSessionId = null;
-  state._depthVideoBlob = null;
-  if (typeof VideoFX !== 'undefined' && VideoFX.isActive && VideoFX.isActive()) VideoFX.dispose();
   state.videoBlob = null;
   state.videoResultBlob = null;
   state.videoInfo = null;
@@ -1374,6 +1373,8 @@ async function loadFile(file) {
 
   const isVideo = isVideoFile(file.name) || file.type.startsWith("video/");
   state._fileType = isVideo ? "video" : "image";
+  // Show video effects notice, hide effects controls for video
+  $("video-fx-notice").style.display = isVideo ? "" : "none";
 
   // Show badge
   $("file-badge").textContent = isVideo ? "Video" : "Image";
@@ -2209,7 +2210,7 @@ async function processVideo() {
     if (!startR.ok) throw new Error((await startR.json()).detail || "Upload failed");
 
     const session = await startR.json();
-    state._videoSessionId = session.session_id; // video session for frame access
+    // session.session_id used for frame access during processing
     const total = session.frames;
     const uploadTime = Math.round((Date.now() - uploadStart) / 1000);
     setIndeterminate(false);
@@ -2335,23 +2336,6 @@ async function processVideo() {
       state.depthBlob = depthBlobs[depthBlobs.length - 1];
     }
     if ($("btn-3d")) $("btn-3d").disabled = false;
-
-    // Fetch grayscale depth MP4 for VideoFX (Three.js real-time video effects)
-    try {
-      log("Preparing video effects...", "info");
-      const vfxFd = new FormData();
-      vfxFd.append("format", "png_gray");
-      vfxFd.append("smooth", smooth.toString());
-      vfxFd.append("align_scale", alignScale.toString());
-      vfxFd.append("output", "video");
-      const vfxR = await fetch(`${SERVER}/process/video/render/${session.session_id}`, { method: "POST", body: vfxFd });
-      if (vfxR.ok) {
-        const depthMp4 = await vfxR.blob();
-        state._depthVideoBlob = depthMp4;
-        await VideoFX.init(state.videoBlob, depthMp4, state.videoInfo, $("elev-canvas"));
-        log("Video effects ready — toggle Effects ON for 3D", "success");
-      }
-    } catch(e2) { log("Video effects prep: " + e2.message, "warn"); }
 
     log(`Processing complete — click Save Result to export`, "success");
 
@@ -2818,30 +2802,7 @@ function setupTimeline() {
     if (totalFrames === 0) return;
     var idx = Math.min(totalFrames - 1, Math.max(0, Math.round(pos * (totalFrames - 1))));
 
-    // VideoFX active → seek video (instant, no server)
-    var fx = getActiveFx();
-    if (state.fxEnabled && (fx === "elevation" || fx === "hologram") && typeof VideoFX !== 'undefined' && VideoFX.isActive()) {
-      VideoFX.seekNormalized(pos);
-      return;
-    }
-
-    // VideoFX available but not showing → show it
-    if (state.fxEnabled && (fx === "elevation" || fx === "hologram") && typeof VideoFX !== 'undefined' && state._depthVideoBlob) {
-      VideoFX.show(fx);
-      VideoFX.seekNormalized(pos);
-      return;
-    }
-
-    // Effects enabled + server effect → request preview for this frame
-    if (state.fxEnabled && state._videoSessionId && fx !== "elevation" && fx !== "hologram" && fx !== "transition") {
-      clearTimeout(_scrubDebounce);
-      _scrubDebounce = setTimeout(function() {
-        _previewEffectAtFrame(idx);
-      }, 200);
-      return;
-    }
-
-    // No effects — show raw depth or source
+    // Show raw depth or source frame
     var view = state.viewMode || "depth";
     if (view === "source" && compare.sourceFrames[idx]) {
       $("preview-img").src = compare.sourceFrames[idx];
@@ -2853,59 +2814,6 @@ function setupTimeline() {
     $("preview-img").style.display = "block";
     $("drop-zone").classList.add("hidden");
   };
-
-  // Load specific frame into Three.js 3D renderer
-  async function _loadFrameInto3D(frameIdx) {
-    var vsid = state._videoSessionId;
-    if (!vsid) return;
-    try {
-      // Fetch source frame from video session
-      var srcR = await fetch(SERVER + "/process/video/source/" + vsid + "/" + frameIdx);
-      var srcBlob = srcR.ok ? await srcR.blob() : null;
-      // Fetch depth frame from video session
-      var smooth = parseFloat($("smooth")?.value || "0.4");
-      var depR = await fetch(SERVER + "/process/video/frame/" + vsid + "/" + frameIdx + "?format=png_gray&smooth=" + smooth + "&align_scale=true");
-      var depBlob = depR.ok ? await depR.blob() : null;
-      if (srcBlob) state._latestSrcBlob = srcBlob;
-      if (depBlob) state._latestDepthBlob = depBlob;
-      // Reload into 3D renderer
-      var smoothing = parseInt($("elev-smooth")?.value || "3");
-      Renderer3D.reload(depBlob, srcBlob, smoothing, function() {
-        if (window.R3DAdapter) R3DAdapter.syncAll();
-      });
-    } catch(e) { log("Frame load error: " + e.message, "error"); }
-  }
-
-  // Preview server-side effect at specific video frame
-  async function _previewEffectAtFrame(frameIdx) {
-    var vsid = state._videoSessionId;
-    if (!vsid) return;
-    var fx = getActiveFx();
-    var params = getEffectParams(fx);
-    try {
-      // Create a per-frame session from video source
-      var srcR = await fetch(SERVER + "/process/video/source/" + vsid + "/" + frameIdx);
-      if (!srcR.ok) return;
-      var srcBlob = await srcR.blob();
-      var fd = new FormData();
-      fd.append("file", srcBlob, "frame.png");
-      fd.append("model", $("model")?.value || "base");
-      fd.append("format", "png_gray");
-      var procR = await fetch(SERVER + "/process/frame", { method: "POST", body: fd });
-      if (!procR.ok) return;
-      var frameSid = procR.headers.get("X-Session-Id");
-      if (!frameSid) return;
-      // Apply effect
-      var efd = new FormData();
-      efd.append("session_id", frameSid);
-      efd.append("params_json", JSON.stringify(params));
-      var url = SERVER + "/effect/" + fx + "/preview";
-      var r = await fetch(url, { method: "POST", body: efd });
-      if (!r.ok) return;
-      var blob = await r.blob();
-      showImage(blob, fx + " @ frame " + frameIdx);
-    } catch(e) { log("Effect preview error: " + e.message, "error"); }
-  }
 
   // Mouse down on track — detect what to drag
   track.addEventListener("mousedown", e => {
@@ -3240,6 +3148,11 @@ async function init() {
       log("Process a depth map first", "warn");
       return;
     }
+    // Effects only for images — video effects in Workshop
+    if (state._fileType === "video") {
+      log("Effects are for images only. Export your depth map and use Effects Workshop for video effects.", "warn");
+      return;
+    }
     state.fxEnabled = !state.fxEnabled;
     $("fx-toggle").classList.toggle("on", state.fxEnabled);
     $("fx-controls").classList.toggle("fx-disabled", !state.fxEnabled);
@@ -3247,31 +3160,12 @@ async function init() {
     if (state.fxEnabled) {
       $("btn-fx-preview").disabled = false;
       $("btn-fx-apply").disabled = false;
-      // Hide render view tabs during effects
       $("viewport-bar").style.display = "none";
-      // Video: show VideoFX 3D playback
-      if (state._fileType === "video" && state.videoInfo && typeof VideoFX !== 'undefined' && VideoFX.isActive !== undefined) {
-        var vfx = getActiveFx();
-        if (vfx === "elevation" || vfx === "hologram") {
-          VideoFX.show(vfx);
-        } else {
-          runEffect(true);
-        }
-      } else {
-        runEffect(true);
-      }
+      runEffect(true);
     } else {
-      // Restore render view with tabs
       showViewportBar(true);
-      // Hide VideoFX if active
-      if (typeof VideoFX !== 'undefined' && VideoFX.isActive()) VideoFX.hide();
-      // Hide 3D canvas if showing
       if (window._elevRenderer) window._elevRenderer.hide();
       if (state.depthBlob) showImage(state.depthBlob, "Depth map");
-      // Restore video timeline if video loaded
-      if (state._fileType === "video" && state.videoInfo) {
-        showTimeline(state.videoInfo);
-      }
     }
   });
 
@@ -3303,18 +3197,9 @@ async function init() {
       if (btn.dataset.fx !== "elevation" && btn.dataset.fx !== "hologram" && window._elevRenderer) {
         window._elevRenderer.hide();
       }
-      // Auto-preview on tab switch if enabled
-      if (state.fxEnabled && btn.dataset.fx !== "transition") {
-        if (state._fileType === "video" && typeof VideoFX !== 'undefined' && state._depthVideoBlob) {
-          if (btn.dataset.fx === "elevation" || btn.dataset.fx === "hologram") {
-            VideoFX.show(btn.dataset.fx);
-          } else {
-            if (VideoFX.isActive()) VideoFX.hide();
-            scrubToFrame(state.playheadPos);
-          }
-        } else {
-          runEffect(true);
-        }
+      // Auto-preview on tab switch (images only)
+      if (state.fxEnabled && state._fileType !== "video" && btn.dataset.fx !== "transition") {
+        runEffect(true);
       }
     });
   });
@@ -3322,15 +3207,10 @@ async function init() {
   // Live preview on slider change (debounced)
   let fxDebounce = null;
   function onFxSliderChange() {
-    if (!state.fxEnabled) return;
+    if (!state.fxEnabled || state._fileType === "video") return;
     if (getActiveFx() === "transition") return;
     clearTimeout(fxDebounce);
-    // Video: re-preview at current playhead frame
-    if (state._fileType === "video" && state.videoInfo) {
-      fxDebounce = setTimeout(() => scrubToFrame(state.playheadPos), 300);
-    } else {
-      fxDebounce = setTimeout(() => runEffect(true), 300);
-    }
+    fxDebounce = setTimeout(() => runEffect(true), 300);
   }
   document.querySelectorAll("#effects-section input[type=range], #effects-section input[type=color], #effects-section select").forEach(el => {
     el.addEventListener("input", onFxSliderChange);
