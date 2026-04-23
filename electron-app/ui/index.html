@@ -828,7 +828,7 @@
         <div class="drop-sub">PNG · JPG · TIFF · BMP · WebP · MP4 · MOV · AVI</div>
       </div>
       <img id="preview-img" style="display:none" alt="Preview"/>
-      <video id="preview-video" style="display:none;max-width:100%;max-height:100%;object-fit:contain" muted playsinline loop></video>
+      <video id="preview-video" style="display:none;max-width:100%;max-height:100%;object-fit:contain;background:#000" muted playsinline autoplay loop></video>
       <div id="pivot-dot" style="display:none;position:absolute;width:20px;height:20px;border-radius:50%;border:2px solid #fff;background:rgba(255,50,50,.8);box-shadow:0 0 8px rgba(255,0,0,.6),0 0 2px #000;pointer-events:none;transform:translate(-50%,-50%);z-index:5"></div>
       <div id="pivot-crosshair-h" style="display:none;position:absolute;height:1px;left:0;right:0;background:rgba(255,255,255,.3);pointer-events:none;z-index:4"></div>
       <div id="pivot-crosshair-v" style="display:none;position:absolute;width:1px;top:0;bottom:0;background:rgba(255,255,255,.3);pointer-events:none;z-index:4"></div>
@@ -1405,7 +1405,7 @@ async function loadFile(file) {
           `${vi.width}×${vi.height} · ${vi.fps.toFixed(2)}fps<br>` +
           `${vi.frames} frames · ${vi.duration.toFixed(1)}s`;
         $("video-info-box").style.display = "block";
-        // Show actual video in preview area
+        // Show video playing in preview area immediately
         hideAllPreviews();
         var videoEl = $("preview-video");
         if (state._previewVideoUrl) URL.revokeObjectURL(state._previewVideoUrl);
@@ -1413,6 +1413,7 @@ async function loadFile(file) {
         videoEl.src = state._previewVideoUrl;
         videoEl.style.display = "block";
         videoEl.load();
+        videoEl.play().catch(function() {}); // autoplay may be blocked, that's ok
         $("drop-zone").classList.add("hidden");
         showTimeline(vi);
         log(`${vi.width}×${vi.height}, ${vi.fps.toFixed(2)}fps, ${vi.frames} frames`, "success");

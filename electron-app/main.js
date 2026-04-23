@@ -8,6 +8,14 @@ const net = require('net');
 
 const PORT = 7843;
 let mainWindow = null;
+
+// Prevent EPIPE crashes when stdout/stderr pipe breaks
+process.stdout.on('error', () => {});
+process.stderr.on('error', () => {});
+process.on('uncaughtException', (err) => {
+  if (err.code === 'EPIPE') return; // ignore broken pipe
+  console.error('Uncaught:', err);
+});
 let setupWindow = null;
 let backendProcess = null;
 
@@ -64,8 +72,9 @@ async function startBackend() {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
-  proc.stdout.on('data', d => { try { process.stdout.write(d); } catch(e) {} });
-  proc.stderr.on('data', d => { try { process.stderr.write(d); } catch(e) {} });
+  // Discard backend output (prevents EPIPE when terminal disconnects)
+  proc.stdout.on('data', () => {});
+  proc.stderr.on('data', () => {});
   proc.on('error', err => console.error('[Backend] Spawn error:', err.message));
   proc.on('exit', code => {
     console.log(`[Backend] Exited (code ${code})`);
