@@ -1410,10 +1410,17 @@ async function loadFile(file) {
         var videoEl = $("preview-video");
         if (state._previewVideoUrl) URL.revokeObjectURL(state._previewVideoUrl);
         state._previewVideoUrl = URL.createObjectURL(file);
+        videoEl.onloadeddata = function() {
+          videoEl.play().catch(function() {});
+          log("Video preview playing", "success");
+        };
+        videoEl.onerror = function() {
+          var e = videoEl.error;
+          log("Video preview error: " + (e ? e.message : "unknown"), "error");
+        };
         videoEl.src = state._previewVideoUrl;
         videoEl.style.display = "block";
         videoEl.load();
-        videoEl.play().catch(function() {}); // autoplay may be blocked, that's ok
         $("drop-zone").classList.add("hidden");
         showTimeline(vi);
         log(`${vi.width}×${vi.height}, ${vi.fps.toFixed(2)}fps, ${vi.frames} frames`, "success");
