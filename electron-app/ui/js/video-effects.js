@@ -28,28 +28,35 @@ window.VideoFX = (function() {
     _trimIn = 0;
     _trimOut = _duration;
 
-    // Get or create hidden video elements
-    _srcVideo = $('vfx-src-video');
-    _depthVideo = $('vfx-depth-video');
+    // Remove old video elements (clean slate each init)
+    var oldSrc = $('vfx-src-video');
+    var oldDep = $('vfx-depth-video');
+    if (oldSrc) { oldSrc.pause(); oldSrc.src = ''; oldSrc.remove(); }
+    if (oldDep) { oldDep.pause(); oldDep.src = ''; oldDep.remove(); }
 
-    if (!_srcVideo) {
-      _srcVideo = document.createElement('video');
-      _srcVideo.id = 'vfx-src-video';
-      _srcVideo.muted = true;
-      _srcVideo.playsInline = true;
-      _srcVideo.style.display = 'none';
-      document.body.appendChild(_srcVideo);
-    }
-    if (!_depthVideo) {
-      _depthVideo = document.createElement('video');
-      _depthVideo.id = 'vfx-depth-video';
-      _depthVideo.muted = true;
-      _depthVideo.playsInline = true;
-      _depthVideo.style.display = 'none';
-      document.body.appendChild(_depthVideo);
-    }
+    _srcVideo = document.createElement('video');
+    _srcVideo.id = 'vfx-src-video';
+    _srcVideo.muted = true;
+    _srcVideo.playsInline = true;
+    _srcVideo.preload = 'auto';
+    _srcVideo.crossOrigin = 'anonymous';
+    _srcVideo.style.display = 'none';
+    document.body.appendChild(_srcVideo);
 
-    // Set sources
+    _depthVideo = document.createElement('video');
+    _depthVideo.id = 'vfx-depth-video';
+    _depthVideo.muted = true;
+    _depthVideo.playsInline = true;
+    _depthVideo.preload = 'auto';
+    _depthVideo.crossOrigin = 'anonymous';
+    _depthVideo.style.display = 'none';
+    document.body.appendChild(_depthVideo);
+
+    // Create blob URLs
+    if (!srcBlob || !depthBlob) {
+      console.error('[VideoFX] Missing blob: src=' + !!srcBlob + ' depth=' + !!depthBlob);
+      return Promise.reject(new Error('Missing video blob'));
+    }
     var srcUrl = URL.createObjectURL(srcBlob);
     var depthUrl = URL.createObjectURL(depthBlob);
 
