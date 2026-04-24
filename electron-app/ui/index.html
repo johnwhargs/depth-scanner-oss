@@ -1405,11 +1405,10 @@ async function loadFile(file) {
           `${vi.width}×${vi.height} · ${vi.fps.toFixed(2)}fps<br>` +
           `${vi.frames} frames · ${vi.duration.toFixed(1)}s`;
         $("video-info-box").style.display = "block";
-        // Show video playing in preview area immediately
+        // Convert to WebM for Electron playback (Electron lacks H.264)
         hideAllPreviews();
         var videoEl = $("preview-video");
         if (state._previewVideoUrl) URL.revokeObjectURL(state._previewVideoUrl);
-        state._previewVideoUrl = URL.createObjectURL(file);
         videoEl.onloadeddata = function() {
           videoEl.play().catch(function() {});
           log("Video preview playing", "success");
@@ -1418,10 +1417,30 @@ async function loadFile(file) {
           var e = videoEl.error;
           log("Video preview error: " + (e ? e.message : "unknown"), "error");
         };
+        // Try direct blob URL first (works for WebM files)
+        state._previewVideoUrl = URL.createObjectURL(file);
         videoEl.src = state._previewVideoUrl;
         videoEl.style.display = "block";
         videoEl.load();
         $("drop-zone").classList.add("hidden");
+        // If direct play fails (MP4/H.264), convert via server
+        setTimeout(function() {
+          if (videoEl.error || videoEl.readyState < 2) {
+            log("Converting video for preview...", "info");
+            var fd = new FormData();
+            fd.append("file", file, file.name);
+            fetch(SERVER + "/convert/webm", { method: "POST", body: fd })
+              .then(function(r) { if (!r.ok) throw new Error("Convert failed"); return r.blob(); })
+              .then(function(webmBlob) {
+                if (state._previewVideoUrl) URL.revokeObjectURL(state._previewVideoUrl);
+                state._previewVideoUrl = URL.createObjectURL(webmBlob);
+                state._previewWebmBlob = webmBlob;
+                videoEl.src = state._previewVideoUrl;
+                videoEl.load();
+              })
+              .catch(function(e) { log("Video convert failed: " + e.message, "error"); });
+          }
+        }, 1000);
         showTimeline(vi);
         log(`${vi.width}×${vi.height}, ${vi.fps.toFixed(2)}fps, ${vi.frames} frames`, "success");
       }

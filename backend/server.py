@@ -103,6 +103,28 @@ def health():
             "model_loaded": engine._model_size, "engine_status": engine._status,
             "version": "1.1.0"}
 
+@app.post("/convert/webm")
+async def convert_to_webm(file: UploadFile = File(...)):
+    """Convert uploaded video to WebM (VP9) for Electron playback."""
+    tmp_in = tempfile.NamedTemporaryFile(suffix=os.path.splitext(file.filename or ".mp4")[1], delete=False)
+    tmp_in.write(await file.read())
+    tmp_in.close()
+    tmp_out = tempfile.NamedTemporaryFile(suffix=".webm", delete=False)
+    tmp_out.close()
+    try:
+        result = subprocess.run([
+            "ffmpeg", "-y", "-i", tmp_in.name,
+            "-c:v", "libvpx-vp9", "-b:v", "4M",
+            "-c:a", "libopus", "-b:a", "128k",
+            tmp_out.name
+        ], capture_output=True, timeout=300)
+        os.unlink(tmp_in.name)
+        if result.returncode != 0:
+            raise HTTPException(500, f"ffmpeg error: {result.stderr.decode()[:200]}")
+        return FileResponse(tmp_out.name, media_type="video/webm", filename="converted.webm")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(500, "Conversion timeout")
+
 @app.get("/models")
 def list_models():
     return {"models": list(MODEL_MAP.keys())}
@@ -436,10 +458,16 @@ def video_render(
         return Response(content=buf.getvalue(), media_type="application/zip",
                         headers={"Content-Disposition": "attachment; filename=depth_sequence.zip"})
     else:
-        tmp_out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-        tmp_out.close()
+        # Write frames as raw video, then encode with ffmpeg to WebM (VP9)
+        # WebM plays in Electron without proprietary codecs
+        tmp_raw = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        tmp_raw.close()
         fourcc = cv2.VideoWriter_fourcc(*"avc1")
-        writer = cv2.VideoWriter(tmp_out.name, fourcc, sess.fps, (w, h))
+        writer = cv2.VideoWriter(tmp_raw.name, fourcc, sess.fps, (w, h))
+        if not writer.isOpened():
+            # Fallback to mp4v if avc1 unavailable
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            writer = cv2.VideoWriter(tmp_raw.name, fourcc, sess.fps, (w, h))
         for d in depths:
             if format == "png_color":
                 rgb = apply_colormap(d, colormap)
@@ -450,9 +478,22 @@ def video_render(
                 rgb = cv2.resize(rgb, (w, h), interpolation=cv2.INTER_LINEAR)
             writer.write(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
         writer.release()
-        # Keep session alive for additional renders (e.g. grayscale depth MP4 for effects)
-        # Session will be cleaned up when limit reached or app closes
-        return FileResponse(tmp_out.name, media_type="video/mp4", filename="depth_video.mp4")
+        # Convert to WebM (VP9) for Electron playback
+        tmp_webm = tempfile.NamedTemporaryFile(suffix=".webm", delete=False)
+        tmp_webm.close()
+        try:
+            result = subprocess.run([
+                "ffmpeg", "-y", "-i", tmp_raw.name,
+                "-c:v", "libvpx-vp9", "-b:v", "2M", "-an",
+                tmp_webm.name
+            ], capture_output=True, timeout=120)
+            os.unlink(tmp_raw.name)
+            if result.returncode == 0:
+                return FileResponse(tmp_webm.name, media_type="video/webm", filename="depth_video.webm")
+        except Exception:
+            pass
+        # Fallback: return raw MP4 if ffmpeg fails
+        return FileResponse(tmp_raw.name, media_type="video/mp4", filename="depth_video.mp4")
 
 
 @app.post("/process/video")
