@@ -2954,6 +2954,12 @@ function setupTimeline() {
   }
 
   _scrubToFrameImpl = function(pos) {
+    // During processing: update playhead position only, don't change preview
+    if (state.processing) {
+      state.playheadPos = pos;
+      updateTimelineDisplay(state.videoInfo);
+      return;
+    }
     state.playheadPos = pos;
     updateTimelineDisplay(state.videoInfo);
     if (!state.videoInfo) return;
@@ -2992,6 +2998,13 @@ function setupTimeline() {
     e.preventDefault();
     const pos = getPos(e);
 
+    // Lock In/Out handles during processing — only playhead allowed
+    if (state.processing) {
+      dragging = "playhead";
+      scrubToFrame(pos);
+      return;
+    }
+
     // Check handles first (wider grab zone)
     if (nearHandle(pos, state.trimIn)) {
       dragging = "in";
@@ -3006,11 +3019,13 @@ function setupTimeline() {
 
   // Handle-specific mousedown (for direct clicks on handles)
   handleIn.addEventListener("mousedown", e => {
+    if (state.processing) return; // locked during render
     e.preventDefault();
     e.stopPropagation();
     dragging = "in";
   });
   handleOut.addEventListener("mousedown", e => {
+    if (state.processing) return; // locked during render
     e.preventDefault();
     e.stopPropagation();
     dragging = "out";
