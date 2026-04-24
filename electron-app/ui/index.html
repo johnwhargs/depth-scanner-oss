@@ -848,8 +848,14 @@
     <!-- Timeline -->
     <div class="timeline" id="timeline">
       <div class="tl-header">
-        <span><span class="tl-time" id="tl-in">0:00</span> — <span class="tl-time" id="tl-out">0:00</span></span>
-        <span id="tl-range-info"></span>
+        <div style="display:flex;align-items:center;gap:var(--sp-lg)">
+          <button id="tl-play-btn" style="background:none;border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);cursor:pointer;padding:2px 8px;font-size:14px;line-height:1" title="Play/Pause">&#9654;</button>
+          <span class="tl-time" id="tl-in">0:00.00</span>
+          <span style="color:var(--border)">/</span>
+          <span class="tl-time" id="tl-out">0:00.00</span>
+          <span style="color:var(--muted);font-family:var(--mono);font-size:9px" id="tl-frame-counter">0 / 0</span>
+        </div>
+        <span id="tl-range-info" style="font-size:9px"></span>
       </div>
       <div class="tl-track" id="tl-track">
         <div class="tl-thumbs" id="tl-thumbs"></div>
@@ -2837,6 +2843,37 @@ function fmtTime(s) {
   const fr = Math.floor((s % 1) * 100);
   return `${m}:${sec.toString().padStart(2, "0")}.${fr.toString().padStart(2, "0")}`;
 }
+
+// ── Video playback sync — update timeline from video.currentTime ──
+setInterval(function() {
+  var videoEl = $("preview-video");
+  if (!videoEl || videoEl.style.display === "none" || !state.videoInfo) return;
+  if (videoEl.readyState < 2) return;
+  var dur = state.videoInfo.duration;
+  if (!dur || dur <= 0) return;
+  var t = videoEl.currentTime;
+  var pos = t / dur;
+  state.playheadPos = pos;
+  $("tl-playhead").style.left = (pos * 100) + "%";
+  $("tl-in").textContent = fmtTime(t);
+  $("tl-out").textContent = fmtTime(dur);
+  var frame = Math.round(pos * state.videoInfo.frames);
+  $("tl-frame-counter").textContent = frame + " / " + state.videoInfo.frames;
+  // Update play button icon
+  var btn = $("tl-play-btn");
+  if (btn) btn.innerHTML = videoEl.paused ? "&#9654;" : "&#9646;&#9646;";
+}, 50);
+
+// Play/pause button
+$("tl-play-btn").addEventListener("click", function() {
+  var videoEl = $("preview-video");
+  if (!videoEl || videoEl.readyState < 2) return;
+  if (videoEl.paused) {
+    videoEl.play().catch(function() {});
+  } else {
+    videoEl.pause();
+  }
+});
 
 // scrubToFrame hoisted to top level — used by effects toggle + tab switch
 var _scrubDebounce = null;
