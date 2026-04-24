@@ -189,10 +189,10 @@
           <input type="checkbox" id="render-in-track"/> Render in track
         </label>
       </div>
-      <div id="trim-timecodes" style="display:none;margin-bottom:var(--sp-md);font-family:var(--mono);font-size:10px;color:var(--muted);display:flex;gap:var(--sp-xl)">
-        <span>In: <strong style="color:var(--text)" id="trim-in-tc">0:00.00</strong></span>
-        <span>Out: <strong style="color:var(--text)" id="trim-out-tc">0:00.00</strong></span>
-        <span style="color:var(--accent)" id="trim-dur-tc"></span>
+      <div id="trim-timecodes" style="display:none;margin-bottom:var(--sp-md);font-family:var(--mono);font-size:10px;color:var(--muted);align-items:center;gap:var(--sp-xl)">
+        <span>In:<strong style="color:var(--text)" id="trim-in-tc">0:00.00</strong></span>
+        <span>Out:<strong style="color:var(--text)" id="trim-out-tc">0:00.00</strong></span>
+        <span style="color:var(--accent);white-space:nowrap" id="trim-dur-tc"></span>
       </div>
       <button class="btn btn-accent2" id="btn-process" disabled>Process Depth Map</button>
       <button class="btn" id="btn-save" disabled>Save Result</button>
