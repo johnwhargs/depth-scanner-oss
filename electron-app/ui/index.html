@@ -184,6 +184,11 @@
         <div id="sidebar-progress-fill" style="height:100%;background:linear-gradient(90deg,var(--accent),#4070e0);width:0%;transition:width .3s"></div>
         <div id="sidebar-progress-text" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;color:var(--text);text-shadow:0 1px 2px rgba(0,0,0,.5)"></div>
       </div>
+      <div style="display:flex;align-items:center;gap:var(--sp-lg);margin-bottom:var(--sp-md)">
+        <label style="font-size:10px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:var(--sp-sm)">
+          <input type="checkbox" id="render-in-track"/> Render in track
+        </label>
+      </div>
       <button class="btn btn-accent2" id="btn-process" disabled>Process Depth Map</button>
       <button class="btn" id="btn-save" disabled>Save Result</button>
     </div>
@@ -1166,6 +1171,28 @@ function showDepthFrame(blob, frameIdx, total) {
   $("drop-zone").classList.add("hidden");
   $("frame-counter").style.display = "block";
   $("frame-counter").textContent = `${frameIdx + 1} / ${total}`;
+
+  // Render thumbnail in timeline track if enabled
+  if ($("render-in-track") && $("render-in-track").checked) {
+    renderFrameInTrack(blob, frameIdx, total);
+  }
+}
+
+function renderFrameInTrack(blob, frameIdx, total) {
+  var container = $("tl-thumbs");
+  if (!container) return;
+  // Create thumbnail image
+  var thumb = document.createElement("img");
+  thumb.style.cssText = "height:100%;flex-shrink:0;object-fit:cover;opacity:.7";
+  // Calculate width based on total frames to fill track
+  thumb.style.width = (100 / total) + "%";
+  thumb.src = URL.createObjectURL(blob);
+  // Insert at correct position (replace if exists)
+  if (container.children[frameIdx]) {
+    container.children[frameIdx].src = thumb.src;
+  } else {
+    container.appendChild(thumb);
+  }
 }
 
 // ── Viewport compare system ──────────────────────────────────────
@@ -2801,6 +2828,9 @@ function showTimeline(vi) {
   state.trimOut = 1;
   state.playheadPos = 0;
   $("timeline").classList.add("show");
+  // Clear old thumbnails
+  var thumbs = $("tl-thumbs");
+  if (thumbs) thumbs.innerHTML = "";
   updateTimelineDisplay(vi);
   // Build ruler marks
   const dur = vi.duration;
