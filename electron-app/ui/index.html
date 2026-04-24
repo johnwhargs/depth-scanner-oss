@@ -1427,18 +1427,55 @@ async function loadFile(file) {
         setTimeout(function() {
           if (videoEl.error || videoEl.readyState < 2) {
             log("Converting video for preview...", "info");
+            // Show converting indicator over preview
+            var convertMsg = document.createElement("div");
+            convertMsg.id = "convert-overlay";
+            convertMsg.style.cssText = "position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.8);z-index:5;color:var(--muted);font-family:var(--mono);font-size:12px;gap:8px";
+            convertMsg.innerHTML = '<div style="font-size:11px;color:var(--text)">Converting to WebM for preview...</div>' +
+              '<div style="width:200px;height:4px;background:var(--raised);border-radius:2px;overflow:hidden"><div id="convert-bar" style="height:100%;background:var(--accent);width:0%;animation:ws-ind 1.5s ease-in-out infinite"></div></div>' +
+              '<div id="convert-status" style="font-size:10px;color:var(--muted)">Uploading...</div>';
+            $("preview-area").appendChild(convertMsg);
+
             var fd = new FormData();
             fd.append("file", file, file.name);
-            fetch(SERVER + "/convert/webm", { method: "POST", body: fd })
-              .then(function(r) { if (!r.ok) throw new Error("Convert failed"); return r.blob(); })
-              .then(function(webmBlob) {
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", SERVER + "/convert/webm");
+            xhr.responseType = "blob";
+            xhr.upload.onprogress = function(e) {
+              if (e.lengthComputable) {
+                var pct = Math.round((e.loaded / e.total) * 50);
+                var bar = $("convert-bar");
+                if (bar) { bar.style.width = pct + "%"; bar.style.animation = "none"; }
+                var st = $("convert-status");
+                if (st) st.textContent = "Uploading " + Math.round(pct * 2) + "%";
+              }
+            };
+            xhr.onprogress = function(e) {
+              var bar = $("convert-bar");
+              if (bar) { bar.style.width = "75%"; bar.style.animation = "none"; }
+              var st = $("convert-status");
+              if (st) st.textContent = "Encoding...";
+            };
+            xhr.onload = function() {
+              var overlay = $("convert-overlay");
+              if (overlay) overlay.remove();
+              if (xhr.status >= 200 && xhr.status < 300) {
+                var webmBlob = xhr.response;
                 if (state._previewVideoUrl) URL.revokeObjectURL(state._previewVideoUrl);
                 state._previewVideoUrl = URL.createObjectURL(webmBlob);
                 state._previewWebmBlob = webmBlob;
                 videoEl.src = state._previewVideoUrl;
                 videoEl.load();
-              })
-              .catch(function(e) { log("Video convert failed: " + e.message, "error"); });
+              } else {
+                log("Video convert failed: " + xhr.status, "error");
+              }
+            };
+            xhr.onerror = function() {
+              var overlay = $("convert-overlay");
+              if (overlay) overlay.remove();
+              log("Video convert failed: network error", "error");
+            };
+            xhr.send(fd);
           }
         }, 1000);
         showTimeline(vi);
