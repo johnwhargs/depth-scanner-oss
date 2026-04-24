@@ -1214,25 +1214,9 @@ function drawCompareView(mode, frameIdx) {
   const canvas = $("compare-canvas");
   const ctx = canvas.getContext("2d");
 
-  // Load current depth frame
-  if (state._latestDepthBlob) {
-    compare.depthImg.src = URL.createObjectURL(state._latestDepthBlob);
-  }
-
-  // Load source frame for current position
-  if (typeof frameIdx === "number" && compare.sourceFrames[frameIdx]) {
-    compare.sourceImg.src = compare.sourceFrames[frameIdx];
-  } else if (!compare.sourceImg.src && state._latestSrcBlob) {
-    compare.sourceImg.src = URL.createObjectURL(state._latestSrcBlob);
-  }
-
-  const srcW = compare.sourceImg.naturalWidth || 1920;
-  const srcH = compare.sourceImg.naturalHeight || 1080;
-
   if (mode === "source") {
     hideAllPreviews();
-    // Show original — grab from stored source frames or video
-    if (compare.sourceFrames[frameIdx]) {
+    if (typeof frameIdx === "number" && compare.sourceFrames[frameIdx]) {
       $("preview-img").src = compare.sourceFrames[frameIdx];
       $("preview-img").style.display = "block";
       $("drop-zone").classList.add("hidden");
@@ -1242,59 +1226,58 @@ function drawCompareView(mode, frameIdx) {
     return;
   }
 
-  hideAllPreviews();
-  canvas.style.display = "block";
+  // Get matching source + depth URLs for this frame
+  var depthUrl = null, sourceUrl = null;
+  if (typeof frameIdx === "number") {
+    depthUrl = compare.depthFrames[frameIdx] || null;
+    sourceUrl = compare.sourceFrames[frameIdx] || null;
+  }
+  if (!depthUrl && state._latestDepthBlob) depthUrl = URL.createObjectURL(state._latestDepthBlob);
+  if (!sourceUrl && state._latestSrcBlob) sourceUrl = URL.createObjectURL(state._latestSrcBlob);
 
-  function render() {
-    const dw = compare.depthImg.naturalWidth;
-    const dh = compare.depthImg.naturalHeight;
+  // Load both images fresh — render only when both ready
+  var srcImg = new Image();
+  var depImg = new Image();
+  var loaded = 0;
+
+  function onBothLoaded() {
+    loaded++;
+    if (loaded < 2) return;
+
+    hideAllPreviews();
+    canvas.style.display = "block";
+
+    var dw = depImg.naturalWidth || srcImg.naturalWidth;
+    var dh = depImg.naturalHeight || srcImg.naturalHeight;
     if (!dw || !dh) return;
 
     if (mode === "side") {
       canvas.width = dw * 2 + 4;
       canvas.height = dh;
-      // Source on left
-      if (compare.sourceImg.naturalWidth) {
-        ctx.drawImage(compare.sourceImg, 0, 0, dw, dh);
-      } else {
-        ctx.fillStyle = "#1a1a1c";
-        ctx.fillRect(0, 0, dw, dh);
-        ctx.fillStyle = "#6e6e80";
-        ctx.font = "14px monospace";
-        ctx.fillText("Source", dw/2 - 24, dh/2);
-      }
-      // Divider
+      ctx.drawImage(srcImg, 0, 0, dw, dh);
       ctx.fillStyle = "#3a3a42";
       ctx.fillRect(dw, 0, 4, dh);
-      // Depth on right
-      ctx.drawImage(compare.depthImg, dw + 4, 0, dw, dh);
+      ctx.drawImage(depImg, dw + 4, 0, dw, dh);
 
     } else if (mode === "wipe") {
       canvas.width = dw;
       canvas.height = dh;
-      const splitX = Math.round(compare.wipePos * dw);
-      // Source left
-      if (compare.sourceImg.naturalWidth) {
-        ctx.drawImage(compare.sourceImg, 0, 0, dw, dh);
-      }
-      // Depth right (clipped)
+      var splitX = Math.round(compare.wipePos * dw);
+      ctx.drawImage(srcImg, 0, 0, dw, dh);
       ctx.save();
       ctx.beginPath();
       ctx.rect(splitX, 0, dw - splitX, dh);
       ctx.clip();
-      ctx.drawImage(compare.depthImg, 0, 0, dw, dh);
+      ctx.drawImage(depImg, 0, 0, dw, dh);
       ctx.restore();
-      // Divider line
       ctx.strokeStyle = "#5b8fff";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(splitX, 0);
       ctx.lineTo(splitX, dh);
       ctx.stroke();
-
-      // Position wipe handle
-      const canvasRect = canvas.getBoundingClientRect();
-      const handlePx = compare.wipePos * canvasRect.width;
+      var canvasRect = canvas.getBoundingClientRect();
+      var handlePx = compare.wipePos * canvasRect.width;
       $("wipe-handle").style.display = "block";
       $("wipe-handle").style.left = (canvas.offsetLeft + handlePx - 1) + "px";
       $("wipe-label-left").style.display = "block";
@@ -1303,34 +1286,25 @@ function drawCompareView(mode, frameIdx) {
     } else if (mode === "overlay") {
       canvas.width = dw;
       canvas.height = dh;
-      if (compare.sourceImg.naturalWidth) {
-        ctx.drawImage(compare.sourceImg, 0, 0, dw, dh);
-      }
+      ctx.drawImage(srcImg, 0, 0, dw, dh);
       ctx.globalAlpha = 0.5;
-      ctx.drawImage(compare.depthImg, 0, 0, dw, dh);
+      ctx.drawImage(depImg, 0, 0, dw, dh);
       ctx.globalAlpha = 1.0;
     }
+
+    // Store for wipe drag redraws
+    compare.sourceImg = srcImg;
+    compare.depthImg = depImg;
   }
 
-  // Wait for both images to load before rendering
-  var ready = 0;
-  var needed = 2;
-  function tryRender() {
-    ready++;
-    if (ready >= needed) render();
-  }
-
-  if (compare.depthImg.complete && compare.depthImg.naturalWidth) {
-    tryRender();
-  } else {
-    compare.depthImg.onload = tryRender;
-  }
-
-  if (compare.sourceImg.complete && compare.sourceImg.naturalWidth) {
-    tryRender();
-  } else {
-    compare.sourceImg.onload = tryRender;
-  }
+  // Load both — render when both ready
+  srcImg.onload = onBothLoaded;
+  depImg.onload = onBothLoaded;
+  srcImg.onerror = function() { loaded++; onBothLoaded(); }; // proceed with what we have
+  depImg.onerror = function() { loaded++; onBothLoaded(); };
+  if (sourceUrl) srcImg.src = sourceUrl; else { loaded++; }
+  if (depthUrl) depImg.src = depthUrl; else { loaded++; }
+  if (loaded >= 2) onBothLoaded(); // both null
 }
 
 function setupWipeDrag() {
