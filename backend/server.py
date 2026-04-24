@@ -6,6 +6,7 @@ uvicorn server:app --host 127.0.0.1 --port 7842
 import io
 import json
 import os
+import subprocess
 import tempfile
 import zipfile
 import uuid
