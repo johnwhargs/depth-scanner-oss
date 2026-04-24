@@ -189,6 +189,11 @@
           <input type="checkbox" id="render-in-track"/> Render in track
         </label>
       </div>
+      <div id="trim-timecodes" style="display:none;margin-bottom:var(--sp-md);font-family:var(--mono);font-size:10px;color:var(--muted);display:flex;gap:var(--sp-xl)">
+        <span>In: <strong style="color:var(--text)" id="trim-in-tc">0:00.00</strong></span>
+        <span>Out: <strong style="color:var(--text)" id="trim-out-tc">0:00.00</strong></span>
+        <span style="color:var(--accent)" id="trim-dur-tc"></span>
+      </div>
       <button class="btn btn-accent2" id="btn-process" disabled>Process Depth Map</button>
       <button class="btn" id="btn-save" disabled>Save Result</button>
     </div>
@@ -2858,13 +2863,33 @@ function updateTimelineDisplay(vi) {
   const outFrame = Math.round(state.trimOut * vi.frames);
   const rangeFrames = outFrame - inFrame;
 
-  $("tl-in").textContent = fmtTime(inTime);
-  $("tl-out").textContent = fmtTime(outTime);
   $("tl-range-info").textContent = `${rangeFrames} frames · ${fmtTime(outTime - inTime)}`;
 
   $("tl-trim").style.left = (state.trimIn * 100) + "%";
   $("tl-trim").style.right = ((1 - state.trimOut) * 100) + "%";
   $("tl-playhead").style.left = (state.playheadPos * 100) + "%";
+
+  // Update In/Out timecodes in sidebar
+  updateTrimTimecodes(vi);
+}
+
+function updateTrimTimecodes(vi) {
+  if (!vi) return;
+  var dur = vi.duration;
+  var inTime = state.trimIn * dur;
+  var outTime = state.trimOut * dur;
+  var inFrame = Math.round(state.trimIn * vi.frames);
+  var outFrame = Math.round(state.trimOut * vi.frames);
+  var trimTc = $("trim-timecodes");
+  if (trimTc) {
+    trimTc.style.display = ($("render-in-track") && $("render-in-track").checked) ? "flex" : "none";
+  }
+  var inEl = $("trim-in-tc");
+  var outEl = $("trim-out-tc");
+  var durEl = $("trim-dur-tc");
+  if (inEl) inEl.textContent = fmtTime(inTime) + " (f" + inFrame + ")";
+  if (outEl) outEl.textContent = fmtTime(outTime) + " (f" + outFrame + ")";
+  if (durEl) durEl.textContent = (outFrame - inFrame) + "f · " + fmtTime(outTime - inTime);
 }
 
 function fmtTime(s) {
@@ -3450,6 +3475,11 @@ async function init() {
   setupWipeDrag();
   setupTimeline();
   state.viewMode = "depth";
+
+  // Render-in-track toggle shows/hides In/Out timecodes
+  $("render-in-track").addEventListener("change", function() {
+    if (state.videoInfo) updateTrimTimecodes(state.videoInfo);
+  });
 
   // Re-estimate when model or every-N changes
   if ($("model")) $("model").addEventListener("change", updateEstimate);
