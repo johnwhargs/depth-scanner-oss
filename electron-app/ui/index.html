@@ -1219,6 +1219,13 @@ function drawCompareView(mode, frameIdx) {
     compare.depthImg.src = URL.createObjectURL(state._latestDepthBlob);
   }
 
+  // Load source frame for current position
+  if (typeof frameIdx === "number" && compare.sourceFrames[frameIdx]) {
+    compare.sourceImg.src = compare.sourceFrames[frameIdx];
+  } else if (!compare.sourceImg.src && state._latestSrcBlob) {
+    compare.sourceImg.src = URL.createObjectURL(state._latestSrcBlob);
+  }
+
   const srcW = compare.sourceImg.naturalWidth || 1920;
   const srcH = compare.sourceImg.naturalHeight || 1080;
 
@@ -1305,10 +1312,24 @@ function drawCompareView(mode, frameIdx) {
     }
   }
 
+  // Wait for both images to load before rendering
+  var ready = 0;
+  var needed = 2;
+  function tryRender() {
+    ready++;
+    if (ready >= needed) render();
+  }
+
   if (compare.depthImg.complete && compare.depthImg.naturalWidth) {
-    render();
+    tryRender();
   } else {
-    compare.depthImg.onload = render;
+    compare.depthImg.onload = tryRender;
+  }
+
+  if (compare.sourceImg.complete && compare.sourceImg.naturalWidth) {
+    tryRender();
+  } else {
+    compare.sourceImg.onload = tryRender;
   }
 }
 
